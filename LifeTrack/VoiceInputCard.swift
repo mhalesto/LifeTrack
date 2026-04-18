@@ -1,0 +1,213 @@
+//
+//  VoiceInputCard.swift
+//  LifeTrack
+//
+//  Created by Halalisani Mbanjwa on 2026/04/18.
+//
+
+import SwiftUI
+
+struct VoiceInputCard: View {
+    @Binding var transcript: String
+    let isRecording: Bool
+    let audioLevel: CGFloat
+    let feedbackMessage: String
+    let authorizationMessage: String?
+    let onToggleRecording: () -> Void
+    let onApplyTranscript: () -> Void
+    let onClearTranscript: () -> Void
+
+    var body: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Voice Capture",
+                subtitle: "Speak naturally. LifeTrack will draft the task details."
+            )
+
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Button(action: onToggleRecording) {
+                    RecordingButtonIcon(isRecording: isRecording, audioLevel: audioLevel)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isRecording ? "Stop recording" : "Start voice input")
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text(isRecording ? "Recording" : "Voice input")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                        if isRecording {
+                            VoiceLevelMeterView(level: audioLevel, isRecording: isRecording)
+                                .frame(width: 84, height: 24)
+                        }
+                    }
+
+                    Text(feedbackMessage)
+                        .font(.footnote)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Transcript")
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                ZStack(alignment: .topLeading) {
+                    if transcript.isEmpty {
+                        Text("Say: Book a dentist appointment tomorrow")
+                            .font(.body)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.placeholderText)
+                            .padding(14)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextField("", text: $transcript, axis: .vertical)
+                        .font(.body.weight(.medium))
+                        .foregroundColor(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(2...5)
+                        .padding(14)
+                        .textFieldStyle(.plain)
+                        .tint(LifeTrackTheme.ColorPalette.accent)
+                }
+                .frame(minHeight: 82, alignment: .topLeading)
+                .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.94), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                        .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8)
+                }
+            }
+
+            if let authorizationMessage {
+                Text(authorizationMessage)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: LifeTrackTheme.Spacing.small) {
+                Button(action: onApplyTranscript) {
+                    Label("Apply Draft", systemImage: "sparkles")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 9)
+                        .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+
+                Button(action: onClearTranscript) {
+                    Label("Clear", systemImage: "xmark")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 9)
+                        .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(transcript.isEmpty)
+                .opacity(transcript.isEmpty ? 0.45 : 1)
+
+                Spacer()
+            }
+        }
+    }
+}
+
+private struct RecordingButtonIcon: View {
+    let isRecording: Bool
+    let audioLevel: CGFloat
+
+    private var reactiveScale: CGFloat {
+        isRecording ? 1 + (audioLevel * 0.16) : 1
+    }
+
+    var body: some View {
+        ZStack {
+            if isRecording {
+                Circle()
+                    .stroke(LifeTrackTheme.ColorPalette.danger.opacity(0.12 + audioLevel * 0.18), lineWidth: 8 + audioLevel * 7)
+                    .frame(width: 76 + audioLevel * 18, height: 76 + audioLevel * 18)
+                    .scaleEffect(reactiveScale)
+
+                Circle()
+                    .stroke(LifeTrackTheme.ColorPalette.danger.opacity(0.08 + audioLevel * 0.12), lineWidth: 1.2)
+                    .frame(width: 92 + audioLevel * 20, height: 92 + audioLevel * 20)
+                    .scaleEffect(1 + audioLevel * 0.10)
+            }
+
+            Circle()
+                .fill(isRecording ? LifeTrackTheme.ColorPalette.danger.opacity(0.14) : LifeTrackTheme.ColorPalette.accentSoft)
+                .frame(width: 58, height: 58)
+                .shadow(color: isRecording ? LifeTrackTheme.ColorPalette.danger.opacity(0.16) : LifeTrackTheme.ColorPalette.accent.opacity(0.08), radius: 14, x: 0, y: 8)
+
+            Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(isRecording ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.accent)
+        }
+        .frame(width: 96, height: 96)
+        .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.78), value: audioLevel)
+        .animation(.easeInOut(duration: 0.2), value: isRecording)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct VoiceLevelMeterView: View {
+    let level: CGFloat
+    let isRecording: Bool
+
+    private let barCount = 14
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 28.0, paused: !isRecording)) { timeline in
+            let phase = timeline.date.timeIntervalSinceReferenceDate * 7.5
+
+            HStack(alignment: .center, spacing: 3) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    LifeTrackTheme.ColorPalette.danger.opacity(0.82),
+                                    Color(hex: 0xE07A7A)
+                                ],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
+                        .frame(width: 4, height: barHeight(for: index, phase: phase))
+                        .opacity(isRecording ? 0.98 : 0.35)
+                }
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .accessibilityLabel("Voice level")
+    }
+
+    private func barHeight(for index: Int, phase: TimeInterval) -> CGFloat {
+        let clampedLevel = min(max(level, 0.04), 1)
+        let wave = 0.55 + (0.45 * CGFloat(sin(phase + Double(index) * 0.68)))
+        let centerBias = 1 - abs(CGFloat(index) - CGFloat(barCount - 1) / 2) / CGFloat(barCount)
+        let lift = 0.55 + centerBias
+        return 5 + (clampedLevel * 21 * wave * lift)
+    }
+}
+
+#Preview {
+    VoiceInputCard(
+        transcript: .constant("Book a doctor appointment tomorrow"),
+        isRecording: true,
+        audioLevel: 0.62,
+        feedbackMessage: "Listening...",
+        authorizationMessage: nil,
+        onToggleRecording: {},
+        onApplyTranscript: {},
+        onClearTranscript: {}
+    )
+    .padding()
+    .background(LifeTrackTheme.appBackground)
+}

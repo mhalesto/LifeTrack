@@ -31,4 +31,23 @@ struct LifeTrackTests {
         #expect(task.isOverdue == false)
     }
 
+    @Test func voiceParserDetectsAppointmentTomorrow() {
+        let referenceDate = Date(timeIntervalSince1970: 1_766_016_000)
+        let draft = VoiceTaskParser.parse(
+            "Remind me to book a dentist appointment tomorrow",
+            referenceDate: referenceDate
+        )
+
+        #expect(draft.title == "Book a dentist appointment tomorrow")
+        #expect(draft.category == .health)
+        #expect(draft.dueDate != nil)
+    }
+
+    @Test func voiceParserDetectsFinanceCategory() {
+        let draft = VoiceTaskParser.parse("Review insurance payment in two days")
+
+        #expect(draft.category == .finance)
+        #expect(draft.title == "Review insurance payment in two days")
+    }
+
 }

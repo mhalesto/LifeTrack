@@ -13,6 +13,7 @@ struct StatCardView: View {
     let subtitle: String
     let symbolName: String
     let tint: Color
+    var showsDisclosure = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
@@ -29,6 +30,12 @@ struct StatCardView: View {
                     .font(.system(.title2, design: .rounded, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                if showsDisclosure {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                }
             }
 
             VStack(alignment: .leading, spacing: 3) {

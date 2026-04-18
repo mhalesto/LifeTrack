@@ -7,22 +7,102 @@
 
 import SwiftUI
 
+enum LifeTrackAppTheme: String, CaseIterable, Identifiable {
+    case focus
+    case sage
+    case dreamy
+
+    var id: String { rawValue }
+
+    static let fallback: LifeTrackAppTheme = .focus
+
+    static var current: LifeTrackAppTheme {
+        let savedID = UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.themeID) ?? fallback.rawValue
+        return LifeTrackAppTheme(rawValue: savedID) ?? fallback
+    }
+
+    var title: String {
+        switch self {
+        case .focus: "Focus Blue"
+        case .sage: "Sage"
+        case .dreamy: "Dreamy"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .focus: "Crisp, classic, and productive."
+        case .sage: "Soft green calm for steady days."
+        case .dreamy: "Airy lavender with a softer mood."
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .focus: "scope"
+        case .sage: "leaf"
+        case .dreamy: "moon.stars"
+        }
+    }
+
+    var backgroundTop: Color {
+        switch self {
+        case .focus: Color(hex: 0xF8FAFF)
+        case .sage: Color(hex: 0xF7FBF8)
+        case .dreamy: Color(hex: 0xFBF8FF)
+        }
+    }
+
+    var backgroundBottom: Color {
+        switch self {
+        case .focus: Color(hex: 0xEEF3F8)
+        case .sage: Color(hex: 0xEAF4EF)
+        case .dreamy: Color(hex: 0xEEF2FF)
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .focus: Color(hex: 0x3159D9)
+        case .sage: Color(hex: 0x2F7E66)
+        case .dreamy: Color(hex: 0x6A5AE0)
+        }
+    }
+
+    var accentSoft: Color {
+        switch self {
+        case .focus: Color(hex: 0xE8EEFF)
+        case .sage: Color(hex: 0xE7F4EF)
+        case .dreamy: Color(hex: 0xEFECFF)
+        }
+    }
+
+    var shadow: Color {
+        switch self {
+        case .focus: Color(hex: 0x1D3557).opacity(0.10)
+        case .sage: Color(hex: 0x143C2F).opacity(0.10)
+        case .dreamy: Color(hex: 0x312E81).opacity(0.10)
+        }
+    }
+}
+
 enum LifeTrackTheme {
     enum ColorPalette {
-        static let backgroundTop = Color(hex: 0xF8FAFF)
-        static let backgroundBottom = Color(hex: 0xEEF3F8)
+        static var backgroundTop: Color { LifeTrackAppTheme.current.backgroundTop }
+        static var backgroundBottom: Color { LifeTrackAppTheme.current.backgroundBottom }
         static let card = Color.white.opacity(0.92)
         static let cardElevated = Color.white
         static let primaryText = Color(hex: 0x111827)
         static let secondaryText = Color(hex: 0x6B7280)
         static let tertiaryText = Color(hex: 0x9CA3AF)
+        static let placeholderText = Color(hex: 0x667085)
         static let hairline = Color(hex: 0xDDE5EF)
-        static let accent = Color(hex: 0x3159D9)
-        static let accentSoft = Color(hex: 0xE8EEFF)
+        static var accent: Color { LifeTrackAppTheme.current.accent }
+        static var accentSoft: Color { LifeTrackAppTheme.current.accentSoft }
         static let success = Color(hex: 0x2F9E6D)
         static let warning = Color(hex: 0xD08B2E)
         static let danger = Color(hex: 0xC94A4A)
-        static let shadow = Color(hex: 0x1D3557).opacity(0.10)
+        static var shadow: Color { LifeTrackAppTheme.current.shadow }
     }
 
     enum Radius {

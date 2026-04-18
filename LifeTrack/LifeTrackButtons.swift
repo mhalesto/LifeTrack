@@ -123,6 +123,8 @@ struct QuickActionButton: View {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.9)
 
                     Text(subtitle)
                         .font(.caption2.weight(.medium))
@@ -133,7 +135,7 @@ struct QuickActionButton: View {
                 Spacer(minLength: 0)
             }
             .padding(12)
-            .frame(width: 184)
+            .frame(width: 184, height: 72, alignment: .leading)
             .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)

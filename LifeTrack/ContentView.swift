@@ -9,8 +9,24 @@ import SwiftData
 import SwiftUI
 
 struct ContentView: View {
+    @State private var isShowingSplash = true
+
     var body: some View {
-        HomeView()
+        ZStack {
+            HomeView()
+
+            if isShowingSplash {
+                SplashScreenView()
+                    .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                    .zIndex(1)
+            }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: 1_650_000_000)
+            withAnimation(.easeInOut(duration: 0.42)) {
+                isShowingSplash = false
+            }
+        }
     }
 }
 

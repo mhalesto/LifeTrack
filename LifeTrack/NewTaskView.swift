@@ -13,6 +13,8 @@ struct NewTaskView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
+    @StateObject private var voiceInput = VoiceTaskInputManager()
+
     private let existingTask: LifeTask?
     private let originalDocumentStorageName: String?
 
@@ -27,6 +29,10 @@ struct NewTaskView: View {
     @State private var isImportingDocument = false
     @State private var documentError: String?
     @State private var didSave = false
+    @State private var voiceTranscript = ""
+    @State private var lastVoiceGeneratedTitle = ""
+    @State private var didApplyVoiceCategory = false
+    @State private var didApplyVoiceDueDate = false
 
     init(task: LifeTask? = nil, template: TaskTemplate? = nil) {
         existingTask = task
@@ -52,6 +58,8 @@ struct NewTaskView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
                         header
+
+                        voiceCard
 
                         taskCard
 
@@ -96,9 +104,15 @@ struct NewTaskView: View {
                 onCompletion: handleDocumentImport
             )
             .onDisappear {
+                voiceInput.stopRecording()
+
                 if !didSave && documentStorageName != originalDocumentStorageName {
                     DocumentStore.delete(storageName: documentStorageName)
                 }
+            }
+            .onChange(of: voiceInput.transcript) { _, newTranscript in
+                voiceTranscript = newTranscript
+                applyVoiceTranscript(newTranscript)
             }
         }
     }
@@ -125,16 +139,26 @@ struct NewTaskView: View {
                     .font(.lifeTrackCaption)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
 
-                TextField("e.g. Send quarterly insurance update", text: $title)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                    .textInputAutocapitalization(.sentences)
-                    .padding(14)
-                    .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
-                            .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8)
+                ZStack(alignment: .leading) {
+                    if title.isEmpty {
+                        Text("e.g. Send quarterly insurance update")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.placeholderText)
+                            .padding(.horizontal, 14)
+                            .allowsHitTesting(false)
                     }
+
+                    TextField("", text: $title)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .textInputAutocapitalization(.sentences)
+                        .padding(14)
+                }
+                .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                        .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8)
+                }
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -160,31 +184,71 @@ struct NewTaskView: View {
         }
     }
 
+    private var voiceCard: some View {
+        VoiceInputCard(
+            transcript: $voiceTranscript,
+            isRecording: voiceInput.isRecording,
+            audioLevel: voiceInput.audioLevel,
+            feedbackMessage: voiceInput.feedbackMessage,
+            authorizationMessage: voiceInput.authorizationMessage,
+            onToggleRecording: { voiceInput.toggleRecording() },
+            onApplyTranscript: { applyVoiceTranscript(voiceTranscript, force: true) },
+            onClearTranscript: {
+                voiceInput.clearTranscript()
+                voiceTranscript = ""
+            }
+        )
+    }
+
     private var dateCard: some View {
         SectionCardView {
             SectionHeaderView(title: "Due Date", subtitle: "LifeTrack will schedule a reminder.")
 
-            HStack(spacing: LifeTrackTheme.Spacing.medium) {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                    .frame(width: 44, height: 44)
-                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+                HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                        .frame(width: 44, height: 44)
+                        .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(dueDate.weekdayDateString)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(dueDate.weekdayDateString)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
 
-                    Text(dueDate.timeString)
-                        .font(.footnote)
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        Text(dueDate.timeString)
+                            .font(.footnote)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 0)
                 }
 
-                Spacer()
+                VStack(spacing: 0) {
+                    DatePickerRow(title: "Date") {
+                        DatePicker("", selection: $dueDate, displayedComponents: .date)
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .fixedSize()
+                    }
 
-                DatePicker("", selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
-                    .labelsHidden()
+                    Divider()
+                        .padding(.leading, 54)
+
+                    DatePickerRow(title: "Time") {
+                        DatePicker("", selection: $dueDate, displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .fixedSize()
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.75), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
             }
             .padding(12)
             .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.85), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
@@ -210,7 +274,7 @@ struct NewTaskView: View {
                 if notes.isEmpty {
                     Text("Write the details that will make this task easier later...")
                         .font(.body)
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.placeholderText)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 18)
                         .allowsHitTesting(false)
@@ -319,6 +383,30 @@ struct NewTaskView: View {
         }
     }
 
+    private func applyVoiceTranscript(_ transcript: String, force: Bool = false) {
+        let cleanedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedTranscript.isEmpty else {
+            return
+        }
+
+        let draft = VoiceTaskParser.parse(cleanedTranscript)
+
+        if let draftTitle = draft.title, force || title.isEmpty || title == lastVoiceGeneratedTitle {
+            title = draftTitle
+            lastVoiceGeneratedTitle = draftTitle
+        }
+
+        if let draftCategory = draft.category, force || !didApplyVoiceCategory {
+            category = draftCategory
+            didApplyVoiceCategory = true
+        }
+
+        if let draftDueDate = draft.dueDate, force || !didApplyVoiceDueDate {
+            dueDate = draftDueDate
+            didApplyVoiceDueDate = true
+        }
+    }
+
     private func save() {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let now = Date()
@@ -364,6 +452,24 @@ struct NewTaskView: View {
         )
         didSave = true
         dismiss()
+    }
+}
+
+private struct DatePickerRow<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+            Spacer(minLength: LifeTrackTheme.Spacing.medium)
+
+            content
+        }
+        .frame(minHeight: 48)
     }
 }
 
