@@ -51,3 +51,69 @@ struct StatusPillView: View {
             .background(tint.opacity(0.10), in: Capsule())
     }
 }
+
+struct PriorityPillView: View {
+    let priority: TaskPriority
+    var isSelected = false
+
+    var body: some View {
+        Label(priority.title, systemImage: priority.symbolName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isSelected ? .white : priority.tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isSelected ? priority.tint : priority.tint.opacity(0.11), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(priority.tint.opacity(isSelected ? 0.18 : 0.24), lineWidth: 0.8)
+            }
+    }
+}
+
+struct RecurrencePillView: View {
+    let recurrence: TaskRecurrence
+    var isSelected = false
+
+    var body: some View {
+        Label(recurrence.shortTitle, systemImage: recurrence.symbolName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isSelected ? .white : recurrence.tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isSelected ? recurrence.tint : recurrence.tint.opacity(0.11), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(recurrence.tint.opacity(isSelected ? 0.18 : 0.24), lineWidth: 0.8)
+            }
+    }
+}
+
+extension TaskPriority {
+    var tint: Color {
+        switch self {
+        case .low:
+            LifeTrackTheme.ColorPalette.secondaryText
+        case .normal:
+            LifeTrackTheme.ColorPalette.accent
+        case .high:
+            LifeTrackTheme.ColorPalette.warning
+        }
+    }
+}
+
+extension TaskRecurrence {
+    var tint: Color {
+        switch self {
+        case .none:
+            LifeTrackTheme.ColorPalette.secondaryText
+        case .daily:
+            LifeTrackTheme.ColorPalette.accent
+        case .weekly:
+            LifeTrackTheme.ColorPalette.secondaryAccent
+        case .monthly:
+            LifeTrackTheme.ColorPalette.success
+        case .yearly:
+            LifeTrackTheme.ColorPalette.warning
+        }
+    }
+}

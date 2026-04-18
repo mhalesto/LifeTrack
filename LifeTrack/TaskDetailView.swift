@@ -33,6 +33,15 @@ struct TaskDetailView: View {
                             subtitle: "Due at \(task.dueDate.timeString)",
                             tint: LifeTrackTheme.ColorPalette.accent
                         )
+
+                        if task.recurrence != .none {
+                            DetailRow(
+                                symbolName: task.recurrence.symbolName,
+                                title: task.recurrence.title,
+                                subtitle: "LifeTrack creates the next copy when this task is completed.",
+                                tint: task.recurrence.tint
+                            )
+                        }
                     }
 
                     if !task.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -84,6 +93,48 @@ struct TaskDetailView: View {
                                 }
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                            }
+                        }
+                    }
+
+                    if task.hasDocumentIntelligence {
+                        SectionCardView {
+                            SectionHeaderView(
+                                title: "Document Assistant",
+                                subtitle: "Searchable text and suggested reminders saved locally."
+                            )
+
+                            DetailRow(
+                                symbolName: "doc.text.magnifyingglass",
+                                title: task.documentSuggestedTitle ?? "Document insights",
+                                subtitle: documentAssistantSubtitle,
+                                tint: LifeTrackTheme.ColorPalette.accent
+                            )
+
+                            if !task.documentKeywords.isEmpty {
+                                ScrollView(.horizontal) {
+                                    HStack(spacing: 7) {
+                                        ForEach(task.documentKeywords.prefix(6), id: \.self) { keyword in
+                                            Text(keyword.capitalized)
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                                                .padding(.horizontal, 9)
+                                                .padding(.vertical, 5)
+                                                .background(LifeTrackTheme.ColorPalette.accentSoft, in: Capsule())
+                                        }
+                                    }
+                                }
+                                .scrollIndicators(.hidden)
+                            }
+
+                            if !task.documentExtractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(task.documentExtractedText)
+                                    .font(.footnote)
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                    .lineLimit(6)
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.86), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
                             }
                         }
                     }
@@ -146,6 +197,22 @@ struct TaskDetailView: View {
                             tint: LifeTrackTheme.ColorPalette.secondaryText
                         )
                     }
+
+                    if task.priority != .normal {
+                        StatusPillView(
+                            title: task.priority.title,
+                            symbolName: task.priority.symbolName,
+                            tint: task.priority.tint
+                        )
+                    }
+
+                    if task.recurrence != .none {
+                        StatusPillView(
+                            title: task.recurrence.shortTitle,
+                            symbolName: "repeat",
+                            tint: task.recurrence.tint
+                        )
+                    }
                 }
             }
         }
@@ -172,6 +239,18 @@ struct TaskDetailView: View {
             for: storageName,
             displayName: task.documentDisplayName
         )
+    }
+
+    private var documentAssistantSubtitle: String {
+        if let dueDate = task.documentSuggestedDueDate {
+            return "Suggested date: \(dueDate.weekdayDateString)"
+        }
+
+        if let summary = task.documentAnalysisSummary {
+            return summary
+        }
+
+        return "Searchable text is available for this file."
     }
 
     private var emailURL: URL? {

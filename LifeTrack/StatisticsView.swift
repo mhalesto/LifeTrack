@@ -408,19 +408,17 @@ struct StatisticsView: View {
 
     private func toggleCompletion(for task: LifeTask) {
         performWithOptionalAnimation {
-            task.isCompleted.toggle()
-            task.updatedAt = Date()
-            try? modelContext.save()
-            syncReminder(for: task)
+            TaskLifecycleManager.toggleCompletion(
+                for: task,
+                in: modelContext,
+                customCategories: customCategories
+            )
         }
     }
 
     private func delete(_ task: LifeTask) {
         performWithOptionalAnimation {
-            ReminderScheduler.cancel(taskID: task.id)
-            DocumentStore.delete(storageName: task.documentStorageName)
-            modelContext.delete(task)
-            try? modelContext.save()
+            TaskLifecycleManager.delete(task, in: modelContext)
         }
     }
 
@@ -432,13 +430,7 @@ struct StatisticsView: View {
     }
 
     private func syncReminder(for task: LifeTask) {
-        ReminderScheduler.synchronizeReminder(
-            taskID: task.id,
-            title: task.title,
-            categoryTitle: task.categoryOption(customCategories: customCategories).title,
-            dueDate: task.dueDate,
-            isCompleted: task.isCompleted
-        )
+        TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
     }
 
     private func performWithOptionalAnimation(_ updates: () -> Void) {

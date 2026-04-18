@@ -46,6 +46,97 @@ enum TaskTemplateAction: String {
     case email
 }
 
+enum TaskPriority: String, CaseIterable, Identifiable {
+    case low
+    case normal
+    case high
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .low: "Low"
+        case .normal: "Normal"
+        case .high: "High"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .low: "arrow.down.circle"
+        case .normal: "equal.circle"
+        case .high: "exclamationmark.circle"
+        }
+    }
+
+    var focusScore: Int {
+        switch self {
+        case .low: 0
+        case .normal: 12
+        case .high: 34
+        }
+    }
+}
+
+enum TaskRecurrence: String, CaseIterable, Identifiable {
+    case none
+    case daily
+    case weekly
+    case monthly
+    case yearly
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: "None"
+        case .daily: "Daily"
+        case .weekly: "Weekly"
+        case .monthly: "Monthly"
+        case .yearly: "Yearly"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .none: "No repeat"
+        case .daily: "Daily"
+        case .weekly: "Weekly"
+        case .monthly: "Monthly"
+        case .yearly: "Yearly"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .none: "circle"
+        case .daily: "sun.max"
+        case .weekly: "calendar.badge.clock"
+        case .monthly: "calendar"
+        case .yearly: "calendar.badge.exclamationmark"
+        }
+    }
+
+    var focusScore: Int {
+        self == .none ? 0 : 18
+    }
+
+    func nextDate(after date: Date, calendar: Calendar = .current) -> Date? {
+        switch self {
+        case .none:
+            return nil
+        case .daily:
+            return calendar.date(byAdding: .day, value: 1, to: date)
+        case .weekly:
+            return calendar.date(byAdding: .weekOfYear, value: 1, to: date)
+        case .monthly:
+            return calendar.date(byAdding: .month, value: 1, to: date)
+        case .yearly:
+            return calendar.date(byAdding: .year, value: 1, to: date)
+        }
+    }
+}
+
 @Model
 final class LifeTask {
     @Attribute(.unique) var id: UUID
@@ -55,8 +146,15 @@ final class LifeTask {
     var isCompleted: Bool
     var notes: String
     var templateActionRawValue: String
+    var priorityRawValue: String = TaskPriority.normal.rawValue
+    var recurrenceRawValue: String = TaskRecurrence.none.rawValue
     var documentStorageName: String?
     var documentDisplayName: String?
+    var documentExtractedText: String = ""
+    var documentAnalysisSummary: String?
+    var documentSuggestedTitle: String?
+    var documentSuggestedDueDate: Date?
+    var documentKeywordsRawValue: String = ""
     var createdAt: Date
     var updatedAt: Date
 
@@ -69,8 +167,15 @@ final class LifeTask {
         isCompleted: Bool = false,
         notes: String = "",
         templateAction: TaskTemplateAction = .none,
+        priority: TaskPriority = .normal,
+        recurrence: TaskRecurrence = .none,
         documentStorageName: String? = nil,
         documentDisplayName: String? = nil,
+        documentExtractedText: String = "",
+        documentAnalysisSummary: String? = nil,
+        documentSuggestedTitle: String? = nil,
+        documentSuggestedDueDate: Date? = nil,
+        documentKeywords: [String] = [],
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -81,8 +186,15 @@ final class LifeTask {
         self.isCompleted = isCompleted
         self.notes = notes
         self.templateActionRawValue = templateAction.rawValue
+        self.priorityRawValue = priority.rawValue
+        self.recurrenceRawValue = recurrence.rawValue
         self.documentStorageName = documentStorageName
         self.documentDisplayName = documentDisplayName
+        self.documentExtractedText = documentExtractedText
+        self.documentAnalysisSummary = documentAnalysisSummary
+        self.documentSuggestedTitle = documentSuggestedTitle
+        self.documentSuggestedDueDate = documentSuggestedDueDate
+        self.documentKeywordsRawValue = documentKeywords.joined(separator: "\n")
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -97,11 +209,68 @@ final class LifeTask {
         set { templateActionRawValue = newValue.rawValue }
     }
 
+    var priority: TaskPriority {
+        get { TaskPriority(rawValue: priorityRawValue) ?? .normal }
+        set { priorityRawValue = newValue.rawValue }
+    }
+
+    var recurrence: TaskRecurrence {
+        get { TaskRecurrence(rawValue: recurrenceRawValue) ?? .none }
+        set { recurrenceRawValue = newValue.rawValue }
+    }
+
+    var documentKeywords: [String] {
+        get {
+            documentKeywordsRawValue
+                .components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            documentKeywordsRawValue = newValue.joined(separator: "\n")
+        }
+    }
+
     var isOverdue: Bool {
         !isCompleted && dueDate < Date()
     }
 
     var hasDocument: Bool {
         documentStorageName != nil && documentDisplayName != nil
+    }
+
+    var hasDocumentIntelligence: Bool {
+        !documentExtractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            documentSuggestedDueDate != nil ||
+            documentSuggestedTitle != nil ||
+            !documentKeywords.isEmpty
+    }
+
+    func nextRecurringTask(completedAt: Date = Date(), calendar: Calendar = .current) -> LifeTask? {
+        guard let nextDueDate = recurrence.nextDate(after: dueDate, calendar: calendar) else {
+            return nil
+        }
+
+        var normalizedDueDate = nextDueDate
+        while normalizedDueDate <= completedAt {
+            guard let followingDate = recurrence.nextDate(after: normalizedDueDate, calendar: calendar) else {
+                break
+            }
+            normalizedDueDate = followingDate
+        }
+
+        return LifeTask(
+            title: title,
+            category: category,
+            categoryRawValue: categoryRawValue,
+            dueDate: normalizedDueDate,
+            isCompleted: false,
+            notes: notes,
+            templateAction: templateAction,
+            priority: priority,
+            recurrence: recurrence,
+            createdAt: completedAt,
+            updatedAt: completedAt
+        )
     }
 }

@@ -14,6 +14,28 @@ struct TaskTemplate: Identifiable {
     let dueDate: Date
     let notes: String
     let action: TaskTemplateAction
+    let priority: TaskPriority
+    let recurrence: TaskRecurrence
+
+    init(
+        id: String,
+        title: String,
+        category: TaskCategory,
+        dueDate: Date,
+        notes: String,
+        action: TaskTemplateAction,
+        priority: TaskPriority = .normal,
+        recurrence: TaskRecurrence = .none
+    ) {
+        self.id = id
+        self.title = title
+        self.category = category
+        self.dueDate = dueDate
+        self.notes = notes
+        self.action = action
+        self.priority = priority
+        self.recurrence = recurrence
+    }
 
     var subtitle: String {
         switch id {
@@ -23,6 +45,12 @@ struct TaskTemplate: Identifiable {
             "Review balances, bills, and savings progress."
         case "checkup":
             "Plan a health appointment and attach records."
+        case "bill":
+            "Track monthly payments before they become overdue."
+        case "medication":
+            "Set a recurring health reminder."
+        case "cleaning":
+            "Keep home routines visible and lightweight."
         default:
             "Start from a structured task."
         }
@@ -53,7 +81,8 @@ struct TaskTemplate: Identifiable {
                 category: .finance,
                 dueDate: Calendar.current.date(byAdding: .day, value: 2, to: Date()) ?? Date(),
                 notes: "Check account balances, upcoming bills, and savings progress.",
-                action: .none
+                action: .none,
+                recurrence: .monthly
             ),
             TaskTemplate(
                 id: "checkup",
@@ -61,7 +90,37 @@ struct TaskTemplate: Identifiable {
                 category: .health,
                 dueDate: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date(),
                 notes: "Confirm available dates and add appointment documents once booked.",
-                action: .none
+                action: .none,
+                priority: .high
+            ),
+            TaskTemplate(
+                id: "bill",
+                title: "Pay monthly bill",
+                category: .finance,
+                dueDate: Calendar.current.date(byAdding: .day, value: 3, to: Date()) ?? Date(),
+                notes: "Attach the invoice or statement and confirm payment once complete.",
+                action: .none,
+                priority: .high,
+                recurrence: .monthly
+            ),
+            TaskTemplate(
+                id: "medication",
+                title: "Take medication",
+                category: .health,
+                dueDate: Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date(),
+                notes: "Confirm dosage and any notes from the prescription.",
+                action: .none,
+                priority: .high,
+                recurrence: .daily
+            ),
+            TaskTemplate(
+                id: "cleaning",
+                title: "Weekly cleaning reset",
+                category: .home,
+                dueDate: Calendar.current.date(byAdding: .day, value: 6, to: Date()) ?? Date(),
+                notes: "Tidy the main spaces, laundry, bins, and quick surface clean.",
+                action: .none,
+                recurrence: .weekly
             )
         ]
     }

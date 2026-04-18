@@ -65,6 +65,8 @@ struct HomeView: View {
                         onEdit: openTaskFromCalendar,
                         onDelete: delete
                     )
+                case .documents:
+                    DocumentSearchView()
                 }
             }
             .sheet(isPresented: $isShowingTemplatePicker) {
@@ -173,6 +175,7 @@ struct HomeView: View {
                 )
             } else {
                 prioritySection(metrics: metrics)
+                documentRemindersSection(metrics: metrics)
                 recentDocumentsSection(metrics: metrics)
             }
         }
@@ -267,6 +270,17 @@ struct HomeView: View {
                     )
 
                     QuickActionButton(
+                        title: "Documents",
+                        subtitle: "Search files",
+                        symbolName: "doc.text.magnifyingglass",
+                        tint: LifeTrackTheme.ColorPalette.warning,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { navigationPath.append(.documents) }
+                    )
+
+                    QuickActionButton(
                         title: "Templates",
                         subtitle: "Smart shortcuts",
                         symbolName: "sparkles",
@@ -286,12 +300,12 @@ struct HomeView: View {
     private func prioritySection(metrics: HomeLayoutMetrics) -> some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
             SectionHeaderView(
-                title: "Today's Focus",
-                trailing: "\(priorityTasks.count)",
-                infoMessage: "The highest-signal tasks right now. LifeTrack prioritizes overdue, due today, and upcoming tasks."
+                title: "Daily Focus",
+                trailing: "\(focusRecommendations.count)",
+                infoMessage: "A local planner picks 3 to 5 tasks using due dates, overdue status, priority, routines, and document reminders."
             )
 
-            if priorityTasks.isEmpty {
+            if focusRecommendations.isEmpty {
                 SectionCardView {
                     CompactMessageView(
                         symbolName: "checkmark.circle",
@@ -301,23 +315,67 @@ struct HomeView: View {
                 }
             } else {
                 VStack(spacing: LifeTrackTheme.Spacing.small) {
-                    ForEach(priorityTasks) { task in
-                        TaskRowView(
-                            task: task,
-                            onToggleCompletion: { toggleCompletion(for: task) },
-                            onEdit: { editingTask = task },
-                            onDelete: { delete(task) },
-                            categoryOption: task.categoryOption(customCategories: customCategories),
+                    ForEach(focusRecommendations) { recommendation in
+                        DailyFocusTaskCard(
+                            recommendation: recommendation,
+                            categoryOption: recommendation.task.categoryOption(customCategories: customCategories),
+                            onToggleCompletion: { toggleCompletion(for: recommendation.task) },
+                            onEdit: { editingTask = recommendation.task },
+                            onDelete: { delete(recommendation.task) },
                             verticalPadding: metrics.taskRowVerticalPadding,
                             leadingIconSize: metrics.taskRowIconSize
                         )
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale(scale: 0.98))
-                        ))
+                    }
+
+                    if shouldShowFocusActions {
+                        HStack(spacing: LifeTrackTheme.Spacing.small) {
+                            FocusPlanningButton(
+                                title: "Reset My Day",
+                                symbolName: "arrow.clockwise",
+                                tint: LifeTrackTheme.ColorPalette.accent,
+                                action: resetMyDay
+                            )
+
+                            FocusPlanningButton(
+                                title: "Reschedule Overdue",
+                                symbolName: "calendar.badge.clock",
+                                tint: LifeTrackTheme.ColorPalette.warning,
+                                action: rescheduleOverdueTasks
+                            )
+                        }
                     }
                 }
-                .animation(animationsEnabled ? .snappy(duration: 0.24) : nil, value: priorityTasks.map(\.id))
+                .animation(animationsEnabled ? .snappy(duration: 0.24) : nil, value: focusRecommendations.map(\.id))
+            }
+        }
+    }
+
+    private func documentRemindersSection(metrics: HomeLayoutMetrics) -> some View {
+        Group {
+            if !documentReminderTasks.isEmpty {
+                VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
+                    SectionHeaderView(
+                        title: "Document Reminders",
+                        trailing: documentReminderTasks.count.formatted(),
+                        infoMessage: "Document-based reminders are detected locally from uploaded files and stay linked to their tasks."
+                    )
+
+                    VStack(spacing: LifeTrackTheme.Spacing.small) {
+                        ForEach(Array(documentReminderTasks.prefix(2))) { task in
+                            NavigationLink {
+                                TaskDetailView(task: task)
+                            } label: {
+                                DocumentReminderRow(
+                                    task: task,
+                                    categoryOption: task.categoryOption(customCategories: customCategories),
+                                    verticalPadding: metrics.documentRowVerticalPadding,
+                                    iconSize: metrics.documentRowIconSize
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
         }
     }
@@ -374,14 +432,31 @@ struct HomeView: View {
         tasks.filter(\.isOverdue)
     }
 
+    private var focusRecommendations: [DailyFocusRecommendation] {
+        DailyFocusPlanner.recommendations(from: tasks)
+    }
+
     private var priorityTasks: [LifeTask] {
-        Array((overdueTasks + dueTodayTasks + upcomingTasks).prefix(5))
+        focusRecommendations.map(\.task)
     }
 
     private var documentTasks: [LifeTask] {
         tasks
             .filter(\.hasDocument)
             .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private var documentReminderTasks: [LifeTask] {
+        tasks
+            .filter { !$0.isCompleted && $0.hasDocumentIntelligence }
+            .sorted {
+                ($0.documentSuggestedDueDate ?? $0.dueDate) < ($1.documentSuggestedDueDate ?? $1.dueDate)
+            }
+    }
+
+    private var shouldShowFocusActions: Bool {
+        DailyFocusPlanner.shouldOfferReset(for: tasks) ||
+            DailyFocusPlanner.shouldOfferOverdueReschedule(for: tasks)
     }
 
     private var dashboardMessage: String {
@@ -647,19 +722,42 @@ struct HomeView: View {
 
     private func toggleCompletion(for task: LifeTask) {
         performWithOptionalAnimation {
-            task.isCompleted.toggle()
-            task.updatedAt = Date()
-            try? modelContext.save()
-            syncReminder(for: task)
+            TaskLifecycleManager.toggleCompletion(
+                for: task,
+                in: modelContext,
+                customCategories: customCategories
+            )
         }
     }
 
     private func delete(_ task: LifeTask) {
         performWithOptionalAnimation {
-            ReminderScheduler.cancel(taskID: task.id)
-            DocumentStore.delete(storageName: task.documentStorageName)
-            modelContext.delete(task)
-            try? modelContext.save()
+            TaskLifecycleManager.delete(task, in: modelContext)
+        }
+    }
+
+    private func resetMyDay() {
+        let focusIDs = Set(focusRecommendations.map(\.task.id))
+        let plan = DailyFocusPlanner.resetSchedule(for: tasks, focusIDs: focusIDs)
+
+        performWithOptionalAnimation {
+            TaskLifecycleManager.applySchedule(
+                plan,
+                in: modelContext,
+                customCategories: customCategories
+            )
+        }
+    }
+
+    private func rescheduleOverdueTasks() {
+        let plan = DailyFocusPlanner.overdueReschedulePlan(for: tasks)
+
+        performWithOptionalAnimation {
+            TaskLifecycleManager.applySchedule(
+                plan,
+                in: modelContext,
+                customCategories: customCategories
+            )
         }
     }
 
@@ -675,19 +773,14 @@ struct HomeView: View {
     }
 
     private func syncReminder(for task: LifeTask) {
-        ReminderScheduler.synchronizeReminder(
-            taskID: task.id,
-            title: task.title,
-            categoryTitle: task.categoryOption(customCategories: customCategories).title,
-            dueDate: task.dueDate,
-            isCompleted: task.isCompleted
-        )
+        TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
     }
 }
 
 private enum HomeRoute: Hashable {
     case statistics
     case calendar
+    case documents
 }
 
 private struct HomeLayoutMetrics {
@@ -1315,6 +1408,97 @@ private struct CompactMessageView: View {
     }
 }
 
+private struct DailyFocusTaskCard: View {
+    let recommendation: DailyFocusRecommendation
+    let categoryOption: TaskCategoryOption
+    let onToggleCompletion: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    var verticalPadding: CGFloat = 12
+    var leadingIconSize: CGFloat = 28
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                Label(recommendation.reason.title, systemImage: recommendation.reason.symbolName)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(reasonTint)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(reasonTint.opacity(0.11), in: Capsule())
+
+                if recommendation.task.priority == .high {
+                    StatusPillView(
+                        title: "High priority",
+                        symbolName: "flag.fill",
+                        tint: TaskPriority.high.tint
+                    )
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 2)
+
+            TaskRowView(
+                task: recommendation.task,
+                onToggleCompletion: onToggleCompletion,
+                onEdit: onEdit,
+                onDelete: onDelete,
+                categoryOption: categoryOption,
+                verticalPadding: verticalPadding,
+                leadingIconSize: leadingIconSize
+            )
+        }
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .move(edge: .top)),
+            removal: .opacity.combined(with: .scale(scale: 0.98))
+        ))
+    }
+
+    private var reasonTint: Color {
+        switch recommendation.reason {
+        case .overdue:
+            LifeTrackTheme.ColorPalette.danger
+        case .dueToday:
+            LifeTrackTheme.ColorPalette.accent
+        case .highPriority:
+            LifeTrackTheme.ColorPalette.warning
+        case .routine:
+            LifeTrackTheme.ColorPalette.success
+        case .documentReminder:
+            LifeTrackTheme.ColorPalette.secondaryAccent
+        case .upcoming:
+            LifeTrackTheme.ColorPalette.secondaryText
+        }
+    }
+}
+
+private struct FocusPlanningButton: View {
+    let title: String
+    let symbolName: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: symbolName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 9)
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                        .stroke(tint.opacity(0.22), lineWidth: 0.8)
+                }
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97, pressedOpacity: 0.92))
+    }
+}
+
 private struct RecentDocumentRow: View {
     let task: LifeTask
     let categoryOption: TaskCategoryOption
@@ -1354,6 +1538,60 @@ private struct RecentDocumentRow: View {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                 .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
         }
+    }
+}
+
+private struct DocumentReminderRow: View {
+    let task: LifeTask
+    let categoryOption: TaskCategoryOption
+    var verticalPadding: CGFloat = 14
+    var iconSize: CGFloat = 42
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(categoryOption.tint)
+                .frame(width: iconSize, height: iconSize)
+                .background(categoryOption.background, in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.documentSuggestedTitle ?? task.documentDisplayName ?? "Document reminder")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, verticalPadding)
+        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
+        }
+    }
+
+    private var subtitle: String {
+        if let dueDate = task.documentSuggestedDueDate {
+            return "Suggested for \(dueDate.dayMonthString) · \(task.title)"
+        }
+
+        if let firstKeyword = task.documentKeywords.first {
+            return "\(firstKeyword.capitalized) · \(task.title)"
+        }
+
+        return task.title
     }
 }
 

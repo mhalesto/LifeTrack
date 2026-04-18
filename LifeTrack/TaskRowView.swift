@@ -81,6 +81,22 @@ struct TaskRowView: View {
                             tint: task.isOverdue ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.secondaryText
                         )
 
+                        if task.priority == .high {
+                            StatusPillView(
+                                title: "High",
+                                symbolName: "flag.fill",
+                                tint: TaskPriority.high.tint
+                            )
+                        }
+
+                        if task.recurrence != .none {
+                            StatusPillView(
+                                title: task.recurrence.shortTitle,
+                                symbolName: "repeat",
+                                tint: task.recurrence.tint
+                            )
+                        }
+
                         if task.hasDocument {
                             Image(systemName: "paperclip")
                                 .font(.caption.weight(.semibold))

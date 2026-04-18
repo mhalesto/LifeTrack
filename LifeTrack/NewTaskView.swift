@@ -25,9 +25,17 @@ struct NewTaskView: View {
     @State private var isCompleted: Bool
     @State private var notes: String
     @State private var templateAction: TaskTemplateAction
+    @State private var priority: TaskPriority
+    @State private var recurrence: TaskRecurrence
     @State private var documentStorageName: String?
     @State private var documentDisplayName: String?
+    @State private var documentExtractedText: String
+    @State private var documentAnalysisSummary: String?
+    @State private var documentSuggestedTitle: String?
+    @State private var documentSuggestedDueDate: Date?
+    @State private var documentKeywords: [String]
     @State private var isImportingDocument = false
+    @State private var isAnalyzingDocument = false
     @State private var isShowingCategoryManager = false
     @State private var pendingCategoryOption: TaskCategoryOption?
     @State private var documentError: String?
@@ -48,8 +56,15 @@ struct NewTaskView: View {
         _isCompleted = State(initialValue: task?.isCompleted ?? false)
         _notes = State(initialValue: task?.notes ?? template?.notes ?? "")
         _templateAction = State(initialValue: task?.templateAction ?? template?.action ?? .none)
+        _priority = State(initialValue: task?.priority ?? template?.priority ?? .normal)
+        _recurrence = State(initialValue: task?.recurrence ?? template?.recurrence ?? .none)
         _documentStorageName = State(initialValue: task?.documentStorageName)
         _documentDisplayName = State(initialValue: task?.documentDisplayName)
+        _documentExtractedText = State(initialValue: task?.documentExtractedText ?? "")
+        _documentAnalysisSummary = State(initialValue: task?.documentAnalysisSummary)
+        _documentSuggestedTitle = State(initialValue: task?.documentSuggestedTitle)
+        _documentSuggestedDueDate = State(initialValue: task?.documentSuggestedDueDate)
+        _documentKeywords = State(initialValue: task?.documentKeywords ?? [])
     }
 
     var body: some View {
@@ -65,6 +80,8 @@ struct NewTaskView: View {
                         voiceCard
 
                         taskCard
+
+                        planningCard
 
                         dateCard
 
@@ -227,6 +244,50 @@ struct NewTaskView: View {
         )
     }
 
+    private var planningCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "Planning", subtitle: "Help LifeTrack choose what matters today.")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Priority")
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                HStack(spacing: 8) {
+                    ForEach(TaskPriority.allCases) { option in
+                        Button {
+                            priority = option
+                        } label: {
+                            PriorityPillView(priority: option, isSelected: priority == option)
+                        }
+                        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.92))
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Repeat")
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 92), spacing: 8, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(TaskRecurrence.allCases) { option in
+                        Button {
+                            recurrence = option
+                        } label: {
+                            RecurrencePillView(recurrence: option, isSelected: recurrence == option)
+                        }
+                        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.92))
+                    }
+                }
+            }
+        }
+    }
+
     private var dateCard: some View {
         SectionCardView {
             SectionHeaderView(title: "Due Date", subtitle: "LifeTrack will schedule a reminder.")
@@ -332,6 +393,28 @@ struct NewTaskView: View {
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.danger)
             }
+
+            if isAnalyzingDocument {
+                HStack(spacing: LifeTrackTheme.Spacing.small) {
+                    ProgressView()
+                        .tint(LifeTrackTheme.ColorPalette.accent)
+
+                    Text("Reading document locally...")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+                .padding(11)
+                .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.86), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            } else if hasDocumentAnalysis {
+                DocumentIntelligenceView(
+                    summary: documentAnalysisSummary,
+                    suggestedTitle: documentSuggestedTitle,
+                    suggestedDueDate: documentSuggestedDueDate,
+                    keywords: documentKeywords,
+                    extractedText: documentExtractedText,
+                    onApplySuggestion: applyDocumentSuggestion
+                )
+            }
         }
     }
 
@@ -398,6 +481,7 @@ struct NewTaskView: View {
         }
         documentStorageName = nil
         documentDisplayName = nil
+        clearDocumentAnalysis()
     }
 
     private func handleDocumentImport(_ result: Result<[URL], Error>) {
@@ -416,11 +500,78 @@ struct NewTaskView: View {
                 documentStorageName = storedDocument.storageName
                 documentDisplayName = storedDocument.displayName
                 documentError = nil
+                analyzeDocument(storageName: storedDocument.storageName, displayName: storedDocument.displayName)
             } catch {
                 documentError = "Document could not be attached."
+                isAnalyzingDocument = false
             }
         case .failure:
             documentError = "Document could not be attached."
+            isAnalyzingDocument = false
+        }
+    }
+
+    private func analyzeDocument(storageName: String, displayName: String) {
+        guard let url = DocumentStore.url(for: storageName) else {
+            clearDocumentAnalysis()
+            documentError = "Document was attached, but could not be read yet."
+            return
+        }
+
+        clearDocumentAnalysis()
+        isAnalyzingDocument = true
+
+        Task {
+            let result = await DocumentAnalysisManager.analyze(url: url, displayName: displayName)
+            await MainActor.run {
+                guard documentStorageName == storageName else {
+                    return
+                }
+
+                documentExtractedText = result.extractedText
+                documentAnalysisSummary = result.summary
+                documentSuggestedTitle = result.suggestedTitle
+                documentSuggestedDueDate = result.suggestedDueDate
+                documentKeywords = result.keywords
+                isAnalyzingDocument = false
+            }
+        }
+    }
+
+    private func clearDocumentAnalysis() {
+        documentExtractedText = ""
+        documentAnalysisSummary = nil
+        documentSuggestedTitle = nil
+        documentSuggestedDueDate = nil
+        documentKeywords = []
+    }
+
+    private var hasDocumentAnalysis: Bool {
+        documentAnalysisSummary != nil ||
+            documentSuggestedTitle != nil ||
+            documentSuggestedDueDate != nil ||
+            !documentKeywords.isEmpty ||
+            !documentExtractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func applyDocumentSuggestion() {
+        if let suggestedTitle = documentSuggestedTitle, !suggestedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            title = suggestedTitle
+        }
+
+        if let documentSuggestedDueDate {
+            dueDate = documentSuggestedDueDate
+        }
+
+        if documentKeywords.contains("insurance") || documentKeywords.contains("invoice") || documentKeywords.contains("bill") || documentKeywords.contains("tax") {
+            categoryRawValue = TaskCategory.finance.rawValue
+            pendingCategoryOption = nil
+        } else if documentKeywords.contains("appointment") || documentKeywords.contains("medical") {
+            categoryRawValue = TaskCategory.health.rawValue
+            pendingCategoryOption = nil
+        } else if documentKeywords.contains("school") || documentKeywords.contains("application") {
+            categoryRawValue = TaskCategory.personal.rawValue
+            pendingCategoryOption = nil
         }
     }
 
@@ -452,6 +603,7 @@ struct NewTaskView: View {
     private func save() {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let now = Date()
+        let wasCompleted = existingTask?.isCompleted ?? false
 
         let task: LifeTask
         if let existingTask {
@@ -465,8 +617,15 @@ struct NewTaskView: View {
             task.isCompleted = isCompleted
             task.notes = notes
             task.templateAction = templateAction
+            task.priority = priority
+            task.recurrence = recurrence
             task.documentStorageName = documentStorageName
             task.documentDisplayName = documentDisplayName
+            task.documentExtractedText = documentExtractedText
+            task.documentAnalysisSummary = documentAnalysisSummary
+            task.documentSuggestedTitle = documentSuggestedTitle
+            task.documentSuggestedDueDate = documentSuggestedDueDate
+            task.documentKeywords = documentKeywords
             task.updatedAt = now
         } else {
             task = LifeTask(
@@ -477,12 +636,29 @@ struct NewTaskView: View {
                 isCompleted: isCompleted,
                 notes: notes,
                 templateAction: templateAction,
+                priority: priority,
+                recurrence: recurrence,
                 documentStorageName: documentStorageName,
                 documentDisplayName: documentDisplayName,
+                documentExtractedText: documentExtractedText,
+                documentAnalysisSummary: documentAnalysisSummary,
+                documentSuggestedTitle: documentSuggestedTitle,
+                documentSuggestedDueDate: documentSuggestedDueDate,
+                documentKeywords: documentKeywords,
                 createdAt: now,
                 updatedAt: now
             )
             modelContext.insert(task)
+        }
+
+        let nextRecurringTask: LifeTask?
+        if !wasCompleted && task.isCompleted {
+            nextRecurringTask = task.nextRecurringTask(completedAt: now)
+            if let nextRecurringTask {
+                modelContext.insert(nextRecurringTask)
+            }
+        } else {
+            nextRecurringTask = nil
         }
 
         try? modelContext.save()
@@ -493,6 +669,12 @@ struct NewTaskView: View {
             dueDate: task.dueDate,
             isCompleted: task.isCompleted
         )
+        if let nextRecurringTask {
+            TaskLifecycleManager.synchronizeReminder(
+                for: nextRecurringTask,
+                customCategories: customCategories
+            )
+        }
         didSave = true
         dismiss()
     }
@@ -517,6 +699,116 @@ private struct DatePickerRow<Content: View>: View {
             content
         }
         .frame(minHeight: 44)
+    }
+}
+
+private struct DocumentIntelligenceView: View {
+    let summary: String?
+    let suggestedTitle: String?
+    let suggestedDueDate: Date?
+    let keywords: [String]
+    let extractedText: String
+    let onApplySuggestion: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
+            HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
+                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Document Assistant")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(summary ?? "Searchable document text is saved locally.")
+                        .font(.footnote)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if let suggestedTitle {
+                DocumentSuggestionRow(
+                    symbolName: "sparkles",
+                    title: suggestedTitle,
+                    subtitle: suggestedDueDate.map { "Suggested due date: \($0.weekdayDateString)" } ?? "Suggested from the uploaded file."
+                )
+
+                LifeTrackPrimaryButton(
+                    title: "Apply Document Suggestion",
+                    systemImage: "wand.and.stars",
+                    action: onApplySuggestion
+                )
+            }
+
+            if !keywords.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 7) {
+                        ForEach(keywords.prefix(6), id: \.self) { keyword in
+                            Text(keyword.capitalized)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 5)
+                                .background(LifeTrackTheme.ColorPalette.accentSoft, in: Capsule())
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+
+            if !extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(extractedText)
+                    .font(.caption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(3)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.86), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            }
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.accentSoft.opacity(0.48), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.accent.opacity(0.18), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct DocumentSuggestionRow: View {
+    let symbolName: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.small) {
+            Image(systemName: symbolName)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.warning)
+                .frame(width: 30, height: 30)
+                .background(LifeTrackTheme.ColorPalette.warning.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(2)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.86), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
     }
 }
 
