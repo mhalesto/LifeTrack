@@ -81,6 +81,12 @@ struct TaskRowView: View {
                             tint: task.isOverdue ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.secondaryText
                         )
 
+                        StatusPillView(
+                            title: task.durationTitle,
+                            symbolName: "timer",
+                            tint: LifeTrackTheme.ColorPalette.secondaryText
+                        )
+
                         if task.priority == .high {
                             StatusPillView(
                                 title: "High",

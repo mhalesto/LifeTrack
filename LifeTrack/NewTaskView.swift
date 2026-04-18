@@ -27,6 +27,7 @@ struct NewTaskView: View {
     @State private var templateAction: TaskTemplateAction
     @State private var priority: TaskPriority
     @State private var recurrence: TaskRecurrence
+    @State private var durationMinutes: Int
     @State private var documentStorageName: String?
     @State private var documentDisplayName: String?
     @State private var documentExtractedText: String
@@ -45,6 +46,8 @@ struct NewTaskView: View {
     @State private var didApplyVoiceCategory = false
     @State private var didApplyVoiceDueDate = false
 
+    private let durationOptions = [15, 30, 45, 60, 90, 120]
+
     init(task: LifeTask? = nil, template: TaskTemplate? = nil) {
         existingTask = task
         originalDocumentStorageName = task?.documentStorageName
@@ -58,6 +61,7 @@ struct NewTaskView: View {
         _templateAction = State(initialValue: task?.templateAction ?? template?.action ?? .none)
         _priority = State(initialValue: task?.priority ?? template?.priority ?? .normal)
         _recurrence = State(initialValue: task?.recurrence ?? template?.recurrence ?? .none)
+        _durationMinutes = State(initialValue: task?.scheduledDurationMinutes ?? template?.estimatedDurationMinutes ?? 30)
         _documentStorageName = State(initialValue: task?.documentStorageName)
         _documentDisplayName = State(initialValue: task?.documentDisplayName)
         _documentExtractedText = State(initialValue: task?.documentExtractedText ?? "")
@@ -339,6 +343,8 @@ struct NewTaskView: View {
                 .padding(.horizontal, 11)
                 .padding(.vertical, 4)
                 .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.75), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+
+                durationSelector
             }
             .padding(11)
             .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.85), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
@@ -347,6 +353,52 @@ struct NewTaskView: View {
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.85), lineWidth: 0.8)
             }
         }
+    }
+
+    private var durationSelector: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: LifeTrackTheme.Spacing.small) {
+                Image(systemName: "timer")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+
+                Text("Duration")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Spacer(minLength: 0)
+
+                Text(durationTitle(for: durationMinutes))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 70), spacing: 8, alignment: .leading)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                ForEach(durationOptions, id: \.self) { option in
+                    Button {
+                        durationMinutes = option
+                    } label: {
+                        Text(durationTitle(for: option))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(durationMinutes == option ? .white : LifeTrackTheme.ColorPalette.secondaryText)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(durationChipBackground(isSelected: durationMinutes == option), in: Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(durationMinutes == option ? Color.white.opacity(0.22) : LifeTrackTheme.ColorPalette.hairline.opacity(0.82), lineWidth: 0.8)
+                            }
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.92))
+                }
+            }
+        }
+        .padding(11)
+        .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.66), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
     }
 
     private var notesCard: some View {
@@ -619,6 +671,7 @@ struct NewTaskView: View {
             task.templateAction = templateAction
             task.priority = priority
             task.recurrence = recurrence
+            task.scheduledDurationMinutes = durationMinutes
             task.documentStorageName = documentStorageName
             task.documentDisplayName = documentDisplayName
             task.documentExtractedText = documentExtractedText
@@ -638,6 +691,7 @@ struct NewTaskView: View {
                 templateAction: templateAction,
                 priority: priority,
                 recurrence: recurrence,
+                estimatedDurationMinutes: durationMinutes,
                 documentStorageName: documentStorageName,
                 documentDisplayName: documentDisplayName,
                 documentExtractedText: documentExtractedText,
@@ -681,6 +735,28 @@ struct NewTaskView: View {
 
     private var selectedCategory: TaskCategory {
         TaskCategory(rawValue: categoryRawValue) ?? .other
+    }
+
+    private func durationTitle(for minutes: Int) -> String {
+        if minutes < 60 {
+            return "\(minutes)m"
+        }
+
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        if remainingMinutes == 0 {
+            return "\(hours)h"
+        }
+
+        return "\(hours)h \(remainingMinutes)m"
+    }
+
+    private func durationChipBackground(isSelected: Bool) -> some ShapeStyle {
+        if isSelected {
+            return AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient)
+        }
+
+        return AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.86))
     }
 }
 

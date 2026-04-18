@@ -16,6 +16,7 @@ struct TaskTemplate: Identifiable {
     let action: TaskTemplateAction
     let priority: TaskPriority
     let recurrence: TaskRecurrence
+    let estimatedDurationMinutes: Int
 
     init(
         id: String,
@@ -25,7 +26,8 @@ struct TaskTemplate: Identifiable {
         notes: String,
         action: TaskTemplateAction,
         priority: TaskPriority = .normal,
-        recurrence: TaskRecurrence = .none
+        recurrence: TaskRecurrence = .none,
+        estimatedDurationMinutes: Int = 30
     ) {
         self.id = id
         self.title = title
@@ -35,6 +37,7 @@ struct TaskTemplate: Identifiable {
         self.action = action
         self.priority = priority
         self.recurrence = recurrence
+        self.estimatedDurationMinutes = estimatedDurationMinutes
     }
 
     var subtitle: String {
@@ -73,7 +76,8 @@ struct TaskTemplate: Identifiable {
                 category: .work,
                 dueDate: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date(),
                 notes: "Subject: Follow up\n\nHi,\n\nI wanted to follow up on this task and confirm the next step.\n\nThanks,",
-                action: .email
+                action: .email,
+                estimatedDurationMinutes: 30
             ),
             TaskTemplate(
                 id: "budget",
@@ -82,7 +86,8 @@ struct TaskTemplate: Identifiable {
                 dueDate: Calendar.current.date(byAdding: .day, value: 2, to: Date()) ?? Date(),
                 notes: "Check account balances, upcoming bills, and savings progress.",
                 action: .none,
-                recurrence: .monthly
+                recurrence: .monthly,
+                estimatedDurationMinutes: 45
             ),
             TaskTemplate(
                 id: "checkup",
@@ -91,7 +96,8 @@ struct TaskTemplate: Identifiable {
                 dueDate: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date(),
                 notes: "Confirm available dates and add appointment documents once booked.",
                 action: .none,
-                priority: .high
+                priority: .high,
+                estimatedDurationMinutes: 30
             ),
             TaskTemplate(
                 id: "bill",
@@ -101,7 +107,8 @@ struct TaskTemplate: Identifiable {
                 notes: "Attach the invoice or statement and confirm payment once complete.",
                 action: .none,
                 priority: .high,
-                recurrence: .monthly
+                recurrence: .monthly,
+                estimatedDurationMinutes: 20
             ),
             TaskTemplate(
                 id: "medication",
@@ -111,7 +118,8 @@ struct TaskTemplate: Identifiable {
                 notes: "Confirm dosage and any notes from the prescription.",
                 action: .none,
                 priority: .high,
-                recurrence: .daily
+                recurrence: .daily,
+                estimatedDurationMinutes: 5
             ),
             TaskTemplate(
                 id: "cleaning",
@@ -120,7 +128,8 @@ struct TaskTemplate: Identifiable {
                 dueDate: Calendar.current.date(byAdding: .day, value: 6, to: Date()) ?? Date(),
                 notes: "Tidy the main spaces, laundry, bins, and quick surface clean.",
                 action: .none,
-                recurrence: .weekly
+                recurrence: .weekly,
+                estimatedDurationMinutes: 60
             )
         ]
     }

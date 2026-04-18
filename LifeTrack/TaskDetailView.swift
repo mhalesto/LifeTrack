@@ -34,6 +34,13 @@ struct TaskDetailView: View {
                             tint: LifeTrackTheme.ColorPalette.accent
                         )
 
+                        DetailRow(
+                            symbolName: "timer",
+                            title: task.durationTitle,
+                            subtitle: "Used by Calendar to show blocked and available time.",
+                            tint: LifeTrackTheme.ColorPalette.secondaryAccent
+                        )
+
                         if task.recurrence != .none {
                             DetailRow(
                                 symbolName: task.recurrence.symbolName,
@@ -188,6 +195,12 @@ struct TaskDetailView: View {
                         title: task.dueDate.dayMonthString,
                         symbolName: task.isOverdue ? "exclamationmark.circle.fill" : "calendar",
                         tint: task.isOverdue ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.secondaryText
+                    )
+
+                    StatusPillView(
+                        title: task.durationTitle,
+                        symbolName: "timer",
+                        tint: LifeTrackTheme.ColorPalette.secondaryText
                     )
 
                     if task.hasDocument {

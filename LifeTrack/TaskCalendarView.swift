@@ -15,33 +15,77 @@ struct TaskCalendarView: View {
 
     let tasks: [LifeTask]
     let customCategories: [CustomTaskCategory]
+    let focusAvailabilityOnAppear: Bool
+    let initialAvailabilityRange: AvailabilityShareRange
     let onToggleCompletion: (LifeTask) -> Void
     let onEdit: (LifeTask) -> Void
     let onDelete: (LifeTask) -> Void
 
     @State private var selectedScope: TaskCalendarScope = .month
     @State private var selectedDate = Date()
+    @State private var selectedAvailabilityRange: AvailabilityShareRange
     @State private var pendingReopenTask: LifeTask?
     @State private var binUndoState: TaskBinUndoState?
+    @State private var restoredToastState: TaskRestoredToastState?
 
     private let calendar = Calendar.current
+
+    init(
+        tasks: [LifeTask],
+        customCategories: [CustomTaskCategory],
+        focusAvailabilityOnAppear: Bool = false,
+        initialAvailabilityRange: AvailabilityShareRange = .today,
+        onToggleCompletion: @escaping (LifeTask) -> Void,
+        onEdit: @escaping (LifeTask) -> Void,
+        onDelete: @escaping (LifeTask) -> Void
+    ) {
+        self.tasks = tasks
+        self.customCategories = customCategories
+        self.focusAvailabilityOnAppear = focusAvailabilityOnAppear
+        self.initialAvailabilityRange = initialAvailabilityRange
+        self.onToggleCompletion = onToggleCompletion
+        self.onEdit = onEdit
+        self.onDelete = onDelete
+        _selectedAvailabilityRange = State(initialValue: initialAvailabilityRange)
+    }
 
     var body: some View {
         ZStack {
             LifeTrackTheme.appBackground
                 .ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
-                    header
-                    calendarCard
-                    selectedTasksSection
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+                        header
+                        calendarCard
+                        AvailabilityTimelineView(
+                            selectedDate: selectedDate,
+                            selectedRange: $selectedAvailabilityRange,
+                            tasks: tasks,
+                            customCategories: customCategories
+                        )
+                        .id(CalendarScrollTarget.availability)
+                        selectedTasksSection
+                    }
+                    .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+                    .padding(.top, LifeTrackTheme.Spacing.medium)
+                    .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
                 }
-                .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
-                .padding(.top, LifeTrackTheme.Spacing.medium)
-                .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
+                .scrollIndicators(.hidden)
+                .onAppear {
+                    guard focusAvailabilityOnAppear else {
+                        return
+                    }
+
+                    selectedAvailabilityRange = initialAvailabilityRange
+
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 220_000_000)
+                        scrollToAvailability(with: proxy)
+                    }
+                }
             }
-            .scrollIndicators(.hidden)
         }
         .overlay {
             if let pendingReopenTask {
@@ -70,9 +114,31 @@ struct TaskCalendarView: View {
                         dismissUndoToast(id: binUndoState.id)
                     }
                 }
+            } else if let restoredToastState {
+                TaskRestoredToast(
+                    taskTitle: restoredToastState.taskTitle,
+                    onDismiss: { dismissRestoredToast(id: restoredToastState.id) }
+                )
+                .task(id: restoredToastState.id) {
+                    try? await Task.sleep(nanoseconds: 2_400_000_000)
+                    await MainActor.run {
+                        dismissRestoredToast(id: restoredToastState.id)
+                    }
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func scrollToAvailability(with proxy: ScrollViewProxy) {
+        guard animationsEnabled else {
+            proxy.scrollTo(CalendarScrollTarget.availability, anchor: .top)
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.36)) {
+            proxy.scrollTo(CalendarScrollTarget.availability, anchor: .top)
+        }
     }
 
     private var header: some View {
@@ -81,7 +147,7 @@ struct TaskCalendarView: View {
                 .font(.lifeTrackHero)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-            Text("See your tasks by due date across the month or week.")
+            Text("See your tasks, blocked time, and availability by date.")
                 .font(.subheadline)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -241,6 +307,7 @@ struct TaskCalendarView: View {
 
     private func confirmReopen(_ task: LifeTask) {
         pendingReopenTask = nil
+        LifeTrackHaptics.lightImpact()
         onToggleCompletion(task)
     }
 
@@ -257,12 +324,15 @@ struct TaskCalendarView: View {
     }
 
     private func restoreFromUndo(_ task: LifeTask) {
+        let taskTitle = task.title
         dismissUndoToast(id: binUndoState?.id)
+        LifeTrackHaptics.lightImpact()
         TaskLifecycleManager.restore(
             task,
             in: modelContext,
             customCategories: customCategories
         )
+        showRestoredToast(taskTitle: taskTitle)
     }
 
     private func showUndoToast(for task: LifeTask) {
@@ -288,6 +358,34 @@ struct TaskCalendarView: View {
 
         withAnimation(.snappy(duration: 0.18)) {
             binUndoState = nil
+        }
+    }
+
+    private func showRestoredToast(taskTitle: String) {
+        let toastState = TaskRestoredToastState(taskTitle: taskTitle)
+
+        guard animationsEnabled else {
+            restoredToastState = toastState
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2)) {
+            restoredToastState = toastState
+        }
+    }
+
+    private func dismissRestoredToast(id: UUID?) {
+        guard id == nil || restoredToastState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            restoredToastState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            restoredToastState = nil
         }
     }
 
@@ -463,6 +561,10 @@ private struct CalendarDayCell: View {
 
         return LifeTrackTheme.ColorPalette.hairline.opacity(0.75)
     }
+}
+
+private enum CalendarScrollTarget {
+    case availability
 }
 
 #Preview {

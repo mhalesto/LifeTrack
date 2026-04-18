@@ -16,12 +16,15 @@ struct HomeView: View {
     @State private var isShowingTemplatePicker = false
     @State private var isShowingTaskEditor = false
     @State private var isShowingSettings = false
+    @State private var isShowingAvailabilitySheet = false
     @State private var navigationPath: [HomeRoute] = []
     @State private var selectedTemplate: TaskTemplate?
     @State private var editingTask: LifeTask?
     @State private var selectedSummary: DashboardSummaryKind?
     @State private var pendingReopenTask: LifeTask?
     @State private var binUndoState: TaskBinUndoState?
+    @State private var restoredToastState: TaskRestoredToastState?
+    @State private var availabilityShareRange: AvailabilityShareRange = .today
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
@@ -83,6 +86,18 @@ struct HomeView: View {
                             dismissUndoToast(id: binUndoState.id)
                         }
                     }
+                } else if let restoredToastState {
+                    TaskRestoredToast(
+                        taskTitle: restoredToastState.taskTitle,
+                        onDismiss: { dismissRestoredToast(id: restoredToastState.id) }
+                    )
+                    .padding(.bottom, 76)
+                    .task(id: restoredToastState.id) {
+                        try? await Task.sleep(nanoseconds: 2_400_000_000)
+                        await MainActor.run {
+                            dismissRestoredToast(id: restoredToastState.id)
+                        }
+                    }
                 }
             }
             .navigationBarHidden(true)
@@ -94,6 +109,18 @@ struct HomeView: View {
                     TaskCalendarView(
                         tasks: activeTasks,
                         customCategories: customCategories,
+                        focusAvailabilityOnAppear: false,
+                        initialAvailabilityRange: .today,
+                        onToggleCompletion: toggleCompletion,
+                        onEdit: openTaskFromCalendar,
+                        onDelete: delete
+                    )
+                case .availabilityCalendar:
+                    TaskCalendarView(
+                        tasks: activeTasks,
+                        customCategories: customCategories,
+                        focusAvailabilityOnAppear: true,
+                        initialAvailabilityRange: availabilityShareRange,
                         onToggleCompletion: toggleCompletion,
                         onEdit: openTaskFromCalendar,
                         onDelete: delete
@@ -110,6 +137,16 @@ struct HomeView: View {
             }
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $isShowingAvailabilitySheet) {
+                AvailabilityShareSheet(
+                    selectedRange: $availabilityShareRange,
+                    tasks: activeTasks,
+                    customCategories: customCategories,
+                    onOpenCalendar: openAvailabilityCalendar
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(item: $selectedSummary) { summary in
                 DashboardSummarySheet(
@@ -268,6 +305,17 @@ struct HomeView: View {
                         height: metrics.quickActionHeight,
                         iconSize: metrics.quickActionIconSize,
                         action: openBlankTask
+                    )
+
+                    QuickActionButton(
+                        title: "Availability",
+                        subtitle: "Share times",
+                        symbolName: "calendar.badge.clock",
+                        tint: LifeTrackTheme.ColorPalette.accent,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { isShowingAvailabilitySheet = true }
                     )
 
                     QuickActionButton(
@@ -748,6 +796,15 @@ struct HomeView: View {
         editingTask = task
     }
 
+    private func openAvailabilityCalendar() {
+        isShowingAvailabilitySheet = false
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            navigationPath.append(.availabilityCalendar)
+        }
+    }
+
     private func tasks(for summary: DashboardSummaryKind) -> [LifeTask] {
         switch summary {
         case .dueToday:
@@ -792,6 +849,7 @@ struct HomeView: View {
 
     private func confirmReopen(_ task: LifeTask) {
         pendingReopenTask = nil
+        LifeTrackHaptics.lightImpact()
         performWithOptionalAnimation {
             TaskLifecycleManager.toggleCompletion(
                 for: task,
@@ -802,7 +860,9 @@ struct HomeView: View {
     }
 
     private func restoreFromUndo(_ task: LifeTask) {
+        let taskTitle = task.title
         dismissUndoToast(id: binUndoState?.id)
+        LifeTrackHaptics.lightImpact()
         performWithOptionalAnimation {
             TaskLifecycleManager.restore(
                 task,
@@ -810,6 +870,7 @@ struct HomeView: View {
                 customCategories: customCategories
             )
         }
+        showRestoredToast(taskTitle: taskTitle)
     }
 
     private func dismissUndoToast(id: UUID?) {
@@ -824,6 +885,34 @@ struct HomeView: View {
 
         withAnimation(.snappy(duration: 0.18)) {
             binUndoState = nil
+        }
+    }
+
+    private func showRestoredToast(taskTitle: String) {
+        let toastState = TaskRestoredToastState(taskTitle: taskTitle)
+
+        guard animationsEnabled else {
+            restoredToastState = toastState
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2)) {
+            restoredToastState = toastState
+        }
+    }
+
+    private func dismissRestoredToast(id: UUID?) {
+        guard id == nil || restoredToastState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            restoredToastState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            restoredToastState = nil
         }
     }
 
@@ -883,6 +972,7 @@ struct HomeView: View {
 private enum HomeRoute: Hashable {
     case statistics
     case calendar
+    case availabilityCalendar
     case documents
 }
 
@@ -1028,6 +1118,7 @@ private struct DashboardSummarySheet: View {
 
     @State private var pendingReopenTask: LifeTask?
     @State private var binUndoState: TaskBinUndoState?
+    @State private var restoredToastState: TaskRestoredToastState?
 
     let summary: DashboardSummaryKind
     let tasks: [LifeTask]
@@ -1087,6 +1178,17 @@ private struct DashboardSummarySheet: View {
                         try? await Task.sleep(nanoseconds: 5_000_000_000)
                         await MainActor.run {
                             dismissUndoToast(id: binUndoState.id)
+                        }
+                    }
+                } else if let restoredToastState {
+                    TaskRestoredToast(
+                        taskTitle: restoredToastState.taskTitle,
+                        onDismiss: { dismissRestoredToast(id: restoredToastState.id) }
+                    )
+                    .task(id: restoredToastState.id) {
+                        try? await Task.sleep(nanoseconds: 2_400_000_000)
+                        await MainActor.run {
+                            dismissRestoredToast(id: restoredToastState.id)
                         }
                     }
                 }
@@ -1203,6 +1305,7 @@ private struct DashboardSummarySheet: View {
 
     private func confirmReopen(_ task: LifeTask) {
         pendingReopenTask = nil
+        LifeTrackHaptics.lightImpact()
         onToggleCompletion(task)
     }
 
@@ -1219,12 +1322,15 @@ private struct DashboardSummarySheet: View {
     }
 
     private func restoreFromUndo(_ task: LifeTask) {
+        let taskTitle = task.title
         dismissUndoToast(id: binUndoState?.id)
+        LifeTrackHaptics.lightImpact()
         TaskLifecycleManager.restore(
             task,
             in: modelContext,
             customCategories: customCategories
         )
+        showRestoredToast(taskTitle: taskTitle)
     }
 
     private func showUndoToast(for task: LifeTask) {
@@ -1250,6 +1356,34 @@ private struct DashboardSummarySheet: View {
 
         withAnimation(.snappy(duration: 0.18)) {
             binUndoState = nil
+        }
+    }
+
+    private func showRestoredToast(taskTitle: String) {
+        let toastState = TaskRestoredToastState(taskTitle: taskTitle)
+
+        guard animationsEnabled else {
+            restoredToastState = toastState
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2)) {
+            restoredToastState = toastState
+        }
+    }
+
+    private func dismissRestoredToast(id: UUID?) {
+        guard id == nil || restoredToastState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            restoredToastState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            restoredToastState = nil
         }
     }
 }

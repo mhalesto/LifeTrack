@@ -148,6 +148,7 @@ final class LifeTask {
     var templateActionRawValue: String
     var priorityRawValue: String = TaskPriority.normal.rawValue
     var recurrenceRawValue: String = TaskRecurrence.none.rawValue
+    var estimatedDurationMinutes: Int?
     var documentStorageName: String?
     var documentDisplayName: String?
     var documentExtractedText: String = ""
@@ -170,6 +171,7 @@ final class LifeTask {
         templateAction: TaskTemplateAction = .none,
         priority: TaskPriority = .normal,
         recurrence: TaskRecurrence = .none,
+        estimatedDurationMinutes: Int? = 30,
         documentStorageName: String? = nil,
         documentDisplayName: String? = nil,
         documentExtractedText: String = "",
@@ -190,6 +192,7 @@ final class LifeTask {
         self.templateActionRawValue = templateAction.rawValue
         self.priorityRawValue = priority.rawValue
         self.recurrenceRawValue = recurrence.rawValue
+        self.estimatedDurationMinutes = estimatedDurationMinutes
         self.documentStorageName = documentStorageName
         self.documentDisplayName = documentDisplayName
         self.documentExtractedText = documentExtractedText
@@ -220,6 +223,31 @@ final class LifeTask {
     var recurrence: TaskRecurrence {
         get { TaskRecurrence(rawValue: recurrenceRawValue) ?? .none }
         set { recurrenceRawValue = newValue.rawValue }
+    }
+
+    var scheduledDurationMinutes: Int {
+        get { max(5, estimatedDurationMinutes ?? 30) }
+        set { estimatedDurationMinutes = max(5, newValue) }
+    }
+
+    var scheduledEndDate: Date {
+        dueDate.addingTimeInterval(TimeInterval(scheduledDurationMinutes * 60))
+    }
+
+    var durationTitle: String {
+        let minutes = scheduledDurationMinutes
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+
+        if hours == 0 {
+            return "\(minutes) min"
+        }
+
+        if remainingMinutes == 0 {
+            return hours == 1 ? "1 hour" : "\(hours) hours"
+        }
+
+        return "\(hours)h \(remainingMinutes)m"
     }
 
     var documentKeywords: [String] {
@@ -276,6 +304,7 @@ final class LifeTask {
             templateAction: templateAction,
             priority: priority,
             recurrence: recurrence,
+            estimatedDurationMinutes: scheduledDurationMinutes,
             createdAt: completedAt,
             updatedAt: completedAt
         )

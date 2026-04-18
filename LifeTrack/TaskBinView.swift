@@ -17,6 +17,7 @@ struct TaskBinView: View {
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
 
     @State private var isConfirmingDeleteAll = false
+    @State private var restoredToastState: TaskRestoredToastState?
 
     var body: some View {
         ZStack {
@@ -48,6 +49,20 @@ struct TaskBinView: View {
                     onConfirm: deleteAllForever,
                     onCancel: { isConfirmingDeleteAll = false }
                 )
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let restoredToastState {
+                TaskRestoredToast(
+                    taskTitle: restoredToastState.taskTitle,
+                    onDismiss: { dismissRestoredToast(id: restoredToastState.id) }
+                )
+                .task(id: restoredToastState.id) {
+                    try? await Task.sleep(nanoseconds: 2_400_000_000)
+                    await MainActor.run {
+                        dismissRestoredToast(id: restoredToastState.id)
+                    }
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -180,6 +195,8 @@ struct TaskBinView: View {
     }
 
     private func restore(_ task: LifeTask) {
+        let taskTitle = task.title
+        LifeTrackHaptics.lightImpact()
         performWithOptionalAnimation {
             TaskLifecycleManager.restore(
                 task,
@@ -187,9 +204,11 @@ struct TaskBinView: View {
                 customCategories: customCategories
             )
         }
+        showRestoredToast(taskTitle: taskTitle)
     }
 
     private func deleteForever(_ task: LifeTask) {
+        LifeTrackHaptics.lightImpact()
         performWithOptionalAnimation {
             TaskLifecycleManager.permanentlyDelete(task, in: modelContext)
         }
@@ -197,6 +216,7 @@ struct TaskBinView: View {
 
     private func deleteAllForever() {
         isConfirmingDeleteAll = false
+        LifeTrackHaptics.lightImpact()
         performWithOptionalAnimation {
             for task in deletedTasks {
                 TaskLifecycleManager.permanentlyDelete(task, in: modelContext)
@@ -220,6 +240,34 @@ struct TaskBinView: View {
 
         withAnimation(.snappy) {
             updates()
+        }
+    }
+
+    private func showRestoredToast(taskTitle: String) {
+        let toastState = TaskRestoredToastState(taskTitle: taskTitle)
+
+        guard animationsEnabled else {
+            restoredToastState = toastState
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2)) {
+            restoredToastState = toastState
+        }
+    }
+
+    private func dismissRestoredToast(id: UUID?) {
+        guard id == nil || restoredToastState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            restoredToastState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            restoredToastState = nil
         }
     }
 }

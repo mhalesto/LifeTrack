@@ -12,6 +12,11 @@ struct TaskBinUndoState: Identifiable {
     let task: LifeTask
 }
 
+struct TaskRestoredToastState: Identifiable {
+    let id = UUID()
+    let taskTitle: String
+}
+
 struct LifeTrackConfirmationOverlay: View {
     let symbolName: String
     let title: String
@@ -156,6 +161,58 @@ struct TaskBinUndoToast: View {
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                 .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.82), lineWidth: 0.8)
+        }
+        .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(1.1), radius: 18, x: 0, y: 12)
+        .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+        .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .move(edge: .bottom)),
+            removal: .opacity.combined(with: .move(edge: .bottom))
+        ))
+    }
+}
+
+struct TaskRestoredToast: View {
+    let taskTitle: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.success)
+                .frame(width: 34, height: 34)
+                .background(LifeTrackTheme.ColorPalette.success.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Restored")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text(taskTitle)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .frame(width: 28, height: 28)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.9), in: Circle())
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.9))
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.success.opacity(0.18), lineWidth: 0.8)
         }
         .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(1.1), radius: 18, x: 0, y: 12)
         .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)

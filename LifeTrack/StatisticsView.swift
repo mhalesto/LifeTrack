@@ -606,6 +606,7 @@ private struct StatisticsSummaryActionSheet: View {
 
     @State private var pendingReopenTask: LifeTask?
     @State private var binUndoState: TaskBinUndoState?
+    @State private var restoredToastState: TaskRestoredToastState?
 
     let action: StatisticsSummaryAction
     let range: StatisticsTimeRange
@@ -667,6 +668,17 @@ private struct StatisticsSummaryActionSheet: View {
                         try? await Task.sleep(nanoseconds: 5_000_000_000)
                         await MainActor.run {
                             dismissUndoToast(id: binUndoState.id)
+                        }
+                    }
+                } else if let restoredToastState {
+                    TaskRestoredToast(
+                        taskTitle: restoredToastState.taskTitle,
+                        onDismiss: { dismissRestoredToast(id: restoredToastState.id) }
+                    )
+                    .task(id: restoredToastState.id) {
+                        try? await Task.sleep(nanoseconds: 2_400_000_000)
+                        await MainActor.run {
+                            dismissRestoredToast(id: restoredToastState.id)
                         }
                     }
                 }
@@ -831,6 +843,7 @@ private struct StatisticsSummaryActionSheet: View {
 
     private func confirmReopen(_ task: LifeTask) {
         pendingReopenTask = nil
+        LifeTrackHaptics.lightImpact()
         onToggleCompletion(task)
     }
 
@@ -847,12 +860,15 @@ private struct StatisticsSummaryActionSheet: View {
     }
 
     private func restoreFromUndo(_ task: LifeTask) {
+        let taskTitle = task.title
         dismissUndoToast(id: binUndoState?.id)
+        LifeTrackHaptics.lightImpact()
         TaskLifecycleManager.restore(
             task,
             in: modelContext,
             customCategories: customCategories
         )
+        showRestoredToast(taskTitle: taskTitle)
     }
 
     private func showUndoToast(for task: LifeTask) {
@@ -878,6 +894,34 @@ private struct StatisticsSummaryActionSheet: View {
 
         withAnimation(.snappy(duration: 0.18)) {
             binUndoState = nil
+        }
+    }
+
+    private func showRestoredToast(taskTitle: String) {
+        let toastState = TaskRestoredToastState(taskTitle: taskTitle)
+
+        guard animationsEnabled else {
+            restoredToastState = toastState
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2)) {
+            restoredToastState = toastState
+        }
+    }
+
+    private func dismissRestoredToast(id: UUID?) {
+        guard id == nil || restoredToastState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            restoredToastState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            restoredToastState = nil
         }
     }
 }

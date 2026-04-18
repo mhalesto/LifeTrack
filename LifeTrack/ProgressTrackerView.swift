@@ -9,27 +9,23 @@ import SwiftUI
 
 struct ProgressTrackerView: View {
     let metrics: TaskProgressMetrics
+    @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength = 1.0
 
     var body: some View {
-        SectionCardView {
-            HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.medium) {
-                ZStack {
-                    Circle()
-                        .fill(LifeTrackTheme.ColorPalette.accentSoft)
-                        .frame(width: 54, height: 54)
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+            HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.large) {
+                StreakHeroIcon(metrics: metrics)
 
-                    Image(systemName: metrics.currentStreak > 0 ? "flame.fill" : "sparkles")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                }
-
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 7) {
                     Text(metrics.title)
-                        .font(.lifeTrackHeadline)
+                        .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(2)
 
                     Text(metrics.message)
-                        .font(.footnote)
+                        .font(.callout.weight(.medium))
+                        .lineSpacing(2)
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -37,39 +33,149 @@ struct ProgressTrackerView: View {
                 Spacer(minLength: LifeTrackTheme.Spacing.small)
             }
 
-            HStack(spacing: LifeTrackTheme.Spacing.small) {
-                ProgressMetricPill(title: "Current", value: "\(metrics.currentStreak)d")
-                ProgressMetricPill(title: "Best", value: "\(metrics.bestStreak)d")
-                ProgressMetricPill(title: "This Week", value: "\(metrics.completedDaysThisWeek)/7")
-            }
+            ProgressMetricPanel(metrics: metrics)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .lifeTrackCard(padding: LifeTrackTheme.Spacing.large, backgroundColor: LifeTrackTheme.ColorPalette.cardElevated)
+        .id("\(selectedThemeID)-\(colorStrength)")
+    }
+}
+
+private struct StreakHeroIcon: View {
+    let metrics: TaskProgressMetrics
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(LifeTrackTheme.ColorPalette.accentSoft)
+                .frame(width: 74, height: 74)
+                .shadow(color: LifeTrackTheme.ColorPalette.accent.opacity(0.10), radius: 14, x: 0, y: 8)
+
+            Circle()
+                .stroke(LifeTrackTheme.ColorPalette.accent.opacity(0.09), lineWidth: 12)
+                .frame(width: 74, height: 74)
+
+            Image(systemName: metrics.currentStreak > 0 ? "flame.fill" : "sparkles")
+                .font(.system(size: 31, weight: .bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                .symbolEffect(.pulse, value: metrics.currentStreak)
+        }
+        .frame(width: 82, height: 82)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct ProgressMetricPanel: View {
+    let metrics: TaskProgressMetrics
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ProgressMetricSegment(
+                title: "Current",
+                value: metrics.currentStreak.formatted(),
+                unit: metrics.currentStreak == 1 ? "Day" : "Days",
+                symbolName: "flame.fill",
+                tint: LifeTrackTheme.ColorPalette.accent
+            )
+
+            ProgressMetricDivider()
+
+            ProgressMetricSegment(
+                title: "Best",
+                value: metrics.bestStreak.formatted(),
+                unit: metrics.bestStreak == 1 ? "Day" : "Days",
+                symbolName: "star.fill",
+                tint: LifeTrackTheme.ColorPalette.accentDeep
+            )
+
+            ProgressMetricDivider()
+
+            ProgressMetricSegment(
+                title: "This Week",
+                value: "\(metrics.completedDaysThisWeek)/7",
+                unit: "Days",
+                symbolName: "calendar",
+                tint: LifeTrackTheme.ColorPalette.accent
+            )
+        }
+        .padding(.vertical, 11)
+        .background(
+            LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82),
+            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.78), lineWidth: 0.8)
         }
     }
 }
 
-private struct ProgressMetricPill: View {
+private struct ProgressMetricSegment: View {
     let title: String
     let value: String
+    let unit: String
+    let symbolName: String
+    let tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value)
-                .font(.subheadline.weight(.bold))
-                .monospacedDigit()
-                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(value)
+                    .font(.system(.title3, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
-            Text(title)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                .lineLimit(1)
+                Text(unit)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+
+            HStack(spacing: 7) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 17, alignment: .center)
+
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 11)
-        .padding(.vertical, 9)
-        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.88), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
-                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.85), lineWidth: 0.7)
+        .padding(.horizontal, 13)
+    }
+}
+
+private struct ProgressMetricDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(LifeTrackTheme.ColorPalette.hairline.opacity(0.70))
+            .frame(width: 0.8)
+            .padding(.vertical, -11)
+    }
+}
+
+private extension TaskProgressMetrics {
+    var referenceMessage: String {
+        if hasCompletedToday {
+            if currentStreak == 1 {
+                return "Great start! You've completed a task 1 day in a row."
+            }
+
+            return "Great pace! You've completed tasks for \(currentStreak) days in a row."
         }
+
+        if currentStreak > 0 {
+            return "Complete one task today to keep your \(currentStreak)-day rhythm alive."
+        }
+
+        return "Finish one task today and start a streak you can build on."
     }
 }
 
@@ -88,15 +194,7 @@ struct TaskProgressMetrics {
     }
 
     var message: String {
-        if hasCompletedToday {
-            return "You completed a task today. Keep the rhythm gentle and visible."
-        }
-
-        if currentStreak > 0 {
-            return "Complete one task today to protect your streak."
-        }
-
-        return "Finish one task to start building a streak."
+        referenceMessage
     }
 
     static func build(from tasks: [LifeTask], calendar: Calendar = .current, referenceDate: Date = Date()) -> TaskProgressMetrics {
