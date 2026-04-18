@@ -5,9 +5,14 @@
 //  Created by Halalisani Mbanjwa on 2026/04/18.
 //
 
+import SwiftData
 import SwiftUI
 
 struct TaskCalendarView: View {
+    @Environment(\.modelContext) private var modelContext
+    @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
+    @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
+
     let tasks: [LifeTask]
     let customCategories: [CustomTaskCategory]
     let onToggleCompletion: (LifeTask) -> Void
@@ -16,6 +21,8 @@ struct TaskCalendarView: View {
 
     @State private var selectedScope: TaskCalendarScope = .month
     @State private var selectedDate = Date()
+    @State private var pendingReopenTask: LifeTask?
+    @State private var binUndoState: TaskBinUndoState?
 
     private let calendar = Calendar.current
 
@@ -35,6 +42,35 @@ struct TaskCalendarView: View {
                 .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
             }
             .scrollIndicators(.hidden)
+        }
+        .overlay {
+            if let pendingReopenTask {
+                LifeTrackConfirmationOverlay(
+                    symbolName: "arrow.uturn.left.circle.fill",
+                    title: "Move back to in progress?",
+                    message: "\"\(pendingReopenTask.title)\" is already completed. Reopening it will return the task to your active lists.",
+                    confirmTitle: "Move Back",
+                    cancelTitle: "Keep Completed",
+                    tint: LifeTrackTheme.ColorPalette.warning,
+                    onConfirm: { confirmReopen(pendingReopenTask) },
+                    onCancel: { self.pendingReopenTask = nil }
+                )
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let binUndoState {
+                TaskBinUndoToast(
+                    taskTitle: binUndoState.task.title,
+                    onRestore: { restoreFromUndo(binUndoState.task) },
+                    onDismiss: { dismissUndoToast(id: binUndoState.id) }
+                )
+                .task(id: binUndoState.id) {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    await MainActor.run {
+                        dismissUndoToast(id: binUndoState.id)
+                    }
+                }
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -127,9 +163,9 @@ struct TaskCalendarView: View {
                     ForEach(selectedDayTasks) { task in
                         TaskRowView(
                             task: task,
-                            onToggleCompletion: { onToggleCompletion(task) },
+                            onToggleCompletion: { requestToggleCompletion(for: task) },
                             onEdit: { onEdit(task) },
-                            onDelete: { onDelete(task) },
+                            onDelete: { moveToBin(task) },
                             categoryOption: task.categoryOption(customCategories: customCategories)
                         )
                     }
@@ -188,6 +224,71 @@ struct TaskCalendarView: View {
 
     private func tasks(on date: Date) -> [LifeTask] {
         tasks.filter { calendar.isDate($0.dueDate, inSameDayAs: date) }
+    }
+
+    private var binRetentionPeriod: TaskBinRetentionPeriod {
+        TaskBinRetentionPeriod(rawValue: binRetentionRawValue) ?? .fallback
+    }
+
+    private func requestToggleCompletion(for task: LifeTask) {
+        guard !task.isCompleted else {
+            pendingReopenTask = task
+            return
+        }
+
+        onToggleCompletion(task)
+    }
+
+    private func confirmReopen(_ task: LifeTask) {
+        pendingReopenTask = nil
+        onToggleCompletion(task)
+    }
+
+    private func moveToBin(_ task: LifeTask) {
+        let movedToBin = TaskLifecycleManager.delete(
+            task,
+            in: modelContext,
+            retentionPeriod: binRetentionPeriod
+        )
+
+        if movedToBin {
+            showUndoToast(for: task)
+        }
+    }
+
+    private func restoreFromUndo(_ task: LifeTask) {
+        dismissUndoToast(id: binUndoState?.id)
+        TaskLifecycleManager.restore(
+            task,
+            in: modelContext,
+            customCategories: customCategories
+        )
+    }
+
+    private func showUndoToast(for task: LifeTask) {
+        guard animationsEnabled else {
+            binUndoState = TaskBinUndoState(task: task)
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2)) {
+            binUndoState = TaskBinUndoState(task: task)
+        }
+    }
+
+    private func dismissUndoToast(id: UUID?) {
+        guard id == nil || binUndoState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            binUndoState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            binUndoState = nil
+        }
     }
 
     private func monthDays(for date: Date) -> [Date] {

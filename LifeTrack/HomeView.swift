@@ -20,6 +20,8 @@ struct HomeView: View {
     @State private var selectedTemplate: TaskTemplate?
     @State private var editingTask: LifeTask?
     @State private var selectedSummary: DashboardSummaryKind?
+    @State private var pendingReopenTask: LifeTask?
+    @State private var binUndoState: TaskBinUndoState?
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
@@ -52,6 +54,36 @@ struct HomeView: View {
                 .padding(.trailing, LifeTrackTheme.Spacing.xLarge)
                 .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
 
+            }
+            .overlay {
+                if let pendingReopenTask {
+                    LifeTrackConfirmationOverlay(
+                        symbolName: "arrow.uturn.left.circle.fill",
+                        title: "Move back to in progress?",
+                        message: "\"\(pendingReopenTask.title)\" is already completed. Reopening it will return the task to your active lists and may schedule a reminder again.",
+                        confirmTitle: "Move Back",
+                        cancelTitle: "Keep Completed",
+                        tint: LifeTrackTheme.ColorPalette.warning,
+                        onConfirm: { confirmReopen(pendingReopenTask) },
+                        onCancel: { self.pendingReopenTask = nil }
+                    )
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let binUndoState {
+                    TaskBinUndoToast(
+                        taskTitle: binUndoState.task.title,
+                        onRestore: { restoreFromUndo(binUndoState.task) },
+                        onDismiss: { dismissUndoToast(id: binUndoState.id) }
+                    )
+                    .padding(.bottom, 76)
+                    .task(id: binUndoState.id) {
+                        try? await Task.sleep(nanoseconds: 5_000_000_000)
+                        await MainActor.run {
+                            dismissUndoToast(id: binUndoState.id)
+                        }
+                    }
+                }
             }
             .navigationBarHidden(true)
             .navigationDestination(for: HomeRoute.self) { route in
@@ -165,9 +197,9 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
             header
 
-            summaryGrid(metrics: metrics)
-
             progressSection
+
+            summaryGrid(metrics: metrics)
 
             quickActions(metrics: metrics)
 
@@ -730,6 +762,11 @@ struct HomeView: View {
     }
 
     private func toggleCompletion(for task: LifeTask) {
+        guard !task.isCompleted else {
+            pendingReopenTask = task
+            return
+        }
+
         performWithOptionalAnimation {
             TaskLifecycleManager.toggleCompletion(
                 for: task,
@@ -741,11 +778,52 @@ struct HomeView: View {
 
     private func delete(_ task: LifeTask) {
         performWithOptionalAnimation {
-            TaskLifecycleManager.delete(
+            let movedToBin = TaskLifecycleManager.delete(
                 task,
                 in: modelContext,
                 retentionPeriod: binRetentionPeriod
             )
+
+            if movedToBin {
+                binUndoState = TaskBinUndoState(task: task)
+            }
+        }
+    }
+
+    private func confirmReopen(_ task: LifeTask) {
+        pendingReopenTask = nil
+        performWithOptionalAnimation {
+            TaskLifecycleManager.toggleCompletion(
+                for: task,
+                in: modelContext,
+                customCategories: customCategories
+            )
+        }
+    }
+
+    private func restoreFromUndo(_ task: LifeTask) {
+        dismissUndoToast(id: binUndoState?.id)
+        performWithOptionalAnimation {
+            TaskLifecycleManager.restore(
+                task,
+                in: modelContext,
+                customCategories: customCategories
+            )
+        }
+    }
+
+    private func dismissUndoToast(id: UUID?) {
+        guard id == nil || binUndoState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            binUndoState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            binUndoState = nil
         }
     }
 
@@ -944,7 +1022,12 @@ private enum DashboardSummaryKind: String, CaseIterable, Identifiable {
 
 private struct DashboardSummarySheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
+    @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
+
+    @State private var pendingReopenTask: LifeTask?
+    @State private var binUndoState: TaskBinUndoState?
 
     let summary: DashboardSummaryKind
     let tasks: [LifeTask]
@@ -978,6 +1061,35 @@ private struct DashboardSummarySheet: View {
                     .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
                 }
                 .scrollIndicators(.hidden)
+            }
+            .overlay {
+                if let pendingReopenTask {
+                    LifeTrackConfirmationOverlay(
+                        symbolName: "arrow.uturn.left.circle.fill",
+                        title: "Move back to in progress?",
+                        message: "\"\(pendingReopenTask.title)\" is already completed. Reopening it will return the task to your active lists.",
+                        confirmTitle: "Move Back",
+                        cancelTitle: "Keep Completed",
+                        tint: LifeTrackTheme.ColorPalette.warning,
+                        onConfirm: { confirmReopen(pendingReopenTask) },
+                        onCancel: { self.pendingReopenTask = nil }
+                    )
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let binUndoState {
+                    TaskBinUndoToast(
+                        taskTitle: binUndoState.task.title,
+                        onRestore: { restoreFromUndo(binUndoState.task) },
+                        onDismiss: { dismissUndoToast(id: binUndoState.id) }
+                    )
+                    .task(id: binUndoState.id) {
+                        try? await Task.sleep(nanoseconds: 5_000_000_000)
+                        await MainActor.run {
+                            dismissUndoToast(id: binUndoState.id)
+                        }
+                    }
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1043,9 +1155,9 @@ private struct DashboardSummarySheet: View {
                     DashboardSummaryTaskCard(
                         task: task,
                         categoryOption: task.categoryOption(customCategories: customCategories),
-                        onToggleCompletion: { onToggleCompletion(task) },
+                        onToggleCompletion: { requestToggleCompletion(for: task) },
                         onEdit: { onEdit(task) },
-                        onDelete: { onDelete(task) }
+                        onDelete: { moveToBin(task) }
                     )
                 }
             }
@@ -1074,6 +1186,71 @@ private struct DashboardSummarySheet: View {
         }
 
         return tasks.sorted { $0.dueDate < $1.dueDate }.first?.dueDate.dayMonthString ?? "None"
+    }
+
+    private var binRetentionPeriod: TaskBinRetentionPeriod {
+        TaskBinRetentionPeriod(rawValue: binRetentionRawValue) ?? .fallback
+    }
+
+    private func requestToggleCompletion(for task: LifeTask) {
+        guard !task.isCompleted else {
+            pendingReopenTask = task
+            return
+        }
+
+        onToggleCompletion(task)
+    }
+
+    private func confirmReopen(_ task: LifeTask) {
+        pendingReopenTask = nil
+        onToggleCompletion(task)
+    }
+
+    private func moveToBin(_ task: LifeTask) {
+        let movedToBin = TaskLifecycleManager.delete(
+            task,
+            in: modelContext,
+            retentionPeriod: binRetentionPeriod
+        )
+
+        if movedToBin {
+            showUndoToast(for: task)
+        }
+    }
+
+    private func restoreFromUndo(_ task: LifeTask) {
+        dismissUndoToast(id: binUndoState?.id)
+        TaskLifecycleManager.restore(
+            task,
+            in: modelContext,
+            customCategories: customCategories
+        )
+    }
+
+    private func showUndoToast(for task: LifeTask) {
+        guard animationsEnabled else {
+            binUndoState = TaskBinUndoState(task: task)
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2)) {
+            binUndoState = TaskBinUndoState(task: task)
+        }
+    }
+
+    private func dismissUndoToast(id: UUID?) {
+        guard id == nil || binUndoState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            binUndoState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            binUndoState = nil
+        }
     }
 }
 

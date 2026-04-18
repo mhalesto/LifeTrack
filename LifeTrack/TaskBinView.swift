@@ -16,6 +16,8 @@ struct TaskBinView: View {
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
 
+    @State private var isConfirmingDeleteAll = false
+
     var body: some View {
         ZStack {
             LifeTrackTheme.appBackground
@@ -32,6 +34,21 @@ struct TaskBinView: View {
                 .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
             }
             .scrollIndicators(.hidden)
+        }
+        .overlay {
+            if isConfirmingDeleteAll {
+                LifeTrackConfirmationOverlay(
+                    symbolName: "trash.fill",
+                    title: "Delete all forever?",
+                    message: "This will permanently remove every task in the Bin, including attached documents. This cannot be undone.",
+                    confirmTitle: "Delete Forever",
+                    cancelTitle: "Cancel",
+                    tint: LifeTrackTheme.ColorPalette.danger,
+                    isDestructive: true,
+                    onConfirm: deleteAllForever,
+                    onCancel: { isConfirmingDeleteAll = false }
+                )
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: purgeExpiredItems)
@@ -71,6 +88,22 @@ struct TaskBinView: View {
                         .font(.footnote)
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                if !deletedTasks.isEmpty {
+                    Button {
+                        isConfirmingDeleteAll = true
+                    } label: {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.danger)
+                            .frame(width: 34, height: 34)
+                            .background(LifeTrackTheme.ColorPalette.danger.opacity(0.10), in: Circle())
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
+                    .accessibilityLabel("Delete all forever")
                 }
             }
         }
@@ -159,6 +192,15 @@ struct TaskBinView: View {
     private func deleteForever(_ task: LifeTask) {
         performWithOptionalAnimation {
             TaskLifecycleManager.permanentlyDelete(task, in: modelContext)
+        }
+    }
+
+    private func deleteAllForever() {
+        isConfirmingDeleteAll = false
+        performWithOptionalAnimation {
+            for task in deletedTasks {
+                TaskLifecycleManager.permanentlyDelete(task, in: modelContext)
+            }
         }
     }
 

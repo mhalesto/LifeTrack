@@ -35,20 +35,22 @@ enum TaskLifecycleManager {
         try? modelContext.save()
     }
 
+    @discardableResult
     static func delete(
         _ task: LifeTask,
         in modelContext: ModelContext,
         retentionPeriod: TaskBinRetentionPeriod = .current
-    ) {
+    ) -> Bool {
         if retentionPeriod == .immediately {
             permanentlyDelete(task, in: modelContext)
-            return
+            return false
         }
 
         ReminderScheduler.cancel(taskID: task.id)
         task.deletedAt = Date()
         task.updatedAt = Date()
         try? modelContext.save()
+        return true
     }
 
     static func restore(
