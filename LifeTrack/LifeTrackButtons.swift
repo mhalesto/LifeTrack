@@ -7,6 +7,20 @@
 
 import SwiftUI
 
+struct LifeTrackPressableButtonStyle: ButtonStyle {
+    var scale: CGFloat = 0.97
+    var pressedOpacity: Double = 0.94
+
+    @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(animationsEnabled && configuration.isPressed ? scale : 1)
+            .opacity(animationsEnabled && configuration.isPressed ? pressedOpacity : 1)
+            .animation(animationsEnabled ? .smooth(duration: 0.16) : nil, value: configuration.isPressed)
+    }
+}
+
 struct LifeTrackPrimaryButton: View {
     let title: String
     var systemImage: String?
@@ -24,23 +38,16 @@ struct LifeTrackPrimaryButton: View {
             .font(.callout.weight(.semibold))
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
+            .padding(.vertical, 12)
             .background(
-                LinearGradient(
-                    colors: [
-                        LifeTrackTheme.ColorPalette.accent,
-                        Color(hex: 0x243FA3)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
+                LifeTrackTheme.ColorPalette.accentGradient,
                 in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
             )
-            .shadow(color: LifeTrackTheme.ColorPalette.accent.opacity(0.24), radius: 14, x: 0, y: 8)
+            .shadow(color: LifeTrackTheme.ColorPalette.accent.opacity(0.22), radius: 12, x: 0, y: 7)
             .opacity(isDisabled ? 0.45 : 1)
         }
         .disabled(isDisabled)
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.985))
     }
 }
 
@@ -60,14 +67,14 @@ struct LifeTrackSecondaryButton: View {
             .font(.callout.weight(.semibold))
             .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 11)
             .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline, lineWidth: 0.8)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.985))
     }
 }
 
@@ -81,14 +88,7 @@ struct PrimaryFloatingButton: View {
                 .foregroundStyle(.white)
                 .frame(width: 62, height: 62)
                 .background(
-                    LinearGradient(
-                        colors: [
-                            LifeTrackTheme.ColorPalette.accent,
-                            Color(hex: 0x243FA3)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
+                    LifeTrackTheme.ColorPalette.accentGradient,
                     in: Circle()
                 )
                 .overlay {
@@ -98,7 +98,7 @@ struct PrimaryFloatingButton: View {
                 .shadow(color: LifeTrackTheme.ColorPalette.accent.opacity(0.34), radius: 22, x: 0, y: 14)
                 .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92, pressedOpacity: 0.96))
         .accessibilityLabel("Add task")
     }
 }
@@ -108,6 +108,9 @@ struct QuickActionButton: View {
     let subtitle: String
     let symbolName: String
     let tint: Color
+    var width: CGFloat = 178
+    var height: CGFloat = 68
+    var iconSize: CGFloat = 32
     let action: () -> Void
 
     var body: some View {
@@ -116,7 +119,7 @@ struct QuickActionButton: View {
                 Image(systemName: symbolName)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
-                    .frame(width: 34, height: 34)
+                    .frame(width: iconSize, height: iconSize)
                     .background(tint.opacity(0.12), in: Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -135,13 +138,13 @@ struct QuickActionButton: View {
                 Spacer(minLength: 0)
             }
             .padding(12)
-            .frame(width: 184, height: 72, alignment: .leading)
+            .frame(width: width, height: height, alignment: .leading)
             .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97))
     }
 }

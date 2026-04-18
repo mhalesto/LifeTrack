@@ -13,6 +13,7 @@ struct LifeTrackApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             LifeTask.self,
+            CustomTaskCategory.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

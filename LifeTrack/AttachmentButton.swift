@@ -17,9 +17,9 @@ struct AttachmentButton: View {
             Button(action: onAttach) {
                 HStack(spacing: LifeTrackTheme.Spacing.medium) {
                     Image(systemName: documentDisplayName == nil ? "arrow.up.doc" : "doc.text")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                        .frame(width: 46, height: 46)
+                        .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
                         .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -39,7 +39,7 @@ struct AttachmentButton: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
                 }
-                .padding(14)
+                .padding(12)
                 .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.85), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
@@ -47,14 +47,14 @@ struct AttachmentButton: View {
                         .foregroundStyle(LifeTrackTheme.ColorPalette.hairline)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.985))
 
             if documentDisplayName != nil, let onRemove {
                 Button(role: .destructive, action: onRemove) {
                     Label("Remove attachment", systemImage: "trash")
                         .font(.footnote.weight(.semibold))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
                 .foregroundStyle(LifeTrackTheme.ColorPalette.danger)
             }
         }

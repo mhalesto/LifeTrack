@@ -28,10 +28,10 @@ struct VoiceInputCard: View {
                 Button(action: onToggleRecording) {
                     RecordingButtonIcon(isRecording: isRecording, audioLevel: audioLevel)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.94, pressedOpacity: 0.96))
                 .accessibilityLabel(isRecording ? "Stop recording" : "Start voice input")
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Text(isRecording ? "Recording" : "Voice input")
                             .font(.subheadline.weight(.semibold))
@@ -50,7 +50,7 @@ struct VoiceInputCard: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text("Transcript")
                     .font(.lifeTrackCaption)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
@@ -60,7 +60,7 @@ struct VoiceInputCard: View {
                         Text("Say: Book a dentist appointment tomorrow")
                             .font(.body)
                             .foregroundStyle(LifeTrackTheme.ColorPalette.placeholderText)
-                            .padding(14)
+                            .padding(13)
                             .allowsHitTesting(false)
                     }
 
@@ -68,11 +68,11 @@ struct VoiceInputCard: View {
                         .font(.body.weight(.medium))
                         .foregroundColor(LifeTrackTheme.ColorPalette.primaryText)
                         .lineLimit(2...5)
-                        .padding(14)
+                        .padding(13)
                         .textFieldStyle(.plain)
                         .tint(LifeTrackTheme.ColorPalette.accent)
                 }
-                .frame(minHeight: 82, alignment: .topLeading)
+                .frame(minHeight: 74, alignment: .topLeading)
                 .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.94), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
@@ -92,8 +92,8 @@ struct VoiceInputCard: View {
                     Label("Apply Draft", systemImage: "sparkles")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 9)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -104,8 +104,8 @@ struct VoiceInputCard: View {
                     Label("Clear", systemImage: "xmark")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 9)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -131,25 +131,25 @@ private struct RecordingButtonIcon: View {
             if isRecording {
                 Circle()
                     .stroke(LifeTrackTheme.ColorPalette.danger.opacity(0.12 + audioLevel * 0.18), lineWidth: 8 + audioLevel * 7)
-                    .frame(width: 76 + audioLevel * 18, height: 76 + audioLevel * 18)
+                    .frame(width: 70 + audioLevel * 16, height: 70 + audioLevel * 16)
                     .scaleEffect(reactiveScale)
 
                 Circle()
                     .stroke(LifeTrackTheme.ColorPalette.danger.opacity(0.08 + audioLevel * 0.12), lineWidth: 1.2)
-                    .frame(width: 92 + audioLevel * 20, height: 92 + audioLevel * 20)
+                    .frame(width: 84 + audioLevel * 18, height: 84 + audioLevel * 18)
                     .scaleEffect(1 + audioLevel * 0.10)
             }
 
             Circle()
                 .fill(isRecording ? LifeTrackTheme.ColorPalette.danger.opacity(0.14) : LifeTrackTheme.ColorPalette.accentSoft)
-                .frame(width: 58, height: 58)
-                .shadow(color: isRecording ? LifeTrackTheme.ColorPalette.danger.opacity(0.16) : LifeTrackTheme.ColorPalette.accent.opacity(0.08), radius: 14, x: 0, y: 8)
+                .frame(width: 54, height: 54)
+                .shadow(color: isRecording ? LifeTrackTheme.ColorPalette.danger.opacity(0.16) : LifeTrackTheme.ColorPalette.accent.opacity(0.08), radius: 12, x: 0, y: 7)
 
             Image(systemName: isRecording ? "stop.fill" : "mic.fill")
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(isRecording ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.accent)
         }
-        .frame(width: 96, height: 96)
+        .frame(width: 88, height: 88)
         .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.78), value: audioLevel)
         .animation(.easeInOut(duration: 0.2), value: isRecording)
         .accessibilityHidden(true)
@@ -173,7 +173,7 @@ private struct VoiceLevelMeterView: View {
                             LinearGradient(
                                 colors: [
                                     LifeTrackTheme.ColorPalette.danger.opacity(0.82),
-                                    Color(hex: 0xE07A7A)
+                                    LifeTrackTheme.ColorPalette.warning.opacity(0.82)
                                 ],
                                 startPoint: .bottom,
                                 endPoint: .top

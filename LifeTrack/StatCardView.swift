@@ -14,31 +14,38 @@ struct StatCardView: View {
     let symbolName: String
     let tint: Color
     var showsDisclosure = false
+    var minHeight: CGFloat = 82
+    var iconSize: CGFloat = LifeTrackTheme.IconSize.smallCircle
+    var valueFontSize: CGFloat = 27
+    var cardPadding: CGFloat = 13
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
-            HStack {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
+            HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.small) {
                 Image(systemName: symbolName)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(tint)
-                    .frame(width: 30, height: 30)
+                    .frame(width: iconSize, height: iconSize)
                     .background(tint.opacity(0.12), in: Circle())
 
                 Spacer()
 
-                Text(value.formatted())
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(value.formatted())
+                        .font(.system(size: valueFontSize, weight: .bold, design: LifeTrackAppTheme.current.fontDesign))
+                        .monospacedDigit()
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-                if showsDisclosure {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                    if showsDisclosure {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText.opacity(0.58))
+                            .offset(y: -1)
+                    }
                 }
             }
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.lifeTrackCaption)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
@@ -50,7 +57,7 @@ struct StatCardView: View {
                     .minimumScaleFactor(0.85)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .lifeTrackCard(padding: LifeTrackTheme.Spacing.medium, backgroundColor: LifeTrackTheme.ColorPalette.cardElevated)
+        .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)
+        .lifeTrackCard(padding: cardPadding, backgroundColor: LifeTrackTheme.ColorPalette.cardElevated)
     }
 }

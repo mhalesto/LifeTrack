@@ -11,57 +11,62 @@ import SwiftUI
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \LifeTask.dueDate, order: .forward) private var tasks: [LifeTask]
+    @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
     @State private var isShowingTemplatePicker = false
     @State private var isShowingTaskEditor = false
     @State private var isShowingSettings = false
-    @State private var isShowingStatistics = false
+    @State private var navigationPath: [HomeRoute] = []
     @State private var selectedTemplate: TaskTemplate?
     @State private var editingTask: LifeTask?
     @State private var selectedSummary: DashboardSummaryKind?
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
+    @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack(alignment: .bottomTrailing) {
                 LifeTrackTheme.appBackground
                     .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
-                        header
+                GeometryReader { proxy in
+                    let metrics = HomeLayoutMetrics(
+                        availableHeight: proxy.size.height,
+                        priorityCount: priorityTasks.count,
+                        documentCount: documentTasks.count,
+                        isEmpty: tasks.isEmpty
+                    )
 
-                        summaryGrid
-
-                        quickActions
-
-                        if tasks.isEmpty {
-                            EmptyStateView(
-                                title: "Start with one clear next step",
-                                message: "Create a task, attach important files, and LifeTrack will keep the dashboard useful from day one.",
-                                actionTitle: "Create Task",
-                                action: openBlankTask
-                            )
-                        } else {
-                            prioritySection
-                            recentDocumentsSection
-                        }
+                    ScrollView {
+                        dashboardContent(metrics: metrics)
                     }
-                    .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
-                    .padding(.top, LifeTrackTheme.Spacing.large)
-                    .padding(.bottom, 126)
+                    .scrollIndicators(.hidden)
                 }
-                .scrollIndicators(.hidden)
 
                 PrimaryFloatingButton {
                     isShowingTemplatePicker = true
                 }
                 .padding(.trailing, LifeTrackTheme.Spacing.xLarge)
                 .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
+
             }
             .navigationBarHidden(true)
+            .navigationDestination(for: HomeRoute.self) { route in
+                switch route {
+                case .statistics:
+                    StatisticsView(tasks: tasks)
+                case .calendar:
+                    TaskCalendarView(
+                        tasks: tasks,
+                        customCategories: customCategories,
+                        onToggleCompletion: toggleCompletion,
+                        onEdit: openTaskFromCalendar,
+                        onDelete: delete
+                    )
+                }
+            }
             .sheet(isPresented: $isShowingTemplatePicker) {
                 TemplatePickerView(
                     onSelectBlank: openBlankTaskFromPicker,
@@ -75,6 +80,7 @@ struct HomeView: View {
                 DashboardSummarySheet(
                     summary: summary,
                     tasks: tasks(for: summary),
+                    customCategories: customCategories,
                     onToggleCompletion: toggleCompletion,
                     onEdit: openTaskFromSummary,
                     onDelete: delete,
@@ -91,15 +97,12 @@ struct HomeView: View {
             }
         }
         .tint(selectedTheme.accent)
-        .navigationDestination(isPresented: $isShowingStatistics) {
-            StatisticsView(tasks: tasks)
-        }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
             HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(greeting)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
@@ -112,19 +115,19 @@ struct HomeView: View {
                 Spacer()
 
                 Button {
-                    isShowingStatistics = true
+                    navigationPath.append(.statistics)
                 } label: {
                     Image(systemName: "chart.xyaxis.line")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                        .frame(width: 42, height: 42)
+                        .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
                         .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
                         .overlay {
                             Circle()
                                 .stroke(Color.white.opacity(0.82), lineWidth: 1)
                         }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.94, pressedOpacity: 0.96))
                 .accessibilityLabel("Open statistics")
 
                 ProfileAvatarButton(avatarVersion: avatarVersion) {
@@ -132,32 +135,53 @@ struct HomeView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 9) {
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [LifeTrackTheme.ColorPalette.accent, Color(hex: 0x6B7BFF)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 10, height: 34)
+                        .fill(LifeTrackTheme.ColorPalette.accentGradient)
+                        .frame(width: 8, height: 30)
 
                     Text("LifeTrack")
-                        .font(.lifeTrackHero)
+                        .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                 }
 
                 Text(dashboardMessage)
-                    .font(.subheadline)
+                    .font(.callout)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private var summaryGrid: some View {
+    private func dashboardContent(metrics: HomeLayoutMetrics) -> some View {
+        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
+            header
+
+            summaryGrid(metrics: metrics)
+
+            progressSection
+
+            quickActions(metrics: metrics)
+
+            if tasks.isEmpty {
+                EmptyStateView(
+                    title: "Start with one clear next step",
+                    message: "Create a task, attach important files, and LifeTrack will keep the dashboard useful from day one.",
+                    actionTitle: "Create Task",
+                    action: openBlankTask
+                )
+            } else {
+                prioritySection(metrics: metrics)
+                recentDocumentsSection(metrics: metrics)
+            }
+        }
+        .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+        .padding(.top, LifeTrackTheme.Spacing.medium)
+        .padding(.bottom, metrics.bottomPadding)
+    }
+
+    private func summaryGrid(metrics: HomeLayoutMetrics) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: LifeTrackTheme.Spacing.medium) {
             ForEach(DashboardSummaryKind.allCases) { summary in
                 Button {
@@ -169,18 +193,29 @@ struct HomeView: View {
                         subtitle: summary.subtitle,
                         symbolName: summary.symbolName,
                         tint: summary.tint,
-                        showsDisclosure: true
+                        showsDisclosure: true,
+                        minHeight: metrics.statCardHeight,
+                        iconSize: metrics.statIconSize,
+                        valueFontSize: metrics.statValueFontSize,
+                        cardPadding: metrics.statCardPadding
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
                 .accessibilityLabel("View \(summary.title) tasks")
             }
         }
     }
 
-    private var quickActions: some View {
-        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
-            SectionHeaderView(title: "Quick Actions", subtitle: "Move fast without losing structure.")
+    private var progressSection: some View {
+        ProgressTrackerView(metrics: TaskProgressMetrics.build(from: tasks))
+    }
+
+    private func quickActions(metrics: HomeLayoutMetrics) -> some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
+            SectionHeaderView(
+                title: "Quick Actions",
+                infoMessage: "Move fast without losing structure. Start a task, use a template, or open productivity trends from here."
+            )
 
             ScrollView(.horizontal) {
                 HStack(spacing: LifeTrackTheme.Spacing.medium) {
@@ -189,6 +224,9 @@ struct HomeView: View {
                         subtitle: "Start fresh",
                         symbolName: "plus",
                         tint: LifeTrackTheme.ColorPalette.accent,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
                         action: openBlankTask
                     )
 
@@ -197,6 +235,9 @@ struct HomeView: View {
                         subtitle: "Use template",
                         symbolName: "envelope.badge",
                         tint: TaskCategory.work.style.tint,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
                         action: {
                             selectedTemplate = TaskTemplate.common.first { $0.id == "email" }
                             isShowingTaskEditor = true
@@ -204,18 +245,35 @@ struct HomeView: View {
                     )
 
                     QuickActionButton(
+                        title: "Calendar",
+                        subtitle: "See dates",
+                        symbolName: "calendar",
+                        tint: LifeTrackTheme.ColorPalette.secondaryAccent,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { navigationPath.append(.calendar) }
+                    )
+
+                    QuickActionButton(
                         title: "Statistics",
                         subtitle: "See trends",
                         symbolName: "chart.bar.xaxis",
                         tint: LifeTrackTheme.ColorPalette.success,
-                        action: { isShowingStatistics = true }
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { navigationPath.append(.statistics) }
                     )
 
                     QuickActionButton(
                         title: "Templates",
                         subtitle: "Smart shortcuts",
                         symbolName: "sparkles",
-                        tint: Color(hex: 0x7B61D1),
+                        tint: LifeTrackTheme.ColorPalette.secondaryAccent,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
                         action: { isShowingTemplatePicker = true }
                     )
                 }
@@ -225,12 +283,12 @@ struct HomeView: View {
         }
     }
 
-    private var prioritySection: some View {
-        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+    private func prioritySection(metrics: HomeLayoutMetrics) -> some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
             SectionHeaderView(
                 title: "Today's Focus",
-                subtitle: "The highest-signal tasks right now.",
-                trailing: "\(priorityTasks.count)"
+                trailing: "\(priorityTasks.count)",
+                infoMessage: "The highest-signal tasks right now. LifeTrack prioritizes overdue, due today, and upcoming tasks."
             )
 
             if priorityTasks.isEmpty {
@@ -248,20 +306,28 @@ struct HomeView: View {
                             task: task,
                             onToggleCompletion: { toggleCompletion(for: task) },
                             onEdit: { editingTask = task },
-                            onDelete: { delete(task) }
+                            onDelete: { delete(task) },
+                            categoryOption: task.categoryOption(customCategories: customCategories),
+                            verticalPadding: metrics.taskRowVerticalPadding,
+                            leadingIconSize: metrics.taskRowIconSize
                         )
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .scale(scale: 0.98))
+                        ))
                     }
                 }
+                .animation(animationsEnabled ? .snappy(duration: 0.24) : nil, value: priorityTasks.map(\.id))
             }
         }
     }
 
-    private var recentDocumentsSection: some View {
-        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+    private func recentDocumentsSection(metrics: HomeLayoutMetrics) -> some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
             SectionHeaderView(
                 title: "Recent Documents",
-                subtitle: "Files connected to your tasks.",
-                trailing: documentTasks.isEmpty ? nil : "\(documentTasks.count)"
+                trailing: documentTasks.isEmpty ? nil : "\(documentTasks.count)",
+                infoMessage: "Files connected to your tasks. Recent attachments stay close so supporting documents are easy to reopen."
             )
 
             if documentTasks.isEmpty {
@@ -278,7 +344,12 @@ struct HomeView: View {
                         NavigationLink {
                             TaskDetailView(task: task)
                         } label: {
-                            RecentDocumentRow(task: task)
+                            RecentDocumentRow(
+                                task: task,
+                                categoryOption: task.categoryOption(customCategories: customCategories),
+                                verticalPadding: metrics.documentRowVerticalPadding,
+                                iconSize: metrics.documentRowIconSize
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -557,6 +628,10 @@ struct HomeView: View {
         }
     }
 
+    private func openTaskFromCalendar(_ task: LifeTask) {
+        editingTask = task
+    }
+
     private func tasks(for summary: DashboardSummaryKind) -> [LifeTask] {
         switch summary {
         case .dueToday:
@@ -571,7 +646,7 @@ struct HomeView: View {
     }
 
     private func toggleCompletion(for task: LifeTask) {
-        withAnimation(.snappy) {
+        performWithOptionalAnimation {
             task.isCompleted.toggle()
             task.updatedAt = Date()
             try? modelContext.save()
@@ -580,7 +655,7 @@ struct HomeView: View {
     }
 
     private func delete(_ task: LifeTask) {
-        withAnimation(.snappy) {
+        performWithOptionalAnimation {
             ReminderScheduler.cancel(taskID: task.id)
             DocumentStore.delete(storageName: task.documentStorageName)
             modelContext.delete(task)
@@ -588,14 +663,92 @@ struct HomeView: View {
         }
     }
 
+    private func performWithOptionalAnimation(_ updates: () -> Void) {
+        guard animationsEnabled else {
+            updates()
+            return
+        }
+
+        withAnimation(.snappy) {
+            updates()
+        }
+    }
+
     private func syncReminder(for task: LifeTask) {
         ReminderScheduler.synchronizeReminder(
             taskID: task.id,
             title: task.title,
-            categoryTitle: task.category.title,
+            categoryTitle: task.categoryOption(customCategories: customCategories).title,
             dueDate: task.dueDate,
             isCompleted: task.isCompleted
         )
+    }
+}
+
+private enum HomeRoute: Hashable {
+    case statistics
+    case calendar
+}
+
+private struct HomeLayoutMetrics {
+    let expansion: CGFloat
+
+    init(availableHeight: CGFloat, priorityCount: Int, documentCount: Int, isEmpty: Bool) {
+        let heightExpansion = min(max((availableHeight - 650) / 130, 0), 1)
+        let sparseDashboard = isEmpty || (priorityCount <= 2 && documentCount <= 2)
+        expansion = sparseDashboard ? heightExpansion : heightExpansion * 0.25
+    }
+
+    var sectionSpacing: CGFloat {
+        LifeTrackTheme.Spacing.large + (4 * expansion)
+    }
+
+    var statCardHeight: CGFloat {
+        82 + (14 * expansion)
+    }
+
+    var statIconSize: CGFloat {
+        LifeTrackTheme.IconSize.smallCircle + (4 * expansion)
+    }
+
+    var statValueFontSize: CGFloat {
+        27 + (2 * expansion)
+    }
+
+    var statCardPadding: CGFloat {
+        13 + (2 * expansion)
+    }
+
+    var quickActionWidth: CGFloat {
+        178 + (6 * expansion)
+    }
+
+    var quickActionHeight: CGFloat {
+        68 + (10 * expansion)
+    }
+
+    var quickActionIconSize: CGFloat {
+        32 + (4 * expansion)
+    }
+
+    var taskRowVerticalPadding: CGFloat {
+        12 + (3 * expansion)
+    }
+
+    var taskRowIconSize: CGFloat {
+        28 + (3 * expansion)
+    }
+
+    var documentRowVerticalPadding: CGFloat {
+        14 + (6 * expansion)
+    }
+
+    var documentRowIconSize: CGFloat {
+        42 + (8 * expansion)
+    }
+
+    var bottomPadding: CGFloat {
+        96
     }
 }
 
@@ -664,7 +817,7 @@ private enum DashboardSummaryKind: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .dueToday: LifeTrackTheme.ColorPalette.accent
-        case .upcoming: Color(hex: 0x5865B8)
+        case .upcoming: LifeTrackTheme.ColorPalette.secondaryAccent
         case .completed: LifeTrackTheme.ColorPalette.success
         case .overdue: LifeTrackTheme.ColorPalette.danger
         }
@@ -673,9 +826,11 @@ private enum DashboardSummaryKind: String, CaseIterable, Identifiable {
 
 private struct DashboardSummarySheet: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
 
     let summary: DashboardSummaryKind
     let tasks: [LifeTask]
+    let customCategories: [CustomTaskCategory]
     let onToggleCompletion: (LifeTask) -> Void
     let onEdit: (LifeTask) -> Void
     let onDelete: (LifeTask) -> Void
@@ -688,7 +843,7 @@ private struct DashboardSummarySheet: View {
                     .ignoresSafeArea()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
                         summaryHeader
 
                         if tasks.isEmpty {
@@ -701,7 +856,7 @@ private struct DashboardSummarySheet: View {
                         }
                     }
                     .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
-                    .padding(.top, LifeTrackTheme.Spacing.large)
+                    .padding(.top, LifeTrackTheme.Spacing.medium)
                     .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
                 }
                 .scrollIndicators(.hidden)
@@ -722,11 +877,10 @@ private struct DashboardSummarySheet: View {
     private var summaryHeader: some View {
         SectionCardView {
             HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
-                Image(systemName: summary.symbolName)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(summary.tint)
-                    .frame(width: 48, height: 48)
-                    .background(summary.tint.opacity(0.12), in: Circle())
+                DashboardSummaryHeroIcon(
+                    summary: summary,
+                    animationsEnabled: animationsEnabled
+                )
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(summary.title)
@@ -741,8 +895,11 @@ private struct DashboardSummarySheet: View {
 
                 Spacer(minLength: LifeTrackTheme.Spacing.small)
 
-                Text(tasks.count.formatted())
-                    .font(.system(.title, design: .rounded, weight: .bold))
+                AnimatedCountText(
+                    value: tasks.count,
+                    animationsEnabled: animationsEnabled
+                )
+                    .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
             }
@@ -767,6 +924,7 @@ private struct DashboardSummarySheet: View {
                 ForEach(tasks) { task in
                     DashboardSummaryTaskCard(
                         task: task,
+                        categoryOption: task.categoryOption(customCategories: customCategories),
                         onToggleCompletion: { onToggleCompletion(task) },
                         onEdit: { onEdit(task) },
                         onDelete: { onDelete(task) }
@@ -828,29 +986,168 @@ private struct SummaryMetricPill: View {
     }
 }
 
+private struct DashboardSummaryHeroIcon: View {
+    let summary: DashboardSummaryKind
+    let animationsEnabled: Bool
+
+    @State private var rotation: Double = 0
+    @State private var scale: CGFloat = 1
+    @State private var animationTask: Task<Void, Never>?
+
+    var body: some View {
+        Image(systemName: summary.symbolName)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(summary.tint)
+            .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
+            .background(summary.tint.opacity(0.12), in: Circle())
+            .scaleEffect(scale)
+            .rotationEffect(.degrees(rotation))
+            .onAppear(perform: runAnimationIfNeeded)
+            .onChange(of: animationsEnabled) { _, _ in
+                runAnimationIfNeeded()
+            }
+            .onChange(of: summary.id) { _, _ in
+                runAnimationIfNeeded()
+            }
+            .onDisappear {
+                animationTask?.cancel()
+            }
+    }
+
+    @MainActor
+    private func runAnimationIfNeeded() {
+        animationTask?.cancel()
+        rotation = 0
+        scale = 1
+
+        guard animationsEnabled else {
+            return
+        }
+
+        scale = 0.82
+        animationTask = Task { @MainActor in
+            withAnimation(.easeInOut(duration: 0.82)) {
+                rotation = 360
+            }
+
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.62)) {
+                scale = 1.17
+            }
+
+            try? await Task.sleep(nanoseconds: 420_000_000)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            withAnimation(.spring(response: 0.48, dampingFraction: 0.76)) {
+                scale = 1
+            }
+        }
+    }
+}
+
+private struct AnimatedCountText: View {
+    let value: Int
+    let animationsEnabled: Bool
+
+    @State private var displayedValue = 0
+    @State private var countTask: Task<Void, Never>?
+
+    var body: some View {
+        Text(displayedValue.formatted())
+            .onAppear {
+                startCountAnimation()
+            }
+            .onChange(of: value) { _, _ in
+                startCountAnimation()
+            }
+            .onChange(of: animationsEnabled) { _, _ in
+                startCountAnimation()
+            }
+            .onDisappear {
+                countTask?.cancel()
+            }
+    }
+
+    @MainActor
+    private func startCountAnimation() {
+        countTask?.cancel()
+
+        guard animationsEnabled else {
+            displayedValue = value
+            return
+        }
+
+        let target = max(value, 0)
+        displayedValue = 0
+
+        guard target > 0 else {
+            return
+        }
+
+        let duration = countDuration(for: target)
+        let frameDelay: UInt64 = 16_666_667
+
+        countTask = Task { @MainActor in
+            let startedAt = Date()
+
+            while !Task.isCancelled {
+                let elapsed = Date().timeIntervalSince(startedAt)
+                let progress = min(elapsed / duration, 1)
+                let easedProgress = 1 - ((1 - progress) * (1 - progress) * (1 - progress))
+                displayedValue = min(Int((Double(target) * easedProgress).rounded()), target)
+
+                if progress >= 1 {
+                    break
+                }
+
+                try? await Task.sleep(nanoseconds: frameDelay)
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            displayedValue = target
+        }
+    }
+
+    private func countDuration(for target: Int) -> TimeInterval {
+        guard target > 100 else {
+            return 3
+        }
+
+        let extraDuration = min(Double(target - 100) / 400 * 2, 2)
+        return min(3 + extraDuration, 5)
+    }
+}
+
 private struct DashboardSummaryTaskCard: View {
     let task: LifeTask
+    let categoryOption: TaskCategoryOption
     let onToggleCompletion: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
-            HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small + 2) {
+            HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.small) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : task.isOverdue ? "exclamationmark.circle.fill" : "circle.dotted")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(statusTint)
-                    .frame(width: 34, height: 34)
+                    .frame(width: LifeTrackTheme.IconSize.mediumCircle, height: LifeTrackTheme.IconSize.mediumCircle)
                     .background(statusTint.opacity(0.11), in: Circle())
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 7) {
                     Text(task.title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                         .lineLimit(2)
+                        .layoutPriority(1)
 
                     HStack(spacing: 8) {
-                        CategoryChipView(category: task.category)
+                        CategoryChipView(option: categoryOption)
 
                         StatusPillView(
                             title: statusTitle,
@@ -884,8 +1181,8 @@ private struct DashboardSummaryTaskCard: View {
                     Label(task.isCompleted ? "Move to Open" : "Complete", systemImage: task.isCompleted ? "arrow.uturn.left" : "checkmark")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(task.isCompleted ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.success)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
                         .background((task.isCompleted ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.success).opacity(0.11), in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -894,8 +1191,8 @@ private struct DashboardSummaryTaskCard: View {
                     Label("Edit", systemImage: "pencil")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
                         .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -910,13 +1207,13 @@ private struct DashboardSummaryTaskCard: View {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                        .frame(width: 34, height: 34)
+                        .frame(width: 32, height: 32)
                         .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Circle())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(14)
+        .padding(12)
         .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
@@ -1020,14 +1317,17 @@ private struct CompactMessageView: View {
 
 private struct RecentDocumentRow: View {
     let task: LifeTask
+    let categoryOption: TaskCategoryOption
+    var verticalPadding: CGFloat = 14
+    var iconSize: CGFloat = 42
 
     var body: some View {
         HStack(spacing: LifeTrackTheme.Spacing.medium) {
             Image(systemName: "doc.text")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(task.category.style.tint)
-                .frame(width: 42, height: 42)
-                .background(task.category.style.background, in: Circle())
+                .foregroundStyle(categoryOption.tint)
+                .frame(width: iconSize, height: iconSize)
+                .background(categoryOption.background, in: Circle())
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.documentDisplayName ?? "Document")
@@ -1047,7 +1347,8 @@ private struct RecentDocumentRow: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, verticalPadding)
         .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
@@ -1058,7 +1359,7 @@ private struct RecentDocumentRow: View {
 
 #Preview {
     let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: LifeTask.self, configurations: configuration)
+    let container = try! ModelContainer(for: LifeTask.self, CustomTaskCategory.self, configurations: configuration)
 
     container.mainContext.insert(
         LifeTask(

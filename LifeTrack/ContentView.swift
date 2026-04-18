@@ -32,7 +32,7 @@ struct ContentView: View {
 
 #Preview {
     let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: LifeTask.self, configurations: configuration)
+    let container = try! ModelContainer(for: LifeTask.self, CustomTaskCategory.self, configurations: configuration)
     let context = container.mainContext
 
     context.insert(

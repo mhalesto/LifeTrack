@@ -36,7 +36,7 @@ struct SplashScreenView: View {
 
                 VStack(spacing: 9) {
                     Text("LifeTrack")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .font(.system(size: 42, weight: .bold, design: LifeTrackAppTheme.current.fontDesign))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
                     Text("Tasks, reminders, and documents in flow.")

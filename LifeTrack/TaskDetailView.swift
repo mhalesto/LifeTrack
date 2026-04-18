@@ -6,10 +6,12 @@
 //
 
 import QuickLook
+import SwiftData
 import SwiftUI
 
 struct TaskDetailView: View {
     @Environment(\.openURL) private var openURL
+    @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
     let task: LifeTask
     @State private var previewURL: URL?
 
@@ -19,29 +21,8 @@ struct TaskDetailView: View {
                 .ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
-                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
-                        CategoryChipView(category: task.category)
-
-                        Text(task.title)
-                            .font(.lifeTrackHero)
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        HStack(spacing: 8) {
-                            StatusPillView(
-                                title: task.isCompleted ? "Completed" : "Open",
-                                symbolName: task.isCompleted ? "checkmark.circle.fill" : "circle",
-                                tint: task.isCompleted ? LifeTrackTheme.ColorPalette.success : LifeTrackTheme.ColorPalette.accent
-                            )
-
-                            StatusPillView(
-                                title: task.dueDate.dayMonthString,
-                                symbolName: task.isOverdue ? "exclamationmark.circle.fill" : "calendar",
-                                tint: task.isOverdue ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.secondaryText
-                            )
-                        }
-                    }
+                VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+                    taskHero
 
                     SectionCardView {
                         SectionHeaderView(title: "Schedule")
@@ -76,18 +57,33 @@ struct TaskDetailView: View {
                                     symbolName: "doc.text",
                                     title: task.documentDisplayName ?? "Document",
                                     subtitle: "Open preview",
-                                    tint: task.category.style.tint
+                                    tint: categoryOption.tint
                                 )
                             }
                             .buttonStyle(.plain)
 
-                            ShareLink(item: documentURL) {
+                            if let shareDocumentURL {
+                                ShareLink(
+                                    item: shareDocumentURL,
+                                    preview: SharePreview(task.documentDisplayName ?? "Document")
+                                ) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "square.and.arrow.up")
+                                        Text("Share Document")
+                                    }
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Capsule())
+                                }
+                            } else {
                                 HStack {
                                     Image(systemName: "square.and.arrow.up")
                                     Text("Share Document")
                                 }
                                 .font(.footnote.weight(.semibold))
-                                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
                             }
                         }
                     }
@@ -111,7 +107,7 @@ struct TaskDetailView: View {
                     }
                 }
                 .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
-                .padding(.top, LifeTrackTheme.Spacing.large)
+                .padding(.top, LifeTrackTheme.Spacing.medium)
                 .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
             }
             .scrollIndicators(.hidden)
@@ -120,12 +116,62 @@ struct TaskDetailView: View {
         .quickLookPreview($previewURL)
     }
 
+    private var taskHero: some View {
+        SectionCardView {
+            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+                CategoryChipView(option: categoryOption)
+
+                Text(task.title)
+                    .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    StatusPillView(
+                        title: task.isCompleted ? "Completed" : "Open",
+                        symbolName: task.isCompleted ? "checkmark.circle.fill" : "circle",
+                        tint: task.isCompleted ? LifeTrackTheme.ColorPalette.success : LifeTrackTheme.ColorPalette.accent
+                    )
+
+                    StatusPillView(
+                        title: task.dueDate.dayMonthString,
+                        symbolName: task.isOverdue ? "exclamationmark.circle.fill" : "calendar",
+                        tint: task.isOverdue ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.secondaryText
+                    )
+
+                    if task.hasDocument {
+                        StatusPillView(
+                            title: "Document",
+                            symbolName: "paperclip",
+                            tint: LifeTrackTheme.ColorPalette.secondaryText
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     private var documentURL: URL? {
         guard let storageName = task.documentStorageName else {
             return nil
         }
 
         return DocumentStore.url(for: storageName)
+    }
+
+    private var categoryOption: TaskCategoryOption {
+        task.categoryOption(customCategories: customCategories)
+    }
+
+    private var shareDocumentURL: URL? {
+        guard let storageName = task.documentStorageName else {
+            return nil
+        }
+
+        return DocumentStore.shareableURL(
+            for: storageName,
+            displayName: task.documentDisplayName
+        )
     }
 
     private var emailURL: URL? {
@@ -148,9 +194,9 @@ private struct DetailRow: View {
     var body: some View {
         HStack(spacing: LifeTrackTheme.Spacing.medium) {
             Image(systemName: symbolName)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 42, height: 42)
+                .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
                 .background(tint.opacity(0.12), in: Circle())
 
             VStack(alignment: .leading, spacing: 4) {
@@ -166,7 +212,7 @@ private struct DetailRow: View {
 
             Spacer()
         }
-        .padding(14)
+        .padding(12)
         .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.9), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
@@ -176,6 +222,9 @@ private struct DetailRow: View {
 }
 
 #Preview {
+    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: LifeTask.self, CustomTaskCategory.self, configurations: configuration)
+
     TaskDetailView(
         task: LifeTask(
             title: "Send follow-up email",
@@ -185,4 +234,5 @@ private struct DetailRow: View {
             templateAction: .email
         )
     )
+    .modelContainer(container)
 }

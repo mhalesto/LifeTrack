@@ -8,21 +8,31 @@
 import SwiftUI
 
 struct CategoryChipView: View {
-    let category: TaskCategory
+    let option: TaskCategoryOption
     var isSelected = false
 
+    init(category: TaskCategory, isSelected: Bool = false) {
+        self.option = .builtIn(category)
+        self.isSelected = isSelected
+    }
+
+    init(option: TaskCategoryOption, isSelected: Bool = false) {
+        self.option = option
+        self.isSelected = isSelected
+    }
+
     var body: some View {
-        Label(category.title, systemImage: category.symbolName)
-            .font(.lifeTrackCaption)
-            .foregroundStyle(isSelected ? .white : category.style.tint)
+        Label(option.title, systemImage: option.symbolName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isSelected ? .white : option.tint)
             .labelStyle(.titleAndIcon)
             .lineLimit(1)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(isSelected ? category.style.tint : category.style.background, in: Capsule())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isSelected ? option.tint : option.background, in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(isSelected ? category.style.tint.opacity(0.2) : category.style.border, lineWidth: 0.8)
+                    .stroke(isSelected ? option.tint.opacity(0.2) : option.border, lineWidth: 0.8)
             }
     }
 }
@@ -36,8 +46,8 @@ struct StatusPillView: View {
         Label(title, systemImage: symbolName)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(tint)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
             .background(tint.opacity(0.10), in: Capsule())
     }
 }

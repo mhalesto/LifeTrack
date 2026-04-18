@@ -14,6 +14,7 @@ struct StoredDocument: Equatable {
 
 enum DocumentStore {
     private static let folderName = "TaskDocuments"
+    private static let shareFolderName = "LifeTrackSharedDocuments"
 
     static func saveSecurityScopedFile(from sourceURL: URL) throws -> StoredDocument {
         let didAccess = sourceURL.startAccessingSecurityScopedResource()
@@ -50,6 +51,33 @@ enum DocumentStore {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    static func shareableURL(for storageName: String, displayName: String?) -> URL? {
+        guard
+            let sourceURL = url(for: storageName),
+            let directory = try? shareDirectory()
+        else {
+            return nil
+        }
+
+        let fileName = sanitizedShareFileName(
+            displayName: displayName,
+            sourceURL: sourceURL,
+            storageName: storageName
+        )
+        let destinationURL = directory.appendingPathComponent(fileName)
+
+        do {
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+
+            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            return destinationURL
+        } catch {
+            return nil
+        }
+    }
+
     static func delete(storageName: String?) {
         guard
             let storageName,
@@ -71,5 +99,42 @@ enum DocumentStore {
         let directory = baseURL.appendingPathComponent(folderName, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+
+    private static func shareDirectory() throws -> URL {
+        let baseURL = FileManager.default.temporaryDirectory
+        let directory = baseURL.appendingPathComponent(shareFolderName, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private static func sanitizedShareFileName(displayName: String?, sourceURL: URL, storageName: String) -> String {
+        let storedDisplayName: String
+        if storageName.count > 37,
+           storageName[storageName.index(storageName.startIndex, offsetBy: 36)] == "-" {
+            let displayNameStart = storageName.index(storageName.startIndex, offsetBy: 37)
+            storedDisplayName = String(storageName[displayNameStart...])
+        } else {
+            storedDisplayName = storageName
+        }
+        let fallbackName = storedDisplayName.isEmpty ? sourceURL.lastPathComponent : storedDisplayName
+        let fallbackExtension = sourceURL.pathExtension
+        let preferredName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawName = preferredName?.isEmpty == false ? preferredName ?? fallbackName : fallbackName
+        let sanitized = rawName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !sanitized.isEmpty else {
+            return fallbackExtension.isEmpty ? "LifeTrack Document" : "LifeTrack Document.\(fallbackExtension)"
+        }
+
+        let currentExtension = URL(fileURLWithPath: sanitized).pathExtension
+        if currentExtension.isEmpty && !fallbackExtension.isEmpty {
+            return "\(sanitized).\(fallbackExtension)"
+        }
+
+        return sanitized
     }
 }

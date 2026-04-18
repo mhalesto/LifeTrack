@@ -89,7 +89,7 @@ struct ProfileAvatarButton: View {
                         .offset(x: 1, y: 1)
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.94, pressedOpacity: 0.96))
         .accessibilityLabel("Open settings")
     }
 }

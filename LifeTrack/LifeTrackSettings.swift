@@ -13,6 +13,8 @@ enum LifeTrackSettings {
         static let nickname = "LifeTrack.settings.nickname"
         static let themeID = "LifeTrack.settings.themeID"
         static let avatarVersion = "LifeTrack.settings.avatarVersion"
+        static let animationsEnabled = "LifeTrack.settings.animationsEnabled"
+        static let colorStrength = "LifeTrack.settings.colorStrength"
     }
 }
 
@@ -32,6 +34,10 @@ enum AvatarImageStore {
             throw AvatarImageError.invalidImage
         }
 
+        try saveAvatar(image: sourceImage)
+    }
+
+    static func saveAvatar(image sourceImage: UIImage) throws {
         let image = sourceImage.preparingThumbnail(of: CGSize(width: 640, height: 640)) ?? sourceImage
         guard let jpegData = image.jpegData(compressionQuality: 0.88) else {
             throw AvatarImageError.couldNotEncode

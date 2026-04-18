@@ -17,8 +17,8 @@ struct LifeTrackLogoView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(hex: 0xEEF4FF),
-                            Color(hex: 0xDCE7FF)
+                            LifeTrackTheme.ColorPalette.cardElevated,
+                            LifeTrackTheme.ColorPalette.accentSoft
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -35,14 +35,7 @@ struct LifeTrackLogoView: View {
             Circle()
                 .trim(from: 0.04, to: 0.77)
                 .stroke(
-                    LinearGradient(
-                        colors: [
-                            LifeTrackTheme.ColorPalette.accent,
-                            Color(hex: 0x6E7CFF)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
+                    LifeTrackTheme.ColorPalette.accentGradient,
                     style: StrokeStyle(lineWidth: size * 0.075, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-92))
@@ -57,7 +50,7 @@ struct LifeTrackLogoView: View {
                 .offset(x: size * 0.015, y: size * 0.01)
 
             Circle()
-                .fill(Color(hex: 0x2F9E6D))
+                .fill(LifeTrackTheme.ColorPalette.success)
                 .frame(width: size * 0.13, height: size * 0.13)
                 .overlay {
                     Circle()

@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
 struct NewTaskView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
     @StateObject private var voiceInput = VoiceTaskInputManager()
 
@@ -19,7 +20,7 @@ struct NewTaskView: View {
     private let originalDocumentStorageName: String?
 
     @State private var title: String
-    @State private var category: TaskCategory
+    @State private var categoryRawValue: String
     @State private var dueDate: Date
     @State private var isCompleted: Bool
     @State private var notes: String
@@ -27,6 +28,8 @@ struct NewTaskView: View {
     @State private var documentStorageName: String?
     @State private var documentDisplayName: String?
     @State private var isImportingDocument = false
+    @State private var isShowingCategoryManager = false
+    @State private var pendingCategoryOption: TaskCategoryOption?
     @State private var documentError: String?
     @State private var didSave = false
     @State private var voiceTranscript = ""
@@ -40,7 +43,7 @@ struct NewTaskView: View {
 
         let template = template
         _title = State(initialValue: task?.title ?? template?.title ?? "")
-        _category = State(initialValue: task?.category ?? template?.category ?? .personal)
+        _categoryRawValue = State(initialValue: task?.categoryRawValue ?? template?.category.rawValue ?? TaskCategory.personal.rawValue)
         _dueDate = State(initialValue: task?.dueDate ?? template?.dueDate ?? Date())
         _isCompleted = State(initialValue: task?.isCompleted ?? false)
         _notes = State(initialValue: task?.notes ?? template?.notes ?? "")
@@ -56,7 +59,7 @@ struct NewTaskView: View {
                     .ignoresSafeArea()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
                         header
 
                         voiceCard
@@ -78,8 +81,8 @@ struct NewTaskView: View {
                         }
                     }
                     .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
-                    .padding(.top, LifeTrackTheme.Spacing.large)
-                    .padding(.bottom, 36)
+                    .padding(.top, LifeTrackTheme.Spacing.medium)
+                    .padding(.bottom, 30)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -103,6 +106,14 @@ struct NewTaskView: View {
                 allowsMultipleSelection: false,
                 onCompletion: handleDocumentImport
             )
+            .sheet(isPresented: $isShowingCategoryManager) {
+                CategoryManagerView { option in
+                    categoryRawValue = option.id
+                    pendingCategoryOption = option
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
             .onDisappear {
                 voiceInput.stopRecording()
 
@@ -118,9 +129,9 @@ struct NewTaskView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(existingTask == nil ? "New Task" : "Edit Task")
-                .font(.lifeTrackHero)
+                .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
             Text(existingTask == nil ? "Capture the next step with enough context to act on it." : "Refine the details and keep reminders accurate.")
@@ -134,7 +145,7 @@ struct NewTaskView: View {
         SectionCardView {
             SectionHeaderView(title: "Task Details", subtitle: "Name it clearly and classify it.")
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text("Title")
                     .font(.lifeTrackCaption)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
@@ -152,7 +163,7 @@ struct NewTaskView: View {
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                         .textInputAutocapitalization(.sentences)
-                        .padding(14)
+                        .padding(13)
                 }
                 .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
                 .overlay {
@@ -161,25 +172,41 @@ struct NewTaskView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Category")
                     .font(.lifeTrackCaption)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
 
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(TaskCategory.allCases) { option in
-                            Button {
-                                category = option
-                            } label: {
-                                CategoryChipView(category: option, isSelected: category == option)
-                            }
-                            .buttonStyle(.plain)
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 92), spacing: 8, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(categoryOptions) { option in
+                        Button {
+                            categoryRawValue = option.id
+                            pendingCategoryOption = nil
+                        } label: {
+                            CategoryChipView(option: option, isSelected: categoryRawValue == option.id)
                         }
+                        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.92))
                     }
-                    .padding(.vertical, 2)
                 }
-                .scrollIndicators(.hidden)
+
+                Button {
+                    isShowingCategoryManager = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                        Text("Custom category")
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Capsule())
+                }
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96))
             }
         }
     }
@@ -207,9 +234,9 @@ struct NewTaskView: View {
             VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
                 HStack(spacing: LifeTrackTheme.Spacing.medium) {
                     Image(systemName: "calendar.badge.clock")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                        .frame(width: 44, height: 44)
+                        .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
                         .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
 
                     VStack(alignment: .leading, spacing: 3) {
@@ -233,6 +260,7 @@ struct NewTaskView: View {
                         DatePicker("", selection: $dueDate, displayedComponents: .date)
                             .labelsHidden()
                             .datePickerStyle(.compact)
+                            .tint(LifeTrackTheme.ColorPalette.accent)
                             .fixedSize()
                     }
 
@@ -243,14 +271,15 @@ struct NewTaskView: View {
                         DatePicker("", selection: $dueDate, displayedComponents: .hourAndMinute)
                             .labelsHidden()
                             .datePickerStyle(.compact)
+                            .tint(LifeTrackTheme.ColorPalette.accent)
                             .fixedSize()
                     }
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 11)
                 .padding(.vertical, 4)
                 .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.75), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
             }
-            .padding(12)
+            .padding(11)
             .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.85), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
@@ -267,9 +296,9 @@ struct NewTaskView: View {
                 TextEditor(text: $notes)
                     .font(.body)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                    .frame(minHeight: 148)
+                    .frame(minHeight: 126)
                     .scrollContentBackground(.hidden)
-                    .padding(10)
+                    .padding(9)
 
                 if notes.isEmpty {
                     Text("Write the details that will make this task easier later...")
@@ -312,9 +341,9 @@ struct NewTaskView: View {
 
             HStack(spacing: LifeTrackTheme.Spacing.medium) {
                 Image(systemName: "envelope.badge")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                    .frame(width: 42, height: 42)
+                    .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
                     .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -349,6 +378,18 @@ struct NewTaskView: View {
 
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var categoryOptions: [TaskCategoryOption] {
+        TaskCategoryOption.all(customCategories: customCategories)
+    }
+
+    private var selectedCategoryOption: TaskCategoryOption {
+        if let pendingCategoryOption, pendingCategoryOption.id == categoryRawValue {
+            return pendingCategoryOption
+        }
+
+        return TaskCategoryOption.resolved(rawValue: categoryRawValue, customCategories: customCategories)
     }
 
     private func removeDocument() {
@@ -397,7 +438,8 @@ struct NewTaskView: View {
         }
 
         if let draftCategory = draft.category, force || !didApplyVoiceCategory {
-            category = draftCategory
+            categoryRawValue = draftCategory.rawValue
+            pendingCategoryOption = nil
             didApplyVoiceCategory = true
         }
 
@@ -418,7 +460,7 @@ struct NewTaskView: View {
                 DocumentStore.delete(storageName: originalDocumentStorageName)
             }
             task.title = cleanedTitle
-            task.category = category
+            task.categoryRawValue = categoryRawValue
             task.dueDate = dueDate
             task.isCompleted = isCompleted
             task.notes = notes
@@ -429,7 +471,8 @@ struct NewTaskView: View {
         } else {
             task = LifeTask(
                 title: cleanedTitle,
-                category: category,
+                category: selectedCategory,
+                categoryRawValue: categoryRawValue,
                 dueDate: dueDate,
                 isCompleted: isCompleted,
                 notes: notes,
@@ -446,12 +489,16 @@ struct NewTaskView: View {
         ReminderScheduler.synchronizeReminder(
             taskID: task.id,
             title: task.title,
-            categoryTitle: task.category.title,
+            categoryTitle: selectedCategoryOption.title,
             dueDate: task.dueDate,
             isCompleted: task.isCompleted
         )
         didSave = true
         dismiss()
+    }
+
+    private var selectedCategory: TaskCategory {
+        TaskCategory(rawValue: categoryRawValue) ?? .other
     }
 }
 
@@ -469,13 +516,13 @@ private struct DatePickerRow<Content: View>: View {
 
             content
         }
-        .frame(minHeight: 48)
+        .frame(minHeight: 44)
     }
 }
 
 #Preview("New Task") {
     let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: LifeTask.self, configurations: configuration)
+    let container = try! ModelContainer(for: LifeTask.self, CustomTaskCategory.self, configurations: configuration)
 
     return NewTaskView(template: TaskTemplate.common.first)
         .modelContainer(container)

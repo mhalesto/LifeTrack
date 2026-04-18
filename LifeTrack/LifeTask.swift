@@ -64,6 +64,7 @@ final class LifeTask {
         id: UUID = UUID(),
         title: String,
         category: TaskCategory,
+        categoryRawValue: String? = nil,
         dueDate: Date,
         isCompleted: Bool = false,
         notes: String = "",
@@ -75,7 +76,7 @@ final class LifeTask {
     ) {
         self.id = id
         self.title = title
-        self.categoryRawValue = category.rawValue
+        self.categoryRawValue = categoryRawValue ?? category.rawValue
         self.dueDate = dueDate
         self.isCompleted = isCompleted
         self.notes = notes
