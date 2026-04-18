@@ -17,6 +17,8 @@ enum LifeTrackSettings {
         static let colorStrength = "LifeTrack.settings.colorStrength"
         static let binRetentionPeriod = "LifeTrack.settings.binRetentionPeriod"
         static let lastDashboardMessageText = "LifeTrack.settings.lastDashboardMessageText"
+        static let reminderActionTipPending = "LifeTrack.notifications.reminderActionTipPending"
+        static let reminderActionTipShown = "LifeTrack.notifications.reminderActionTipShown"
     }
 }
 

@@ -25,10 +25,12 @@ struct HomeView: View {
     @State private var pendingReopenTask: LifeTask?
     @State private var binUndoState: TaskBinUndoState?
     @State private var restoredToastState: TaskRestoredToastState?
+    @State private var reminderActionTipState: ReminderActionTipToastState?
     @State private var availabilityShareRange: AvailabilityShareRange = .today
     @State private var dashboardMessageSeed = Int.random(in: 0...1_000_000)
     @State private var dashboardMessageSignal: DashboardMessageSignal?
     @State private var hasHandledInitialActivePhase = false
+    @State private var hasSyncedRemindersForSession = false
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
@@ -101,6 +103,20 @@ struct HomeView: View {
                         try? await Task.sleep(nanoseconds: 2_400_000_000)
                         await MainActor.run {
                             dismissRestoredToast(id: restoredToastState.id)
+                        }
+                    }
+                }
+            }
+            .overlay(alignment: .top) {
+                if let reminderActionTipState {
+                    ReminderActionTipToast {
+                        dismissReminderActionTip(id: reminderActionTipState.id)
+                    }
+                    .padding(.top, LifeTrackTheme.Spacing.medium)
+                    .task(id: reminderActionTipState.id) {
+                        try? await Task.sleep(nanoseconds: 6_000_000_000)
+                        await MainActor.run {
+                            dismissReminderActionTip(id: reminderActionTipState.id)
                         }
                     }
                 }
@@ -178,10 +194,13 @@ struct HomeView: View {
         .tint(selectedTheme.accent)
         .onAppear {
             purgeExpiredBinItems()
+            synchronizeUpcomingRemindersIfNeeded()
             if scenePhase == .active {
                 hasHandledInitialActivePhase = true
             }
             refreshDashboardMessage(rotateSeed: false)
+            openPendingNotificationTaskIfNeeded()
+            showPendingReminderActionTipIfNeeded()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else {
@@ -193,6 +212,11 @@ struct HomeView: View {
             } else {
                 hasHandledInitialActivePhase = true
             }
+            openPendingNotificationTaskIfNeeded()
+            showPendingReminderActionTipIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ReminderScheduler.actionTipDidBecomePendingNotification)) { _ in
+            showPendingReminderActionTipIfNeeded()
         }
         .onChange(of: dashboardMessageContextKey) { _, _ in
             refreshDashboardMessage(rotateSeed: false)
@@ -950,6 +974,17 @@ struct HomeView: View {
         editingTask = task
     }
 
+    private func openPendingNotificationTaskIfNeeded() {
+        guard let task = LifeTrackNotificationActionHandler.consumePendingOpenTask(in: tasks) else {
+            return
+        }
+
+        selectedSummary = nil
+        isShowingTemplatePicker = false
+        isShowingTaskEditor = false
+        editingTask = task
+    }
+
     private func openAvailabilityCalendar() {
         isShowingAvailabilitySheet = false
 
@@ -1070,6 +1105,41 @@ struct HomeView: View {
         }
     }
 
+    private func showPendingReminderActionTipIfNeeded() {
+        guard
+            reminderActionTipState == nil,
+            ReminderScheduler.consumePendingActionTip()
+        else {
+            return
+        }
+
+        let tipState = ReminderActionTipToastState()
+
+        guard animationsEnabled else {
+            reminderActionTipState = tipState
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.22)) {
+            reminderActionTipState = tipState
+        }
+    }
+
+    private func dismissReminderActionTip(id: UUID?) {
+        guard id == nil || reminderActionTipState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            reminderActionTipState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            reminderActionTipState = nil
+        }
+    }
+
     private func resetMyDay() {
         let focusIDs = Set(focusRecommendations.map(\.task.id))
         let plan = DailyFocusPlanner.resetSchedule(for: activeTasks, focusIDs: focusIDs)
@@ -1108,6 +1178,17 @@ struct HomeView: View {
 
     private func syncReminder(for task: LifeTask) {
         TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+    }
+
+    private func synchronizeUpcomingRemindersIfNeeded() {
+        guard !hasSyncedRemindersForSession else {
+            return
+        }
+
+        hasSyncedRemindersForSession = true
+        for task in activeTasks where !task.isCompleted {
+            TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        }
     }
 
     private var binRetentionPeriod: TaskBinRetentionPeriod {

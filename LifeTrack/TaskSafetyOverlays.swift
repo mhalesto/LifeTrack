@@ -17,6 +17,10 @@ struct TaskRestoredToastState: Identifiable {
     let taskTitle: String
 }
 
+struct ReminderActionTipToastState: Identifiable {
+    let id = UUID()
+}
+
 struct LifeTrackConfirmationOverlay: View {
     let symbolName: String
     let title: String
@@ -220,6 +224,60 @@ struct TaskRestoredToast: View {
         .transition(.asymmetric(
             insertion: .opacity.combined(with: .move(edge: .bottom)),
             removal: .opacity.combined(with: .move(edge: .bottom))
+        ))
+    }
+}
+
+struct ReminderActionTipToast: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+            Image(systemName: "hand.tap.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                .frame(width: 36, height: 36)
+                .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(LifeTrackTheme.ColorPalette.accent.opacity(0.16), lineWidth: 7)
+                }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Reminder actions are ready")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text("Hold a LifeTrack notification to complete, snooze, or open the task.")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .frame(width: 28, height: 28)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.9), in: Circle())
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.9))
+            .accessibilityLabel("Dismiss reminder actions tip")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.accent.opacity(0.18), lineWidth: 0.8)
+        }
+        .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(1.1), radius: 18, x: 0, y: 12)
+        .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .move(edge: .top)),
+            removal: .opacity.combined(with: .move(edge: .top))
         ))
     }
 }

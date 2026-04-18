@@ -7,22 +7,17 @@
 
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 @main
 struct LifeTrackApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            LifeTask.self,
-            CustomTaskCategory.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    private let sharedModelContainer: ModelContainer
 
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    init() {
+        sharedModelContainer = LifeTrackDataStore.sharedModelContainer
+        ReminderScheduler.configureNotificationCategories()
+        UNUserNotificationCenter.current().delegate = LifeTrackNotificationDelegate.shared
+    }
 
     var body: some Scene {
         WindowGroup {
