@@ -126,8 +126,8 @@ struct QuickActionButton: View {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.9)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.86)
 
                     Text(subtitle)
                         .font(.caption2.weight(.medium))

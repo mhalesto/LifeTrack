@@ -184,7 +184,7 @@ struct TaskDetailView: View {
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 8) {
+                WrappingChipLayout(spacing: 8, rowSpacing: 7) {
                     StatusPillView(
                         title: task.isCompleted ? "Completed" : "Open",
                         symbolName: task.isCompleted ? "checkmark.circle.fill" : "circle",
@@ -227,6 +227,7 @@ struct TaskDetailView: View {
                         )
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

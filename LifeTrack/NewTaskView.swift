@@ -38,6 +38,8 @@ struct NewTaskView: View {
     @State private var isImportingDocument = false
     @State private var isAnalyzingDocument = false
     @State private var isShowingCategoryManager = false
+    @State private var isShowingTaskDataExchange = false
+    @State private var taskDataMode: TaskDataExchangeEntryMode = .importTasks
     @State private var pendingCategoryOption: TaskCategoryOption?
     @State private var documentError: String?
     @State private var didSave = false
@@ -80,6 +82,8 @@ struct NewTaskView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
                         header
+
+                        taskDataShortcutCard
 
                         voiceCard
 
@@ -131,6 +135,13 @@ struct NewTaskView: View {
                 CategoryManagerView { option in
                     categoryRawValue = option.id
                     pendingCategoryOption = option
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isShowingTaskDataExchange) {
+                NavigationStack {
+                    TaskDataExchangeView(initialMode: taskDataMode, showsCloseButton: true)
                 }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
@@ -228,6 +239,37 @@ struct NewTaskView: View {
                     .background(LifeTrackTheme.ColorPalette.accentSoft, in: Capsule())
                 }
                 .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96))
+            }
+        }
+    }
+
+    private var taskDataShortcutCard: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Task Data",
+                subtitle: "Bring tasks in or send your task list out."
+            )
+
+            HStack(spacing: LifeTrackTheme.Spacing.small) {
+                TaskDataShortcutButton(
+                    title: "Import",
+                    subtitle: "From file",
+                    symbolName: "tray.and.arrow.down",
+                    tint: LifeTrackTheme.ColorPalette.accent
+                ) {
+                    taskDataMode = .importTasks
+                    isShowingTaskDataExchange = true
+                }
+
+                TaskDataShortcutButton(
+                    title: "Export",
+                    subtitle: "Share/AirDrop",
+                    symbolName: "square.and.arrow.up",
+                    tint: LifeTrackTheme.ColorPalette.success
+                ) {
+                    taskDataMode = .exportTasks
+                    isShowingTaskDataExchange = true
+                }
             }
         }
     }
@@ -775,6 +817,48 @@ private struct DatePickerRow<Content: View>: View {
             content
         }
         .frame(minHeight: 44)
+    }
+}
+
+private struct TaskDataShortcutButton: View {
+    let title: String
+    let subtitle: String
+    let symbolName: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 32, height: 32)
+                    .background(tint.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(11)
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.82), lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97, pressedOpacity: 0.93))
     }
 }
 

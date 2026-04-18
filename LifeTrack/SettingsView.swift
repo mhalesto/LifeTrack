@@ -26,6 +26,8 @@ struct SettingsView: View {
     @State private var pendingAvatarImage: UIImage?
     @State private var avatarError: String?
     @State private var isImportingAvatar = false
+    @State private var nicknameInputFrame: CGRect = .zero
+    @FocusState private var focusedField: SettingsFocusField?
 
     var body: some View {
         NavigationStack {
@@ -39,6 +41,7 @@ struct SettingsView: View {
                         profileCard
                         themeCard
                         motionCard
+                        taskDataCard
                         binCard
                     }
                     .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
@@ -46,10 +49,19 @@ struct SettingsView: View {
                     .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
                 }
                 .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .coordinateSpace(name: SettingsCoordinateSpace.scrollView)
+                .simultaneousGesture(
+                    SpatialTapGesture()
+                        .onEnded { value in
+                            dismissKeyboardIfNeeded(for: value.location)
+                        }
+                )
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
+                        focusedField = nil
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -165,12 +177,28 @@ struct SettingsView: View {
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .focused($focusedField, equals: .nickname)
+                        .onSubmit {
+                            focusedField = nil
+                        }
                         .padding(14)
                 }
                 .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: NicknameInputFramePreferenceKey.self,
+                            value: proxy.frame(in: .named(SettingsCoordinateSpace.scrollView))
+                        )
+                    }
+                }
                 .overlay {
                     RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
                         .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8)
+                }
+                .onPreferenceChange(NicknameInputFramePreferenceKey.self) { frame in
+                    nicknameInputFrame = frame
                 }
             }
 
@@ -319,6 +347,54 @@ struct SettingsView: View {
         }
     }
 
+    private var taskDataCard: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Task Data",
+                subtitle: "Import and export backups or spreadsheet-ready task lists."
+            )
+
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: "tray.and.arrow.down.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    .frame(width: 42, height: 42)
+                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("JSON, CSV, and TSV")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text("Includes title, due date, category label, status, priority, recurrence, duration, and notes.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                NavigationLink {
+                    TaskDataExchangeView()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                        .frame(width: 32, height: 32)
+                        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: Circle())
+                }
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
+                .accessibilityLabel("Open Task Data")
+            }
+            .padding(12)
+            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+            }
+        }
+    }
+
     private var selectedTheme: LifeTrackAppTheme {
         LifeTrackAppTheme(rawValue: selectedThemeID) ?? .fallback
     }
@@ -405,6 +481,34 @@ struct SettingsView: View {
             in: modelContext,
             retentionPeriod: binRetentionPeriod
         )
+    }
+
+    private func dismissKeyboardIfNeeded(for tapLocation: CGPoint) {
+        guard focusedField != nil else {
+            return
+        }
+
+        let tappableInputFrame = nicknameInputFrame.insetBy(dx: -8, dy: -8)
+
+        if !tappableInputFrame.contains(tapLocation) {
+            focusedField = nil
+        }
+    }
+}
+
+private enum SettingsFocusField: Hashable {
+    case nickname
+}
+
+private enum SettingsCoordinateSpace {
+    static let scrollView = "settings-scroll-view"
+}
+
+private struct NicknameInputFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
     }
 }
 

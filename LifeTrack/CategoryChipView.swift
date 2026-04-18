@@ -34,6 +34,7 @@ struct CategoryChipView: View {
                 Capsule()
                     .stroke(isSelected ? option.tint.opacity(0.2) : option.border, lineWidth: 0.8)
             }
+            .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -49,6 +50,8 @@ struct StatusPillView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(tint.opacity(0.10), in: Capsule())
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
 }
 

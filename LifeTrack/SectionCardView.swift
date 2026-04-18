@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SectionCardView<Content: View>: View {
     private let content: Content
@@ -61,7 +62,7 @@ struct SectionHeaderView: View {
     }
 }
 
-private struct InfoTipButton: View {
+struct InfoTipButton: View {
     let message: String
 
     @State private var isShowingInfo = false
@@ -80,12 +81,11 @@ private struct InfoTipButton: View {
         .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.88, pressedOpacity: 0.86))
         .accessibilityLabel("More information")
         .accessibilityHint(message)
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: .topLeading) {
             if isShowingInfo {
-                InfoTooltipView(message: message) {
+                AdaptiveInfoTooltipView(message: message) {
                     hideInfo()
                 }
-                .offset(x: -10, y: -30)
                 .transition(.opacity.combined(with: .move(edge: .bottom)).combined(with: .scale(scale: 0.98)))
                 .zIndex(20)
             }
@@ -116,8 +116,41 @@ private struct InfoTipButton: View {
     }
 }
 
+private struct AdaptiveInfoTooltipView: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let buttonFrame = proxy.frame(in: .global)
+            let screenWidth = currentScreenWidth
+            let width = min(286, max(220, screenWidth - 32))
+            let preferredLeading = buttonFrame.minX - 18
+            let clampedLeading = min(max(preferredLeading, 16), screenWidth - width - 16)
+            let tailX = min(max(buttonFrame.midX - clampedLeading, 18), width - 18)
+
+            InfoTooltipView(
+                message: message,
+                width: width,
+                tailX: tailX,
+                onDismiss: onDismiss
+            )
+            .offset(x: clampedLeading - buttonFrame.minX, y: -98)
+        }
+        .frame(width: 22, height: 22)
+    }
+
+    private var currentScreenWidth: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.screen.bounds.width }
+            .first ?? 393
+    }
+}
+
 private struct InfoTooltipView: View {
     let message: String
+    let width: CGFloat
+    let tailX: CGFloat
     let onDismiss: () -> Void
 
     var body: some View {
@@ -129,7 +162,7 @@ private struct InfoTooltipView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .frame(width: 252, alignment: .leading)
+                .frame(width: width, alignment: .leading)
                 .background(
                     tooltipBackground,
                     in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
@@ -148,7 +181,7 @@ private struct InfoTooltipView: View {
                     TooltipTail()
                         .stroke(LifeTrackTheme.ColorPalette.accent.opacity(0.26), lineWidth: 0.8)
                 }
-                .offset(x: 10, y: -1)
+                .offset(x: tailX - (width / 2), y: -1)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: onDismiss)
@@ -156,7 +189,8 @@ private struct InfoTooltipView: View {
 
     private var tooltipBackground: Color {
         LifeTrackTheme.ColorPalette.accentSoft
-            .mixed(with: LifeTrackTheme.ColorPalette.cardElevated, amount: 0.38)
+            .mixed(with: LifeTrackTheme.ColorPalette.accent, amount: 0.13)
+            .mixed(with: LifeTrackTheme.ColorPalette.cardElevated, amount: 0.10)
     }
 }
 

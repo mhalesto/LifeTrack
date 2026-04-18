@@ -11,11 +11,14 @@ struct ProgressTrackerView: View {
     let metrics: TaskProgressMetrics
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength = 1.0
+    @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
+    @State private var isIntroPulsing = false
+    @State private var revealedMetricCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
             HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.large) {
-                StreakHeroIcon(metrics: metrics)
+                StreakHeroIcon(metrics: metrics, isPulsing: isIntroPulsing)
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(metrics.title)
@@ -33,19 +36,93 @@ struct ProgressTrackerView: View {
                 Spacer(minLength: LifeTrackTheme.Spacing.small)
             }
 
-            ProgressMetricPanel(metrics: metrics)
+            ProgressMetricPanel(metrics: metrics, revealedSegmentCount: revealedMetricCount)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .lifeTrackCard(padding: LifeTrackTheme.Spacing.large, backgroundColor: LifeTrackTheme.ColorPalette.cardElevated)
         .id("\(selectedThemeID)-\(colorStrength)")
+        .task(id: introAnimationID) {
+            await runIntroAnimation()
+        }
+    }
+
+    private var introAnimationID: String {
+        [
+            selectedThemeID,
+            colorStrength.formatted(),
+            metrics.currentStreak.formatted(),
+            metrics.bestStreak.formatted(),
+            metrics.completedDaysThisWeek.formatted(),
+            metrics.hasCompletedToday.description
+        ]
+        .joined(separator: "-")
+    }
+
+    private func runIntroAnimation() async {
+        guard animationsEnabled else {
+            await MainActor.run {
+                isIntroPulsing = false
+                revealedMetricCount = 3
+            }
+            return
+        }
+
+        await MainActor.run {
+            isIntroPulsing = false
+            revealedMetricCount = 0
+        }
+
+        try? await Task.sleep(nanoseconds: 110_000_000)
+
+        await MainActor.run {
+            withAnimation(.easeOut(duration: 0.22)) {
+                isIntroPulsing = true
+            }
+        }
+
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+
+        await MainActor.run {
+            withAnimation(.smooth(duration: 0.42)) {
+                revealedMetricCount = 1
+            }
+        }
+
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+
+        await MainActor.run {
+            withAnimation(.smooth(duration: 0.42)) {
+                revealedMetricCount = 2
+            }
+        }
+
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+
+        await MainActor.run {
+            withAnimation(.smooth(duration: 0.42)) {
+                revealedMetricCount = 3
+            }
+        }
+
+        await MainActor.run {
+            withAnimation(.easeOut(duration: 0.28)) {
+                isIntroPulsing = false
+            }
+        }
     }
 }
 
 private struct StreakHeroIcon: View {
     let metrics: TaskProgressMetrics
+    let isPulsing: Bool
 
     var body: some View {
         ZStack {
+            if isPulsing {
+                StreakPulseRings(tint: LifeTrackTheme.ColorPalette.accent)
+                    .transition(.opacity)
+            }
+
             Circle()
                 .fill(LifeTrackTheme.ColorPalette.accentSoft)
                 .frame(width: 74, height: 74)
@@ -59,14 +136,49 @@ private struct StreakHeroIcon: View {
                 .font(.system(size: 31, weight: .bold))
                 .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
                 .symbolEffect(.pulse, value: metrics.currentStreak)
+                .scaleEffect(isPulsing ? 1.06 : 1)
+                .animation(.easeInOut(duration: 1.2).repeatCount(isPulsing ? 2 : 0, autoreverses: true), value: isPulsing)
         }
         .frame(width: 82, height: 82)
         .accessibilityHidden(true)
     }
 }
 
+private struct StreakPulseRings: View {
+    let tint: Color
+    @State private var isExpanded = false
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .stroke(
+                        tint.opacity(0.18 - (Double(index) * 0.035)),
+                        lineWidth: 2.2
+                    )
+                    .frame(width: 74, height: 74)
+                    .scaleEffect(isExpanded ? 1.42 + CGFloat(index) * 0.08 : 0.82)
+                    .opacity(isExpanded ? 0 : 1)
+                    .animation(
+                        .easeOut(duration: 1.35)
+                            .repeatForever(autoreverses: false)
+                            .delay(Double(index) * 0.24),
+                        value: isExpanded
+                    )
+            }
+        }
+        .onAppear {
+            isExpanded = false
+            DispatchQueue.main.async {
+                isExpanded = true
+            }
+        }
+    }
+}
+
 private struct ProgressMetricPanel: View {
     let metrics: TaskProgressMetrics
+    let revealedSegmentCount: Int
 
     var body: some View {
         HStack(spacing: 0) {
@@ -75,7 +187,8 @@ private struct ProgressMetricPanel: View {
                 value: metrics.currentStreak.formatted(),
                 unit: metrics.currentStreak == 1 ? "Day" : "Days",
                 symbolName: "flame.fill",
-                tint: LifeTrackTheme.ColorPalette.accent
+                tint: LifeTrackTheme.ColorPalette.accent,
+                isRevealed: revealedSegmentCount >= 1
             )
 
             ProgressMetricDivider()
@@ -85,7 +198,8 @@ private struct ProgressMetricPanel: View {
                 value: metrics.bestStreak.formatted(),
                 unit: metrics.bestStreak == 1 ? "Day" : "Days",
                 symbolName: "star.fill",
-                tint: LifeTrackTheme.ColorPalette.accentDeep
+                tint: LifeTrackTheme.ColorPalette.accentDeep,
+                isRevealed: revealedSegmentCount >= 2
             )
 
             ProgressMetricDivider()
@@ -95,7 +209,8 @@ private struct ProgressMetricPanel: View {
                 value: "\(metrics.completedDaysThisWeek)/7",
                 unit: "Days",
                 symbolName: "calendar",
-                tint: LifeTrackTheme.ColorPalette.accent
+                tint: LifeTrackTheme.ColorPalette.accent,
+                isRevealed: revealedSegmentCount >= 3
             )
         }
         .padding(.vertical, 11)
@@ -107,6 +222,7 @@ private struct ProgressMetricPanel: View {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                 .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.78), lineWidth: 0.8)
         }
+        .animation(.smooth(duration: 0.42), value: revealedSegmentCount)
     }
 }
 
@@ -116,6 +232,7 @@ private struct ProgressMetricSegment: View {
     let unit: String
     let symbolName: String
     let tint: Color
+    let isRevealed: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -139,6 +256,7 @@ private struct ProgressMetricSegment: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(tint)
                     .frame(width: 17, alignment: .center)
+                    .symbolEffect(.bounce, value: isRevealed)
 
                 Text(title)
                     .font(.callout.weight(.semibold))
@@ -146,6 +264,8 @@ private struct ProgressMetricSegment: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
+            .opacity(isRevealed ? 1 : 0)
+            .offset(y: isRevealed ? 0 : 6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 13)

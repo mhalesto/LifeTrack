@@ -23,6 +23,9 @@ struct TaskRowView: View {
 
     private let leadingRevealWidth: CGFloat = 78
     private let trailingRevealWidth: CGFloat = 150
+    private let swipeMinimumDistance: CGFloat = 22
+    private let swipeTrackingBias: CGFloat = 1.3
+    private let swipeCommitBias: CGFloat = 1.45
 
     var body: some View {
         ZStack {
@@ -72,7 +75,7 @@ struct TaskRowView: View {
                         Spacer(minLength: 0)
                     }
 
-                    HStack(spacing: 8) {
+                    WrappingChipLayout(spacing: 7, rowSpacing: 6) {
                         CategoryChipView(option: categoryOption ?? task.categoryOption(customCategories: []))
 
                         StatusPillView(
@@ -111,6 +114,7 @@ struct TaskRowView: View {
                                 .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Circle())
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.99, pressedOpacity: 0.96))
@@ -207,24 +211,24 @@ struct TaskRowView: View {
     }
 
     private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
+        DragGesture(minimumDistance: swipeMinimumDistance)
             .updating($dragOffset) { value, state, _ in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
+                guard isHorizontalSwipe(value, minimumDistance: swipeMinimumDistance, bias: swipeTrackingBias) else {
                     return
                 }
 
                 state = value.translation.width
             }
             .onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
+                guard isHorizontalSwipe(value, minimumDistance: swipeMinimumDistance + 8, bias: swipeCommitBias) else {
                     return
                 }
 
                 let predictedOffset = clampedOffset(restingOffset + value.predictedEndTranslation.width)
                 let nextOffset: CGFloat
-                if predictedOffset > leadingRevealWidth * 0.46 {
+                if predictedOffset > leadingRevealWidth * 0.62 {
                     nextOffset = leadingRevealWidth
-                } else if predictedOffset < -(trailingRevealWidth * 0.36) {
+                } else if predictedOffset < -(trailingRevealWidth * 0.50) {
                     nextOffset = -trailingRevealWidth
                 } else {
                     nextOffset = 0
@@ -244,6 +248,13 @@ struct TaskRowView: View {
 
     private func clampedOffset(_ offset: CGFloat) -> CGFloat {
         min(max(offset, -trailingRevealWidth), leadingRevealWidth)
+    }
+
+    private func isHorizontalSwipe(_ value: DragGesture.Value, minimumDistance: CGFloat, bias: CGFloat) -> Bool {
+        let horizontalDistance = abs(value.translation.width)
+        let verticalDistance = abs(value.translation.height)
+
+        return horizontalDistance >= minimumDistance && horizontalDistance > verticalDistance * bias
     }
 
     private func closeSwipe() {
@@ -267,5 +278,63 @@ struct TaskRowView: View {
         }
 
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+}
+
+struct WrappingChipLayout: Layout {
+    var spacing: CGFloat
+    var rowSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? CGFloat.greatestFiniteMagnitude
+        var currentX: CGFloat = 0
+        var currentRowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var widestRow: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let proposedX = currentX == 0 ? size.width : currentX + spacing + size.width
+
+            if currentX > 0 && proposedX > maxWidth {
+                totalHeight += currentRowHeight + rowSpacing
+                widestRow = max(widestRow, currentX)
+                currentX = size.width
+                currentRowHeight = size.height
+            } else {
+                currentX = proposedX
+                currentRowHeight = max(currentRowHeight, size.height)
+            }
+        }
+
+        totalHeight += currentRowHeight
+        widestRow = max(widestRow, currentX)
+
+        return CGSize(width: proposal.width ?? widestRow, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var currentX = bounds.minX
+        var currentY = bounds.minY
+        var currentRowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let proposedX = currentX == bounds.minX ? currentX + size.width : currentX + spacing + size.width
+
+            if currentX > bounds.minX && proposedX > bounds.maxX {
+                currentX = bounds.minX
+                currentY += currentRowHeight + rowSpacing
+                currentRowHeight = 0
+            }
+
+            subview.place(
+                at: CGPoint(x: currentX, y: currentY),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+
+            currentX += size.width + spacing
+            currentRowHeight = max(currentRowHeight, size.height)
+        }
     }
 }

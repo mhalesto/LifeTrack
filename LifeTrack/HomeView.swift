@@ -10,6 +10,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \LifeTask.dueDate, order: .forward) private var tasks: [LifeTask]
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
@@ -25,11 +26,15 @@ struct HomeView: View {
     @State private var binUndoState: TaskBinUndoState?
     @State private var restoredToastState: TaskRestoredToastState?
     @State private var availabilityShareRange: AvailabilityShareRange = .today
+    @State private var dashboardMessageSeed = Int.random(in: 0...1_000_000)
+    @State private var dashboardMessageSignal: DashboardMessageSignal?
+    @State private var hasHandledInitialActivePhase = false
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.lastDashboardMessageText) private var lastDashboardMessageText = ""
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -127,6 +132,8 @@ struct HomeView: View {
                     )
                 case .documents:
                     DocumentSearchView()
+                case .taskData(let mode):
+                    TaskDataExchangeView(initialMode: mode)
                 }
             }
             .sheet(isPresented: $isShowingTemplatePicker) {
@@ -169,7 +176,27 @@ struct HomeView: View {
             }
         }
         .tint(selectedTheme.accent)
-        .onAppear(perform: purgeExpiredBinItems)
+        .onAppear {
+            purgeExpiredBinItems()
+            if scenePhase == .active {
+                hasHandledInitialActivePhase = true
+            }
+            refreshDashboardMessage(rotateSeed: false)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else {
+                return
+            }
+
+            if hasHandledInitialActivePhase {
+                refreshDashboardMessage(rotateSeed: true)
+            } else {
+                hasHandledInitialActivePhase = true
+            }
+        }
+        .onChange(of: dashboardMessageContextKey) { _, _ in
+            refreshDashboardMessage(rotateSeed: false)
+        }
         .onChange(of: binRetentionRawValue) { _, _ in
             purgeExpiredBinItems()
         }
@@ -222,10 +249,7 @@ struct HomeView: View {
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                 }
 
-                Text(dashboardMessage)
-                    .font(.callout)
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                DashboardHeaderMessageView(message: dashboardMessage)
             }
         }
     }
@@ -312,7 +336,7 @@ struct HomeView: View {
                         subtitle: "Share times",
                         symbolName: "calendar.badge.clock",
                         tint: LifeTrackTheme.ColorPalette.accent,
-                        width: metrics.quickActionWidth,
+                        width: metrics.quickActionWideWidth,
                         height: metrics.quickActionHeight,
                         iconSize: metrics.quickActionIconSize,
                         action: { isShowingAvailabilitySheet = true }
@@ -323,13 +347,76 @@ struct HomeView: View {
                         subtitle: "Use template",
                         symbolName: "envelope.badge",
                         tint: TaskCategory.work.style.tint,
+                        width: metrics.quickActionWideWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { openTemplateShortcut(id: "email") }
+                    )
+
+                    QuickActionButton(
+                        title: "Import",
+                        subtitle: "From file",
+                        symbolName: "tray.and.arrow.down",
+                        tint: LifeTrackTheme.ColorPalette.accent,
                         width: metrics.quickActionWidth,
                         height: metrics.quickActionHeight,
                         iconSize: metrics.quickActionIconSize,
-                        action: {
-                            selectedTemplate = TaskTemplate.common.first { $0.id == "email" }
-                            isShowingTaskEditor = true
-                        }
+                        action: { navigationPath.append(.taskData(.importTasks)) }
+                    )
+
+                    QuickActionButton(
+                        title: "Export",
+                        subtitle: "Share/AirDrop",
+                        symbolName: "square.and.arrow.up",
+                        tint: LifeTrackTheme.ColorPalette.success,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { navigationPath.append(.taskData(.exportTasks)) }
+                    )
+
+                    QuickActionButton(
+                        title: "Pay bill",
+                        subtitle: "Monthly",
+                        symbolName: "creditcard",
+                        tint: TaskCategory.finance.style.tint,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { openTemplateShortcut(id: "bill") }
+                    )
+
+                    QuickActionButton(
+                        title: "Medication",
+                        subtitle: "Daily routine",
+                        symbolName: "cross.case",
+                        tint: TaskCategory.health.style.tint,
+                        width: metrics.quickActionWideWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { openTemplateShortcut(id: "medication") }
+                    )
+
+                    QuickActionButton(
+                        title: "Budget",
+                        subtitle: "Monthly review",
+                        symbolName: "chart.pie",
+                        tint: TaskCategory.finance.style.tint,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { openTemplateShortcut(id: "budget") }
+                    )
+
+                    QuickActionButton(
+                        title: "Health check",
+                        subtitle: "Book visit",
+                        symbolName: "heart.text.square",
+                        tint: TaskCategory.health.style.tint,
+                        width: metrics.quickActionWideWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { openTemplateShortcut(id: "checkup") }
                     )
 
                     QuickActionButton(
@@ -378,7 +465,7 @@ struct HomeView: View {
                 }
                 .padding(.vertical, 2)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.visible)
         }
     }
 
@@ -400,16 +487,24 @@ struct HomeView: View {
                 }
             } else {
                 VStack(spacing: LifeTrackTheme.Spacing.small) {
-                    ForEach(focusRecommendations) { recommendation in
-                        DailyFocusTaskCard(
-                            recommendation: recommendation,
-                            categoryOption: recommendation.task.categoryOption(customCategories: customCategories),
-                            onToggleCompletion: { toggleCompletion(for: recommendation.task) },
-                            onEdit: { editingTask = recommendation.task },
-                            onDelete: { delete(recommendation.task) },
-                            verticalPadding: metrics.taskRowVerticalPadding,
-                            leadingIconSize: metrics.taskRowIconSize
-                        )
+                    ForEach(focusRecommendationGroups) { group in
+                        VStack(alignment: .leading, spacing: 7) {
+                            DailyFocusReasonHeader(reason: group.reason, count: group.recommendations.count)
+
+                            VStack(spacing: LifeTrackTheme.Spacing.small) {
+                                ForEach(group.recommendations) { recommendation in
+                                    DailyFocusTaskCard(
+                                        recommendation: recommendation,
+                                        categoryOption: recommendation.task.categoryOption(customCategories: customCategories),
+                                        onToggleCompletion: { toggleCompletion(for: recommendation.task) },
+                                        onEdit: { editingTask = recommendation.task },
+                                        onDelete: { delete(recommendation.task) },
+                                        verticalPadding: metrics.taskRowVerticalPadding,
+                                        leadingIconSize: metrics.taskRowIconSize
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     if shouldShowFocusActions {
@@ -525,6 +620,18 @@ struct HomeView: View {
         DailyFocusPlanner.recommendations(from: activeTasks)
     }
 
+    private var focusRecommendationGroups: [DailyFocusRecommendationGroup] {
+        let groupedRecommendations = Dictionary(grouping: focusRecommendations, by: \.reason)
+
+        return DailyFocusReason.displayOrder.compactMap { reason in
+            guard let recommendations = groupedRecommendations[reason], !recommendations.isEmpty else {
+                return nil
+            }
+
+            return DailyFocusRecommendationGroup(reason: reason, recommendations: recommendations)
+        }
+    }
+
     private var priorityTasks: [LifeTask] {
         focusRecommendations.map(\.task)
     }
@@ -548,35 +655,66 @@ struct HomeView: View {
             DailyFocusPlanner.shouldOfferOverdueReschedule(for: activeTasks)
     }
 
-    private var dashboardMessage: String {
-        let messages = dashboardMessageCandidates
-        let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
-        let taskSignal = activeTasks.count + (dueTodayTasks.count * 3) + (upcomingTasks.count * 5) + (completedTasks.count * 7) + (overdueTasks.count * 11)
-        return messages[(dayOfYear + taskSignal) % messages.count]
+    private var dashboardMessage: DashboardMessageSignal {
+        dashboardMessageSignal ?? makeDashboardMessage(seed: dashboardMessageSeed)
     }
 
-    private var dashboardMessageCandidates: [String] {
+    private var dashboardMessageContextKey: String {
+        [
+            activeTasks.count,
+            dueTodayTasks.count,
+            upcomingTasks.count,
+            completedTasks.count,
+            overdueTasks.count
+        ]
+        .map(String.init)
+        .joined(separator: "-")
+    }
+
+    private func makeDashboardMessage(seed: Int) -> DashboardMessageSignal {
+        let source = dashboardMessageSource
+        let messages = source.messages
+        guard !messages.isEmpty else {
+            return DashboardMessageSignal(text: "LifeTrack is ready when you are.", tone: .calm)
+        }
+
+        let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        let taskSignal = activeTasks.count + (dueTodayTasks.count * 3) + (upcomingTasks.count * 5) + (completedTasks.count * 7) + (overdueTasks.count * 11)
+        var index = (dayOfYear + taskSignal + seed) % messages.count
+
+        if messages.count > 1 && messages[index] == lastDashboardMessageText {
+            let offset = 1 + (seed % (messages.count - 1))
+            index = (index + offset) % messages.count
+        }
+
+        return DashboardMessageSignal(
+            text: messages[index],
+            tone: source.tone
+        )
+    }
+
+    private var dashboardMessageSource: DashboardMessageSource {
         if activeTasks.isEmpty {
-            return emptyDashboardMessages
+            return DashboardMessageSource(messages: emptyDashboardMessages, tone: .calm)
         }
 
         if overdueTasks.count >= 3 {
-            return overdueDashboardMessages
+            return DashboardMessageSource(messages: overdueDashboardMessages, tone: .overdue)
         }
 
         if completedTasks.count >= max(4, activeTasks.count / 2) {
-            return completedDashboardMessages
+            return DashboardMessageSource(messages: completedDashboardMessages, tone: .completed)
         }
 
         if dueTodayTasks.count >= 4 {
-            return busyDashboardMessages
+            return DashboardMessageSource(messages: busyDashboardMessages, tone: .busy)
         }
 
         if dueTodayTasks.isEmpty && overdueTasks.isEmpty {
-            return clearDayDashboardMessages
+            return DashboardMessageSource(messages: clearDayDashboardMessages, tone: .clear)
         }
 
-        return focusDashboardMessages
+        return DashboardMessageSource(messages: focusDashboardMessages, tone: .focus)
     }
 
     private var emptyDashboardMessages: [String] {
@@ -756,8 +894,24 @@ struct HomeView: View {
         LifeTrackAppTheme(rawValue: selectedThemeID) ?? .fallback
     }
 
+    private func refreshDashboardMessage(rotateSeed: Bool) {
+        let seed = rotateSeed ? Int.random(in: 0...1_000_000) : dashboardMessageSeed
+        dashboardMessageSeed = seed
+
+        let message = makeDashboardMessage(seed: seed)
+        performWithOptionalAnimation {
+            dashboardMessageSignal = message
+        }
+        lastDashboardMessageText = message.text
+    }
+
     private func openBlankTask() {
         selectedTemplate = nil
+        isShowingTaskEditor = true
+    }
+
+    private func openTemplateShortcut(id: String) {
+        selectedTemplate = TaskTemplate.common.first { $0.id == id }
         isShowingTaskEditor = true
     }
 
@@ -974,6 +1128,7 @@ private enum HomeRoute: Hashable {
     case calendar
     case availabilityCalendar
     case documents
+    case taskData(TaskDataExchangeEntryMode)
 }
 
 private struct HomeLayoutMetrics {
@@ -1006,7 +1161,11 @@ private struct HomeLayoutMetrics {
     }
 
     var quickActionWidth: CGFloat {
-        178 + (6 * expansion)
+        158 + (6 * expansion)
+    }
+
+    var quickActionWideWidth: CGFloat {
+        188 + (8 * expansion)
     }
 
     var quickActionHeight: CGFloat {
@@ -1035,6 +1194,110 @@ private struct HomeLayoutMetrics {
 
     var bottomPadding: CGFloat {
         96
+    }
+}
+
+private struct DailyFocusRecommendationGroup: Identifiable {
+    let reason: DailyFocusReason
+    let recommendations: [DailyFocusRecommendation]
+
+    var id: String { reason.rawValue }
+}
+
+private struct DashboardMessageSource {
+    let messages: [String]
+    let tone: DashboardMessageTone
+}
+
+private struct DashboardMessageSignal {
+    let text: String
+    let tone: DashboardMessageTone
+}
+
+private enum DashboardMessageTone {
+    case calm
+    case focus
+    case clear
+    case completed
+    case overdue
+    case busy
+
+    var tint: Color {
+        switch self {
+        case .calm:
+            LifeTrackTheme.ColorPalette.accent
+        case .focus:
+            LifeTrackTheme.ColorPalette.secondaryAccent
+        case .clear:
+            LifeTrackTheme.ColorPalette.success
+        case .completed:
+            LifeTrackTheme.ColorPalette.success
+        case .overdue:
+            LifeTrackTheme.ColorPalette.danger
+        case .busy:
+            LifeTrackTheme.ColorPalette.warning
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .calm:
+            "sparkles"
+        case .focus:
+            "scope"
+        case .clear:
+            "checkmark.seal.fill"
+        case .completed:
+            "checkmark.circle.fill"
+        case .overdue:
+            "exclamationmark.triangle.fill"
+        case .busy:
+            "calendar.badge.clock"
+        }
+    }
+}
+
+private struct DashboardHeaderMessageView: View {
+    let message: DashboardMessageSignal
+
+    var body: some View {
+        HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.small) {
+            ZStack {
+                Circle()
+                    .fill(message.tone.tint.opacity(0.13))
+
+                Image(systemName: message.tone.symbolName)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(message.tone.tint)
+            }
+            .frame(width: 25, height: 25)
+            .padding(.top, 1)
+
+            Text(message.text)
+                .font(.callout.weight(.medium))
+                .lineSpacing(1.5)
+                .foregroundStyle(messageTextColor)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(messageBackground, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(message.tone.tint.opacity(0.17), lineWidth: 0.8)
+        }
+    }
+
+    private var messageTextColor: Color {
+        message.tone.tint.mixed(with: LifeTrackTheme.ColorPalette.primaryText, amount: 0.36)
+    }
+
+    private var messageBackground: Color {
+        LifeTrackTheme.ColorPalette.cardElevated
+            .mixed(with: message.tone.tint, amount: 0.055)
+            .opacity(0.92)
     }
 }
 
@@ -1117,8 +1380,15 @@ private struct DashboardSummarySheet: View {
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
 
     @State private var pendingReopenTask: LifeTask?
+    @State private var pendingBulkAction: DashboardBulkAction?
     @State private var binUndoState: TaskBinUndoState?
     @State private var restoredToastState: TaskRestoredToastState?
+    @State private var bulkToastState: DashboardBulkToastState?
+    @State private var isBulkSelecting = false
+    @State private var bulkAction: DashboardBulkAction = .moveToBin
+    @State private var isShowingBulkActionMenu = false
+    @State private var isShowingBulkActionPicker = false
+    @State private var selectedTaskIDs: Set<UUID> = []
 
     let summary: DashboardSummaryKind
     let tasks: [LifeTask]
@@ -1154,7 +1424,19 @@ private struct DashboardSummarySheet: View {
                 .scrollIndicators(.hidden)
             }
             .overlay {
-                if let pendingReopenTask {
+                if let pendingBulkAction {
+                    LifeTrackConfirmationOverlay(
+                        symbolName: pendingBulkAction.symbolName,
+                        title: pendingBulkAction.confirmationTitle(count: selectedTasks.count),
+                        message: pendingBulkAction.confirmationMessage(count: selectedTasks.count),
+                        confirmTitle: pendingBulkAction.confirmTitle(count: selectedTasks.count),
+                        cancelTitle: "Review",
+                        tint: pendingBulkAction.tint,
+                        isDestructive: pendingBulkAction.isDestructive,
+                        onConfirm: { performBulkAction(pendingBulkAction) },
+                        onCancel: { self.pendingBulkAction = nil }
+                    )
+                } else if let pendingReopenTask {
                     LifeTrackConfirmationOverlay(
                         symbolName: "arrow.uturn.left.circle.fill",
                         title: "Move back to in progress?",
@@ -1168,7 +1450,18 @@ private struct DashboardSummarySheet: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                if let binUndoState {
+                if let bulkToastState {
+                    DashboardBulkActionToast(
+                        state: bulkToastState,
+                        onDismiss: { dismissBulkToast(id: bulkToastState.id) }
+                    )
+                    .task(id: bulkToastState.id) {
+                        try? await Task.sleep(nanoseconds: 2_600_000_000)
+                        await MainActor.run {
+                            dismissBulkToast(id: bulkToastState.id)
+                        }
+                    }
+                } else if let binUndoState {
                     TaskBinUndoToast(
                         taskTitle: binUndoState.task.title,
                         onRestore: { restoreFromUndo(binUndoState.task) },
@@ -1201,6 +1494,12 @@ private struct DashboardSummarySheet: View {
                     }
                     .fontWeight(.semibold)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+            }
+            .onChange(of: tasks.map(\.id)) { _, taskIDs in
+                selectedTaskIDs.formIntersection(Set(taskIDs))
+                if taskIDs.isEmpty {
+                    cancelBulkSelection()
                 }
             }
         }
@@ -1246,23 +1545,153 @@ private struct DashboardSummarySheet: View {
 
     private var taskList: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
-            SectionHeaderView(
-                title: "Tasks",
-                subtitle: summary.subtitle,
-                trailing: tasks.count.formatted()
-            )
+            taskListHeader
+
+            if isShowingBulkActionMenu {
+                DashboardBulkActionDropdown(
+                    selectedAction: bulkAction,
+                    title: "Bulk Action",
+                    onSelect: { action in
+                        startBulkSelection(action)
+                    }
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)).combined(with: .scale(scale: 0.98, anchor: .topTrailing)))
+            }
+
+            if isBulkSelecting {
+                bulkSelectionControls
+            }
 
             LazyVStack(spacing: LifeTrackTheme.Spacing.small) {
                 ForEach(tasks) { task in
                     DashboardSummaryTaskCard(
                         task: task,
                         categoryOption: task.categoryOption(customCategories: customCategories),
+                        bulkAction: isBulkSelecting ? bulkAction : nil,
+                        isSelected: selectedTaskIDs.contains(task.id),
+                        onSelect: { toggleSelection(for: task) },
                         onToggleCompletion: { requestToggleCompletion(for: task) },
                         onEdit: { onEdit(task) },
                         onDelete: { moveToBin(task) }
                     )
                 }
             }
+        }
+    }
+
+    private var taskListHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: LifeTrackTheme.Spacing.medium) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("Tasks")
+                        .font(.lifeTrackHeadline)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    InfoTipButton(message: "Use Actions to select multiple tasks, then move them to Bin, reopen them, mark them complete, or move their due date to tomorrow.")
+                }
+
+                Text(isBulkSelecting ? "\(selectedTaskIDs.count) selected for \(bulkAction.title.lowercased())." : summary.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            Button {
+                withSelectionAnimation {
+                    isShowingBulkActionMenu.toggle()
+                    isShowingBulkActionPicker = false
+                }
+            } label: {
+                Label(isBulkSelecting ? bulkAction.shortTitle : "Actions", systemImage: isBulkSelecting ? bulkAction.symbolName : "checklist")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(isBulkSelecting ? bulkAction.tint : LifeTrackTheme.ColorPalette.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background((isBulkSelecting ? bulkAction.tint : LifeTrackTheme.ColorPalette.accent).opacity(0.11), in: Capsule())
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.94, pressedOpacity: 0.9))
+        }
+    }
+
+    private var bulkSelectionControls: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
+            HStack(spacing: LifeTrackTheme.Spacing.small) {
+                Button {
+                    withSelectionAnimation {
+                        isShowingBulkActionPicker.toggle()
+                        isShowingBulkActionMenu = false
+                    }
+                } label: {
+                    Label(bulkAction.title, systemImage: bulkAction.symbolName)
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(bulkAction.tint)
+                        .lineLimit(1)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .background(bulkAction.tint.opacity(0.11), in: Capsule())
+                }
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.9))
+
+                Spacer(minLength: 0)
+
+                Button(selectedTaskIDs.count == tasks.count ? "Clear" : "All") {
+                    toggleSelectAll()
+                }
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+                .background(LifeTrackTheme.ColorPalette.accentSoft, in: Capsule())
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.9))
+
+                Button("Cancel") {
+                    cancelBulkSelection()
+                }
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+                .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Capsule())
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.9))
+            }
+
+            if isShowingBulkActionPicker {
+                DashboardBulkActionDropdown(
+                    selectedAction: bulkAction,
+                    title: "Choose Action",
+                    onSelect: { action in
+                        withSelectionAnimation {
+                            bulkAction = action
+                            isShowingBulkActionPicker = false
+                        }
+                    }
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)).combined(with: .scale(scale: 0.98, anchor: .top)))
+            }
+
+            Button {
+                requestBulkAction()
+            } label: {
+                Label(bulkAction.applyTitle(count: selectedTaskIDs.count), systemImage: bulkAction.symbolName)
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(selectedTaskIDs.isEmpty ? LifeTrackTheme.ColorPalette.tertiaryText : .white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(
+                        selectedTaskIDs.isEmpty ? AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop) : AnyShapeStyle(bulkAction.background),
+                        in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    )
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: selectedTaskIDs.isEmpty ? 1 : 0.98, pressedOpacity: 0.92))
+            .disabled(selectedTaskIDs.isEmpty)
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(bulkAction.tint.opacity(0.18), lineWidth: 0.8)
         }
     }
 
@@ -1294,7 +1723,16 @@ private struct DashboardSummarySheet: View {
         TaskBinRetentionPeriod(rawValue: binRetentionRawValue) ?? .fallback
     }
 
+    private var selectedTasks: [LifeTask] {
+        tasks.filter { selectedTaskIDs.contains($0.id) }
+    }
+
     private func requestToggleCompletion(for task: LifeTask) {
+        guard !isBulkSelecting else {
+            toggleSelection(for: task)
+            return
+        }
+
         guard !task.isCompleted else {
             pendingReopenTask = task
             return
@@ -1310,6 +1748,11 @@ private struct DashboardSummarySheet: View {
     }
 
     private func moveToBin(_ task: LifeTask) {
+        guard !isBulkSelecting else {
+            toggleSelection(for: task)
+            return
+        }
+
         let movedToBin = TaskLifecycleManager.delete(
             task,
             in: modelContext,
@@ -1319,6 +1762,145 @@ private struct DashboardSummarySheet: View {
         if movedToBin {
             showUndoToast(for: task)
         }
+    }
+
+    private func startBulkSelection(_ action: DashboardBulkAction) {
+        LifeTrackHaptics.lightImpact()
+        withSelectionAnimation {
+            bulkAction = action
+            isBulkSelecting = true
+            isShowingBulkActionMenu = false
+            isShowingBulkActionPicker = false
+        }
+    }
+
+    private func cancelBulkSelection() {
+        withSelectionAnimation {
+            isBulkSelecting = false
+            pendingBulkAction = nil
+            isShowingBulkActionMenu = false
+            isShowingBulkActionPicker = false
+            selectedTaskIDs.removeAll()
+        }
+    }
+
+    private func toggleSelection(for task: LifeTask) {
+        withSelectionAnimation {
+            if selectedTaskIDs.contains(task.id) {
+                selectedTaskIDs.remove(task.id)
+            } else {
+                selectedTaskIDs.insert(task.id)
+            }
+        }
+    }
+
+    private func toggleSelectAll() {
+        withSelectionAnimation {
+            if selectedTaskIDs.count == tasks.count {
+                selectedTaskIDs.removeAll()
+            } else {
+                selectedTaskIDs = Set(tasks.map(\.id))
+            }
+        }
+    }
+
+    private func requestBulkAction() {
+        guard !selectedTaskIDs.isEmpty else {
+            return
+        }
+
+        pendingBulkAction = bulkAction
+    }
+
+    private func performBulkAction(_ action: DashboardBulkAction) {
+        let tasksToUpdate = selectedTasks
+        pendingBulkAction = nil
+
+        guard !tasksToUpdate.isEmpty else {
+            cancelBulkSelection()
+            return
+        }
+
+        LifeTrackHaptics.lightImpact()
+
+        let changedCount: Int
+        switch action {
+        case .moveToBin:
+            changedCount = moveSelectedTasksToBin(tasksToUpdate)
+        case .markOpen:
+            changedCount = setSelectedTasks(tasksToUpdate, completed: false)
+        case .markComplete:
+            changedCount = setSelectedTasks(tasksToUpdate, completed: true)
+        case .moveTomorrow:
+            changedCount = moveSelectedTasksToTomorrow(tasksToUpdate)
+        }
+
+        cancelBulkSelection()
+        showBulkToast(
+            title: changedCount == 0 ? "No tasks changed" : action.toastTitle(count: changedCount),
+            message: changedCount == 0 ? "Selected tasks already match that action." : action.toastMessage(count: changedCount),
+            symbolName: action.symbolName,
+            tint: action.tint
+        )
+    }
+
+    private func moveSelectedTasksToBin(_ tasksToUpdate: [LifeTask]) -> Int {
+        var changedCount = 0
+
+        for task in tasksToUpdate {
+            _ = TaskLifecycleManager.delete(
+                task,
+                in: modelContext,
+                retentionPeriod: binRetentionPeriod
+            )
+            changedCount += 1
+        }
+
+        return changedCount
+    }
+
+    private func setSelectedTasks(_ tasksToUpdate: [LifeTask], completed: Bool) -> Int {
+        let filteredTasks = tasksToUpdate.filter { $0.isCompleted != completed }
+
+        for task in filteredTasks {
+            TaskLifecycleManager.toggleCompletion(
+                for: task,
+                in: modelContext,
+                customCategories: customCategories
+            )
+        }
+
+        return filteredTasks.count
+    }
+
+    private func moveSelectedTasksToTomorrow(_ tasksToUpdate: [LifeTask]) -> Int {
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: Date())) ?? Date()
+        let now = Date()
+
+        for task in tasksToUpdate {
+            let components = calendar.dateComponents([.hour, .minute, .second], from: task.dueDate)
+            task.dueDate = calendar.date(
+                bySettingHour: components.hour ?? 9,
+                minute: components.minute ?? 0,
+                second: components.second ?? 0,
+                of: tomorrow
+            ) ?? tomorrow
+            task.updatedAt = now
+            TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        }
+
+        try? modelContext.save()
+        return tasksToUpdate.count
+    }
+
+    private func withSelectionAnimation(_ updates: () -> Void) {
+        guard animationsEnabled else {
+            updates()
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2), updates)
     }
 
     private func restoreFromUndo(_ task: LifeTask) {
@@ -1385,6 +1967,318 @@ private struct DashboardSummarySheet: View {
         withAnimation(.snappy(duration: 0.18)) {
             restoredToastState = nil
         }
+    }
+
+    private func showBulkToast(title: String, message: String, symbolName: String, tint: Color) {
+        let toastState = DashboardBulkToastState(
+            title: title,
+            message: message,
+            symbolName: symbolName,
+            tint: tint
+        )
+
+        guard animationsEnabled else {
+            bulkToastState = toastState
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.2)) {
+            bulkToastState = toastState
+        }
+    }
+
+    private func dismissBulkToast(id: UUID?) {
+        guard id == nil || bulkToastState?.id == id else {
+            return
+        }
+
+        guard animationsEnabled else {
+            bulkToastState = nil
+            return
+        }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            bulkToastState = nil
+        }
+    }
+}
+
+private enum DashboardBulkAction: String, CaseIterable, Identifiable {
+    case moveToBin
+    case markOpen
+    case markComplete
+    case moveTomorrow
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .moveToBin: "Move to Bin"
+        case .markOpen: "Move to Open"
+        case .markComplete: "Mark Complete"
+        case .moveTomorrow: "Move to Tomorrow"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .moveToBin: "Bin"
+        case .markOpen: "Open"
+        case .markComplete: "Complete"
+        case .moveTomorrow: "Tomorrow"
+        }
+    }
+
+    var menuSubtitle: String {
+        switch self {
+        case .moveToBin: "Move selected tasks into Bin"
+        case .markOpen: "Return completed tasks to progress"
+        case .markComplete: "Finish selected open tasks"
+        case .moveTomorrow: "Push due dates forward one day"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .moveToBin: "trash"
+        case .markOpen: "arrow.uturn.left"
+        case .markComplete: "checkmark"
+        case .moveTomorrow: "calendar.badge.clock"
+        }
+    }
+
+    var selectedSymbolName: String {
+        switch self {
+        case .moveToBin: "trash.fill"
+        case .markOpen: "arrow.uturn.left.circle.fill"
+        case .markComplete: "checkmark.circle.fill"
+        case .moveTomorrow: "calendar.badge.clock"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .moveToBin:
+            LifeTrackTheme.ColorPalette.danger
+        case .markOpen:
+            LifeTrackTheme.ColorPalette.accent
+        case .markComplete:
+            LifeTrackTheme.ColorPalette.success
+        case .moveTomorrow:
+            LifeTrackTheme.ColorPalette.warning
+        }
+    }
+
+    var background: LinearGradient {
+        LinearGradient(
+            colors: [tint, tint.mixed(with: .black, amount: isDestructive ? 0.18 : 0.10)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var isDestructive: Bool {
+        self == .moveToBin
+    }
+
+    func applyTitle(count: Int) -> String {
+        guard count > 0 else {
+            return "Select Tasks"
+        }
+
+        return switch self {
+        case .moveToBin: "Move \(count) to Bin"
+        case .markOpen: "Move \(count) to Open"
+        case .markComplete: "Mark \(count) Complete"
+        case .moveTomorrow: "Move \(count) to Tomorrow"
+        }
+    }
+
+    func confirmTitle(count: Int) -> String {
+        return switch self {
+        case .moveToBin: "Move \(count) to Bin"
+        case .markOpen: "Move \(count) Back"
+        case .markComplete: "Complete \(count)"
+        case .moveTomorrow: "Move \(count)"
+        }
+    }
+
+    func confirmationTitle(count: Int) -> String {
+        return switch self {
+        case .moveToBin: "Move \(count) \(taskWord(count)) to Bin?"
+        case .markOpen: "Move \(count) \(taskWord(count)) to open?"
+        case .markComplete: "Mark \(count) \(taskWord(count)) complete?"
+        case .moveTomorrow: "Move \(count) \(taskWord(count)) to tomorrow?"
+        }
+    }
+
+    func confirmationMessage(count: Int) -> String {
+        return switch self {
+        case .moveToBin:
+            "Selected tasks will leave this list and move into Bin using your current retention setting."
+        case .markOpen:
+            "Selected completed tasks will return to your active lists and reminders may be scheduled again."
+        case .markComplete:
+            "Selected open tasks will be completed. Recurring tasks may create their next scheduled copy."
+        case .moveTomorrow:
+            "Selected tasks will keep their current time, but their due date will move to tomorrow."
+        }
+    }
+
+    func toastTitle(count: Int) -> String {
+        return switch self {
+        case .moveToBin: "\(count) \(taskWord(count)) moved"
+        case .markOpen: "\(count) \(taskWord(count)) reopened"
+        case .markComplete: "\(count) \(taskWord(count)) completed"
+        case .moveTomorrow: "\(count) \(taskWord(count)) rescheduled"
+        }
+    }
+
+    func toastMessage(count: Int) -> String {
+        return switch self {
+        case .moveToBin: "Moved to Bin."
+        case .markOpen: "Moved back to open."
+        case .markComplete: "Marked complete."
+        case .moveTomorrow: "Due date moved to tomorrow."
+        }
+    }
+
+    private func taskWord(_ count: Int) -> String {
+        count == 1 ? "task" : "tasks"
+    }
+}
+
+private struct DashboardBulkActionDropdown: View {
+    let selectedAction: DashboardBulkAction
+    let title: String
+    let onSelect: (DashboardBulkAction) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .padding(.horizontal, 2)
+
+            VStack(spacing: 4) {
+                ForEach(DashboardBulkAction.allCases) { action in
+                    Button {
+                        LifeTrackHaptics.lightImpact()
+                        onSelect(action)
+                    } label: {
+                        HStack(spacing: LifeTrackTheme.Spacing.small) {
+                            ZStack {
+                                Circle()
+                                    .fill(action.tint.opacity(action == selectedAction ? 0.18 : 0.11))
+
+                                Image(systemName: action.symbolName)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(action.tint)
+                            }
+                            .frame(width: 30, height: 30)
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(action.title)
+                                    .font(.footnote.weight(.bold))
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                                Text(action.menuSubtitle)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                            Image(systemName: action == selectedAction ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(action == selectedAction ? action.tint : LifeTrackTheme.ColorPalette.tertiaryText.opacity(0.55))
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 8)
+                        .background(
+                            action == selectedAction ? action.tint.opacity(0.08) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98, pressedOpacity: 0.92))
+                }
+            }
+        }
+        .padding(10)
+        .background(dropdownBackground, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.accent.opacity(0.24), lineWidth: 0.8)
+        }
+        .shadow(color: LifeTrackTheme.ColorPalette.accent.opacity(0.12), radius: 14, x: 0, y: 9)
+        .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(0.9), radius: 12, x: 0, y: 7)
+    }
+
+    private var dropdownBackground: Color {
+        LifeTrackTheme.ColorPalette.cardElevated
+            .mixed(with: LifeTrackTheme.ColorPalette.accentSoft, amount: 0.34)
+    }
+}
+
+private struct DashboardBulkToastState: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let symbolName: String
+    let tint: Color
+}
+
+private struct DashboardBulkActionToast: View {
+    let state: DashboardBulkToastState
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Image(systemName: state.symbolName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(state.tint)
+                .frame(width: 34, height: 34)
+                .background(state.tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(state.title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text(state.message)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .frame(width: 28, height: 28)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.9), in: Circle())
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.9))
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(state.tint.opacity(0.18), lineWidth: 0.8)
+        }
+        .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(1.1), radius: 18, x: 0, y: 12)
+        .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+        .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .move(edge: .bottom)),
+            removal: .opacity.combined(with: .move(edge: .bottom))
+        ))
     }
 }
 
@@ -1555,6 +2449,9 @@ private struct AnimatedCountText: View {
 private struct DashboardSummaryTaskCard: View {
     let task: LifeTask
     let categoryOption: TaskCategoryOption
+    let bulkAction: DashboardBulkAction?
+    let isSelected: Bool
+    let onSelect: () -> Void
     let onToggleCompletion: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -1562,11 +2459,7 @@ private struct DashboardSummaryTaskCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small + 2) {
             HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.small) {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : task.isOverdue ? "exclamationmark.circle.fill" : "circle.dotted")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(statusTint)
-                    .frame(width: LifeTrackTheme.IconSize.mediumCircle, height: LifeTrackTheme.IconSize.mediumCircle)
-                    .background(statusTint.opacity(0.11), in: Circle())
+                leadingIndicator
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(task.title)
@@ -1575,14 +2468,36 @@ private struct DashboardSummaryTaskCard: View {
                         .lineLimit(2)
                         .layoutPriority(1)
 
-                    HStack(spacing: 8) {
+                    WrappingChipLayout(spacing: 8, rowSpacing: 7) {
                         CategoryChipView(option: categoryOption)
 
                         StatusPillView(
-                            title: statusTitle,
-                            symbolName: statusSymbol,
-                            tint: statusTint
+                            title: task.dueDate.dayMonthString,
+                            symbolName: task.isOverdue ? "exclamationmark.circle.fill" : "calendar",
+                            tint: task.isOverdue ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.secondaryText
                         )
+
+                        StatusPillView(
+                            title: task.durationTitle,
+                            symbolName: "timer",
+                            tint: LifeTrackTheme.ColorPalette.secondaryText
+                        )
+
+                        if task.priority != .normal {
+                            StatusPillView(
+                                title: task.priority.title,
+                                symbolName: task.priority.symbolName,
+                                tint: task.priority.tint
+                            )
+                        }
+
+                        if task.recurrence != .none {
+                            StatusPillView(
+                                title: task.recurrence.shortTitle,
+                                symbolName: "repeat",
+                                tint: task.recurrence.tint
+                            )
+                        }
 
                         if task.hasDocument {
                             StatusPillView(
@@ -1591,6 +2506,16 @@ private struct DashboardSummaryTaskCard: View {
                                 tint: LifeTrackTheme.ColorPalette.secondaryText
                             )
                         }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let bulkAction {
+                        Label(isSelected ? "Selected for \(bulkAction.shortTitle.lowercased())" : "Tap to select", systemImage: isSelected ? "checkmark.circle.fill" : "hand.tap")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(isSelected ? bulkAction.tint : LifeTrackTheme.ColorPalette.secondaryText)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background((isSelected ? bulkAction.tint : LifeTrackTheme.ColorPalette.secondaryText).opacity(0.10), in: Capsule())
                     }
                 }
 
@@ -1605,73 +2530,94 @@ private struct DashboardSummaryTaskCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: LifeTrackTheme.Spacing.small) {
-                Button(action: onToggleCompletion) {
-                    Label(task.isCompleted ? "Move to Open" : "Complete", systemImage: task.isCompleted ? "arrow.uturn.left" : "checkmark")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(task.isCompleted ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.success)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
-                        .background((task.isCompleted ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.success).opacity(0.11), in: Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
-                        .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Spacer(minLength: 0)
-
-                Menu {
-                    Button(role: .destructive, action: onDelete) {
-                        Label("Move to Bin", systemImage: "trash")
+            if bulkAction == nil {
+                HStack(spacing: LifeTrackTheme.Spacing.small) {
+                    Button(action: onToggleCompletion) {
+                        Label(task.isCompleted ? "Move to Open" : "Complete", systemImage: task.isCompleted ? "arrow.uturn.left" : "checkmark")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(task.isCompleted ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.success)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background((task.isCompleted ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.success).opacity(0.11), in: Capsule())
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                        .frame(width: 32, height: 32)
-                        .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Circle())
+                    .buttonStyle(.plain)
+
+                    Button(action: onEdit) {
+                        Label("Edit", systemImage: "pencil")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer(minLength: 0)
+
+                    Menu {
+                        Button(role: .destructive, action: onDelete) {
+                            Label("Move to Bin", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .frame(width: 32, height: 32)
+                            .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(12)
         .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
-                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
+                .stroke(cardStrokeColor, lineWidth: isSelected ? 1.2 : 0.7)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .onTapGesture {
+            if bulkAction != nil {
+                onSelect()
+            }
         }
     }
 
-    private var statusTitle: String {
-        if task.isCompleted {
-            return "Completed"
-        }
+    @ViewBuilder
+    private var leadingIndicator: some View {
+        if let bulkAction {
+            Button(action: onSelect) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? bulkAction.tint : bulkAction.tint.opacity(0.10))
+                        .frame(width: LifeTrackTheme.IconSize.mediumCircle, height: LifeTrackTheme.IconSize.mediumCircle)
 
-        if task.isOverdue {
-            return "Overdue"
-        }
+                    Circle()
+                        .stroke(bulkAction.tint.opacity(isSelected ? 0.0 : 0.42), lineWidth: 1.5)
+                        .frame(width: LifeTrackTheme.IconSize.mediumCircle - 2, height: LifeTrackTheme.IconSize.mediumCircle - 2)
 
-        if Calendar.current.isDateInToday(task.dueDate) {
-            return "Today \(task.dueDate.timeString)"
+                    Image(systemName: isSelected ? bulkAction.selectedSymbolName : bulkAction.symbolName)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(isSelected ? .white : bulkAction.tint)
+                }
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.9, pressedOpacity: 0.9))
+            .accessibilityLabel(isSelected ? "Deselect \(task.title)" : "Select \(task.title)")
+        } else {
+            Image(systemName: task.isCompleted ? "checkmark.circle.fill" : task.isOverdue ? "exclamationmark.circle.fill" : "circle.dotted")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(statusTint)
+                .frame(width: LifeTrackTheme.IconSize.mediumCircle, height: LifeTrackTheme.IconSize.mediumCircle)
+                .background(statusTint.opacity(0.11), in: Circle())
         }
-
-        return task.dueDate.dayMonthString
     }
 
-    private var statusSymbol: String {
-        if task.isCompleted {
-            return "checkmark.circle.fill"
+    private var cardStrokeColor: Color {
+        guard let bulkAction else {
+            return LifeTrackTheme.ColorPalette.hairline.opacity(0.8)
         }
 
-        return task.isOverdue ? "exclamationmark.circle.fill" : "clock"
+        return isSelected ? bulkAction.tint.opacity(0.48) : bulkAction.tint.opacity(0.16)
     }
 
     private var statusTint: Color {
@@ -1754,45 +2700,52 @@ private struct DailyFocusTaskCard: View {
     var leadingIconSize: CGFloat = 28
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 7) {
-                Label(recommendation.reason.title, systemImage: recommendation.reason.symbolName)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(reasonTint)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(reasonTint.opacity(0.11), in: Capsule())
-
-                if recommendation.task.priority == .high {
-                    StatusPillView(
-                        title: "High priority",
-                        symbolName: "flag.fill",
-                        tint: TaskPriority.high.tint
-                    )
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 2)
-
-            TaskRowView(
-                task: recommendation.task,
-                onToggleCompletion: onToggleCompletion,
-                onEdit: onEdit,
-                onDelete: onDelete,
-                categoryOption: categoryOption,
-                verticalPadding: verticalPadding,
-                leadingIconSize: leadingIconSize
-            )
-        }
+        TaskRowView(
+            task: recommendation.task,
+            onToggleCompletion: onToggleCompletion,
+            onEdit: onEdit,
+            onDelete: onDelete,
+            categoryOption: categoryOption,
+            verticalPadding: verticalPadding,
+            leadingIconSize: leadingIconSize
+        )
         .transition(.asymmetric(
             insertion: .opacity.combined(with: .move(edge: .top)),
             removal: .opacity.combined(with: .scale(scale: 0.98))
         ))
     }
+}
 
-    private var reasonTint: Color {
-        switch recommendation.reason {
+private struct DailyFocusReasonHeader: View {
+    let reason: DailyFocusReason
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Label(reason.title, systemImage: reason.symbolName)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(reason.themeTint)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(reason.themeTint.opacity(0.11), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(reason.themeTint.opacity(0.18), lineWidth: 0.7)
+                }
+
+            Text("\(count) \(count == 1 ? "task" : "tasks")")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 2)
+    }
+}
+
+private extension DailyFocusReason {
+    var themeTint: Color {
+        switch self {
         case .overdue:
             LifeTrackTheme.ColorPalette.danger
         case .dueToday:

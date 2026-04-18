@@ -15,13 +15,22 @@ struct DailyFocusRecommendation: Identifiable {
     var id: UUID { task.id }
 }
 
-enum DailyFocusReason: String {
+enum DailyFocusReason: String, CaseIterable, Hashable {
     case overdue
     case dueToday
     case highPriority
     case routine
     case documentReminder
     case upcoming
+
+    static let displayOrder: [DailyFocusReason] = [
+        .overdue,
+        .dueToday,
+        .highPriority,
+        .routine,
+        .documentReminder,
+        .upcoming
+    ]
 
     var title: String {
         switch self {
