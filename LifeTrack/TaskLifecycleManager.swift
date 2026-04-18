@@ -37,11 +37,64 @@ enum TaskLifecycleManager {
 
     static func delete(
         _ task: LifeTask,
+        in modelContext: ModelContext,
+        retentionPeriod: TaskBinRetentionPeriod = .current
+    ) {
+        if retentionPeriod == .immediately {
+            permanentlyDelete(task, in: modelContext)
+            return
+        }
+
+        ReminderScheduler.cancel(taskID: task.id)
+        task.deletedAt = Date()
+        task.updatedAt = Date()
+        try? modelContext.save()
+    }
+
+    static func restore(
+        _ task: LifeTask,
+        in modelContext: ModelContext,
+        customCategories: [CustomTaskCategory]
+    ) {
+        task.deletedAt = nil
+        task.updatedAt = Date()
+        try? modelContext.save()
+        synchronizeReminder(for: task, customCategories: customCategories)
+    }
+
+    static func permanentlyDelete(
+        _ task: LifeTask,
         in modelContext: ModelContext
     ) {
         ReminderScheduler.cancel(taskID: task.id)
         DocumentStore.delete(storageName: task.documentStorageName)
         modelContext.delete(task)
+        try? modelContext.save()
+    }
+
+    static func purgeExpiredBinItems(
+        from tasks: [LifeTask],
+        in modelContext: ModelContext,
+        retentionPeriod: TaskBinRetentionPeriod = .current
+    ) {
+        let expiredTasks = tasks.filter { task in
+            guard let deletedAt = task.deletedAt else {
+                return false
+            }
+
+            return retentionPeriod.isExpired(deletedAt: deletedAt)
+        }
+
+        guard !expiredTasks.isEmpty else {
+            return
+        }
+
+        for task in expiredTasks {
+            ReminderScheduler.cancel(taskID: task.id)
+            DocumentStore.delete(storageName: task.documentStorageName)
+            modelContext.delete(task)
+        }
+
         try? modelContext.save()
     }
 
@@ -65,6 +118,11 @@ enum TaskLifecycleManager {
         for task: LifeTask,
         customCategories: [CustomTaskCategory]
     ) {
+        guard !task.isDeleted else {
+            ReminderScheduler.cancel(taskID: task.id)
+            return
+        }
+
         ReminderScheduler.synchronizeReminder(
             taskID: task.id,
             title: task.title,

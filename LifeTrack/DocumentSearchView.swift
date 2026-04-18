@@ -133,7 +133,7 @@ struct DocumentSearchView: View {
 
     private var documentTasks: [LifeTask] {
         tasks
-            .filter(\.hasDocument)
+            .filter { !$0.isDeleted && $0.hasDocument }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 

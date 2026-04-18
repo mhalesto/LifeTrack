@@ -24,6 +24,7 @@ struct HomeView: View {
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
+    @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -36,7 +37,7 @@ struct HomeView: View {
                         availableHeight: proxy.size.height,
                         priorityCount: priorityTasks.count,
                         documentCount: documentTasks.count,
-                        isEmpty: tasks.isEmpty
+                        isEmpty: activeTasks.isEmpty
                     )
 
                     ScrollView {
@@ -56,10 +57,10 @@ struct HomeView: View {
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
                 case .statistics:
-                    StatisticsView(tasks: tasks)
+                    StatisticsView(tasks: activeTasks)
                 case .calendar:
                     TaskCalendarView(
-                        tasks: tasks,
+                        tasks: activeTasks,
                         customCategories: customCategories,
                         onToggleCompletion: toggleCompletion,
                         onEdit: openTaskFromCalendar,
@@ -99,6 +100,10 @@ struct HomeView: View {
             }
         }
         .tint(selectedTheme.accent)
+        .onAppear(perform: purgeExpiredBinItems)
+        .onChange(of: binRetentionRawValue) { _, _ in
+            purgeExpiredBinItems()
+        }
     }
 
     private var header: some View {
@@ -166,7 +171,7 @@ struct HomeView: View {
 
             quickActions(metrics: metrics)
 
-            if tasks.isEmpty {
+            if activeTasks.isEmpty {
                 EmptyStateView(
                     title: "Start with one clear next step",
                     message: "Create a task, attach important files, and LifeTrack will keep the dashboard useful from day one.",
@@ -210,7 +215,7 @@ struct HomeView: View {
     }
 
     private var progressSection: some View {
-        ProgressTrackerView(metrics: TaskProgressMetrics.build(from: tasks))
+        ProgressTrackerView(metrics: TaskProgressMetrics.build(from: activeTasks))
     }
 
     private func quickActions(metrics: HomeLayoutMetrics) -> some View {
@@ -417,23 +422,27 @@ struct HomeView: View {
     }
 
     private var dueTodayTasks: [LifeTask] {
-        tasks.filter { !$0.isCompleted && Calendar.current.isDateInToday($0.dueDate) }
+        activeTasks.filter { !$0.isCompleted && Calendar.current.isDateInToday($0.dueDate) }
+    }
+
+    private var activeTasks: [LifeTask] {
+        tasks.filter { !$0.isDeleted }
     }
 
     private var upcomingTasks: [LifeTask] {
-        tasks.filter { !$0.isCompleted && $0.dueDate > Date() && !Calendar.current.isDateInToday($0.dueDate) }
+        activeTasks.filter { !$0.isCompleted && $0.dueDate > Date() && !Calendar.current.isDateInToday($0.dueDate) }
     }
 
     private var completedTasks: [LifeTask] {
-        tasks.filter(\.isCompleted)
+        activeTasks.filter(\.isCompleted)
     }
 
     private var overdueTasks: [LifeTask] {
-        tasks.filter(\.isOverdue)
+        activeTasks.filter(\.isOverdue)
     }
 
     private var focusRecommendations: [DailyFocusRecommendation] {
-        DailyFocusPlanner.recommendations(from: tasks)
+        DailyFocusPlanner.recommendations(from: activeTasks)
     }
 
     private var priorityTasks: [LifeTask] {
@@ -442,12 +451,12 @@ struct HomeView: View {
 
     private var documentTasks: [LifeTask] {
         tasks
-            .filter(\.hasDocument)
+            .filter { !$0.isDeleted && $0.hasDocument }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
     private var documentReminderTasks: [LifeTask] {
-        tasks
+        activeTasks
             .filter { !$0.isCompleted && $0.hasDocumentIntelligence }
             .sorted {
                 ($0.documentSuggestedDueDate ?? $0.dueDate) < ($1.documentSuggestedDueDate ?? $1.dueDate)
@@ -455,19 +464,19 @@ struct HomeView: View {
     }
 
     private var shouldShowFocusActions: Bool {
-        DailyFocusPlanner.shouldOfferReset(for: tasks) ||
-            DailyFocusPlanner.shouldOfferOverdueReschedule(for: tasks)
+        DailyFocusPlanner.shouldOfferReset(for: activeTasks) ||
+            DailyFocusPlanner.shouldOfferOverdueReschedule(for: activeTasks)
     }
 
     private var dashboardMessage: String {
         let messages = dashboardMessageCandidates
         let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
-        let taskSignal = tasks.count + (dueTodayTasks.count * 3) + (upcomingTasks.count * 5) + (completedTasks.count * 7) + (overdueTasks.count * 11)
+        let taskSignal = activeTasks.count + (dueTodayTasks.count * 3) + (upcomingTasks.count * 5) + (completedTasks.count * 7) + (overdueTasks.count * 11)
         return messages[(dayOfYear + taskSignal) % messages.count]
     }
 
     private var dashboardMessageCandidates: [String] {
-        if tasks.isEmpty {
+        if activeTasks.isEmpty {
             return emptyDashboardMessages
         }
 
@@ -475,7 +484,7 @@ struct HomeView: View {
             return overdueDashboardMessages
         }
 
-        if completedTasks.count >= max(4, tasks.count / 2) {
+        if completedTasks.count >= max(4, activeTasks.count / 2) {
             return completedDashboardMessages
         }
 
@@ -732,13 +741,17 @@ struct HomeView: View {
 
     private func delete(_ task: LifeTask) {
         performWithOptionalAnimation {
-            TaskLifecycleManager.delete(task, in: modelContext)
+            TaskLifecycleManager.delete(
+                task,
+                in: modelContext,
+                retentionPeriod: binRetentionPeriod
+            )
         }
     }
 
     private func resetMyDay() {
         let focusIDs = Set(focusRecommendations.map(\.task.id))
-        let plan = DailyFocusPlanner.resetSchedule(for: tasks, focusIDs: focusIDs)
+        let plan = DailyFocusPlanner.resetSchedule(for: activeTasks, focusIDs: focusIDs)
 
         performWithOptionalAnimation {
             TaskLifecycleManager.applySchedule(
@@ -750,7 +763,7 @@ struct HomeView: View {
     }
 
     private func rescheduleOverdueTasks() {
-        let plan = DailyFocusPlanner.overdueReschedulePlan(for: tasks)
+        let plan = DailyFocusPlanner.overdueReschedulePlan(for: activeTasks)
 
         performWithOptionalAnimation {
             TaskLifecycleManager.applySchedule(
@@ -774,6 +787,18 @@ struct HomeView: View {
 
     private func syncReminder(for task: LifeTask) {
         TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+    }
+
+    private var binRetentionPeriod: TaskBinRetentionPeriod {
+        TaskBinRetentionPeriod(rawValue: binRetentionRawValue) ?? .fallback
+    }
+
+    private func purgeExpiredBinItems() {
+        TaskLifecycleManager.purgeExpiredBinItems(
+            from: tasks,
+            in: modelContext,
+            retentionPeriod: binRetentionPeriod
+        )
     }
 }
 
@@ -1294,7 +1319,7 @@ private struct DashboardSummaryTaskCard: View {
 
                 Menu {
                     Button(role: .destructive, action: onDelete) {
-                        Label("Delete", systemImage: "trash")
+                        Label("Move to Bin", systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis")

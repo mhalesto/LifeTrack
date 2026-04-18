@@ -49,7 +49,7 @@ enum DailyFocusReason: String {
 @MainActor
 enum DailyFocusPlanner {
     static func recommendations(from tasks: [LifeTask], calendar: Calendar = .current) -> [DailyFocusRecommendation] {
-        let openTasks = tasks.filter { !$0.isCompleted }
+        let openTasks = tasks.filter { !$0.isDeleted && !$0.isCompleted }
 
         let rankedTasks = openTasks
             .map { task in
@@ -72,19 +72,20 @@ enum DailyFocusPlanner {
     }
 
     static func shouldOfferReset(for tasks: [LifeTask], calendar: Calendar = .current) -> Bool {
-        let openTasks = tasks.filter { !$0.isCompleted }
+        let openTasks = tasks.filter { !$0.isDeleted && !$0.isCompleted }
         let overdueCount = openTasks.filter { $0.dueDate < Date() }.count
         let dueTodayCount = openTasks.filter { calendar.isDateInToday($0.dueDate) }.count
         return overdueCount >= 3 || dueTodayCount >= 5 || openTasks.count >= 12
     }
 
     static func shouldOfferOverdueReschedule(for tasks: [LifeTask]) -> Bool {
-        tasks.contains(where: \.isOverdue)
+        tasks.contains { !$0.isDeleted && $0.isOverdue }
     }
 
     static func resetSchedule(for tasks: [LifeTask], focusIDs: Set<UUID>, referenceDate: Date = Date(), calendar: Calendar = .current) -> [(LifeTask, Date)] {
         let openTasks = tasks
             .filter { !$0.isCompleted }
+            .filter { !$0.isDeleted }
             .sorted { first, second in
                 if focusIDs.contains(first.id) != focusIDs.contains(second.id) {
                     return focusIDs.contains(first.id)

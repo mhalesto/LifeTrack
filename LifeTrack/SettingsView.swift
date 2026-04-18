@@ -6,17 +6,21 @@
 //
 
 import PhotosUI
+import SwiftData
 import SwiftUI
 import UIKit
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \LifeTask.updatedAt, order: .reverse) private var tasks: [LifeTask]
 
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
     @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength = 1.0
+    @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarImage: UIImage?
@@ -35,6 +39,7 @@ struct SettingsView: View {
                         profileCard
                         themeCard
                         motionCard
+                        binCard
                     }
                     .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
                     .padding(.top, LifeTrackTheme.Spacing.large)
@@ -53,6 +58,10 @@ struct SettingsView: View {
             }
             .onChange(of: selectedPhotoItem) { _, newItem in
                 importAvatar(from: newItem)
+            }
+            .onAppear(perform: purgeExpiredBinItems)
+            .onChange(of: binRetentionRawValue) { _, _ in
+                purgeExpiredBinItems()
             }
             .sheet(isPresented: isShowingAvatarCropper) {
                 if let pendingAvatarImage {
@@ -236,8 +245,90 @@ struct SettingsView: View {
         }
     }
 
+    private var binCard: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Bin",
+                subtitle: "Restore deleted tasks before they are removed forever."
+            )
+
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: "trash")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.danger)
+                    .frame(width: 42, height: 42)
+                    .background(LifeTrackTheme.ColorPalette.danger.opacity(0.10), in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(binCount == 1 ? "1 task in Bin" : "\(binCount) tasks in Bin")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(binRetentionPeriod == .immediately ? "Deleted tasks are removed forever immediately." : "Items expire after \(binRetentionPeriod.title.lowercased()).")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                NavigationLink {
+                    TaskBinView()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                        .frame(width: 32, height: 32)
+                        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: Circle())
+                }
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
+                .accessibilityLabel("Open Bin")
+            }
+            .padding(12)
+            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Keep deleted tasks for")
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 96), spacing: 8, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(TaskBinRetentionPeriod.allCases) { period in
+                        Button {
+                            withAnimation(.snappy) {
+                                binRetentionRawValue = period.rawValue
+                            }
+                        } label: {
+                            BinRetentionChip(
+                                period: period,
+                                isSelected: binRetentionPeriod == period
+                            )
+                        }
+                        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.92))
+                    }
+                }
+            }
+        }
+    }
+
     private var selectedTheme: LifeTrackAppTheme {
         LifeTrackAppTheme(rawValue: selectedThemeID) ?? .fallback
+    }
+
+    private var binRetentionPeriod: TaskBinRetentionPeriod {
+        TaskBinRetentionPeriod(rawValue: binRetentionRawValue) ?? .fallback
+    }
+
+    private var binCount: Int {
+        tasks.filter(\.isDeleted).count
     }
 
     private var cleanedNickname: String {
@@ -306,6 +397,45 @@ struct SettingsView: View {
         AvatarImageStore.deleteAvatar()
         avatarVersion += 1
         avatarError = nil
+    }
+
+    private func purgeExpiredBinItems() {
+        TaskLifecycleManager.purgeExpiredBinItems(
+            from: tasks,
+            in: modelContext,
+            retentionPeriod: binRetentionPeriod
+        )
+    }
+}
+
+private struct BinRetentionChip: View {
+    let period: TaskBinRetentionPeriod
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(period.title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(isSelected ? .white : LifeTrackTheme.ColorPalette.primaryText)
+                .lineLimit(1)
+
+            Text(period.subtitle)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(isSelected ? Color.white.opacity(0.82) : LifeTrackTheme.ColorPalette.secondaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.88)
+        }
+        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(
+            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82)),
+            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(isSelected ? Color.white.opacity(0.24) : LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+        }
     }
 }
 

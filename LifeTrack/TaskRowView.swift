@@ -115,7 +115,7 @@ struct TaskRowView: View {
                 }
 
                 Button(role: .destructive, action: onDelete) {
-                    Label("Delete", systemImage: "trash")
+                    Label("Move to Bin", systemImage: "trash")
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -185,7 +185,7 @@ struct TaskRowView: View {
                     VStack(spacing: 5) {
                         Image(systemName: "trash")
                             .font(.system(size: 15, weight: .bold))
-                        Text("Delete")
+                        Text("Bin")
                             .font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(.white)

@@ -23,7 +23,11 @@ struct StatisticsView: View {
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
 
     private var points: [ProductivityStatPoint] {
-        ProductivityStatsBuilder.points(for: tasks, range: selectedRange)
+        ProductivityStatsBuilder.points(for: activeTasks, range: selectedRange)
+    }
+
+    private var activeTasks: [LifeTask] {
+        tasks.filter { !$0.isDeleted }
     }
 
     private var totalCompleted: Int {
@@ -373,7 +377,7 @@ struct StatisticsView: View {
             return []
         }
 
-        return tasks
+        return activeTasks
             .filter { $0.isCompleted && $0.updatedAt >= interval.start && $0.updatedAt < interval.end }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
@@ -383,7 +387,7 @@ struct StatisticsView: View {
             return []
         }
 
-        return tasks
+        return activeTasks
             .filter { $0.isOverdue && $0.dueDate >= interval.start && $0.dueDate < interval.end }
             .sorted { $0.dueDate < $1.dueDate }
     }
@@ -393,7 +397,7 @@ struct StatisticsView: View {
             return []
         }
 
-        return tasks
+        return activeTasks
             .filter { $0.isCompleted && $0.updatedAt >= bestPoint.date && $0.updatedAt < bestPoint.endDate }
             .sorted { $0.updatedAt > $1.updatedAt }
     }

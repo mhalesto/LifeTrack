@@ -155,6 +155,7 @@ final class LifeTask {
     var documentSuggestedTitle: String?
     var documentSuggestedDueDate: Date?
     var documentKeywordsRawValue: String = ""
+    var deletedAt: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -176,6 +177,7 @@ final class LifeTask {
         documentSuggestedTitle: String? = nil,
         documentSuggestedDueDate: Date? = nil,
         documentKeywords: [String] = [],
+        deletedAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -195,6 +197,7 @@ final class LifeTask {
         self.documentSuggestedTitle = documentSuggestedTitle
         self.documentSuggestedDueDate = documentSuggestedDueDate
         self.documentKeywordsRawValue = documentKeywords.joined(separator: "\n")
+        self.deletedAt = deletedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -232,7 +235,11 @@ final class LifeTask {
     }
 
     var isOverdue: Bool {
-        !isCompleted && dueDate < Date()
+        !isDeleted && !isCompleted && dueDate < Date()
+    }
+
+    var isDeleted: Bool {
+        deletedAt != nil
     }
 
     var hasDocument: Bool {
