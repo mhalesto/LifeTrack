@@ -135,7 +135,7 @@ struct LocationPickerView: View {
                                 Text(item.name ?? "Selected Place")
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                                if let address = item.placemark.title {
+                                if let address = item.safeAddress {
                                     Text(address)
                                         .font(.caption)
                                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)

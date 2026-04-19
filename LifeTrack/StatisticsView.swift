@@ -1261,7 +1261,7 @@ private enum ProductivityStatsBuilder {
     static func snapshot(
         for tasks: [StatisticsTaskSnapshot],
         range: StatisticsTimeRange,
-        calendar: Calendar = .current
+        calendar: Calendar
     ) -> ProductivityStatsSnapshot {
         let points = points(for: tasks, range: range, calendar: calendar)
         let totalCompleted = points.reduce(0) { $0 + $1.completedCount }
