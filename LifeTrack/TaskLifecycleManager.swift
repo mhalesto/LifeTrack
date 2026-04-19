@@ -49,8 +49,9 @@ enum TaskLifecycleManager {
     static func delete(
         _ task: LifeTask,
         in modelContext: ModelContext,
-        retentionPeriod: TaskBinRetentionPeriod = .current
+        retentionPeriod: TaskBinRetentionPeriod? = nil
     ) -> Bool {
+        let retentionPeriod = retentionPeriod ?? .current
         if retentionPeriod == .immediately {
             permanentlyDelete(task, in: modelContext)
             return false
@@ -87,8 +88,9 @@ enum TaskLifecycleManager {
     static func purgeExpiredBinItems(
         from tasks: [LifeTask],
         in modelContext: ModelContext,
-        retentionPeriod: TaskBinRetentionPeriod = .current
+        retentionPeriod: TaskBinRetentionPeriod? = nil
     ) {
+        let retentionPeriod = retentionPeriod ?? .current
         let expiredTasks = tasks.filter { task in
             guard let deletedAt = task.deletedAt else {
                 return false
@@ -137,7 +139,7 @@ enum TaskLifecycleManager {
         try? modelContext.save()
 
         let snapshots = reminderSnapshots
-        Task.detached(priority: .utility) {
+        Task { @MainActor in
             for snapshot in snapshots {
                 if snapshot.isDeleted {
                     ReminderScheduler.cancel(taskID: snapshot.id)

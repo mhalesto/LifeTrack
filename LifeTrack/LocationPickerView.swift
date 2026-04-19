@@ -244,17 +244,14 @@ struct LocationPickerView: View {
 private extension MKMapItem {
     var safeCoordinate: CLLocationCoordinate2D? {
         if #available(iOS 26.0, *) {
-            location?.coordinate
+            location.coordinate   // non-optional CLLocation in iOS 26
         } else {
             placemark.location?.coordinate
         }
     }
 
     var safeAddress: String? {
-        if #available(iOS 26.0, *) {
-            location.flatMap { _ in placemark.title } ?? name
-        } else {
-            placemark.title
-        }
+        // No clean address-string API in iOS 26 yet; placemark.title still works
+        placemark.title
     }
 }
