@@ -3,6 +3,7 @@
 //  LifeTrack
 //
 
+import SwiftData
 import SwiftUI
 
 struct AITaskSuggestionsView: View {
@@ -278,6 +279,6 @@ struct AITaskSuggestionsView: View {
         task.dueDate = date
         task.updatedAt = Date()
         try? modelContext.save()
-        withAnimation(.snappy) { appliedIDs.insert(suggestion.id) }
+        _ = withAnimation(.snappy) { appliedIDs.insert(suggestion.id) }
     }
 }
