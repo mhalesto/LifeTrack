@@ -101,7 +101,7 @@ struct LocationPickerView: View {
                                 Text(item.name ?? "Unknown place")
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                                if let address = item.placemark.title {
+                                                if let address = item.safeAddress {
                                     Text(address)
                                         .font(.caption)
                                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
@@ -216,7 +216,7 @@ struct LocationPickerView: View {
 
     private func selectItem(_ item: MKMapItem) {
         selectedItem = item
-        if let coord = item.placemark.location?.coordinate {
+        if let coord = item.safeCoordinate {
             region.center = coord
         }
     }
@@ -224,7 +224,7 @@ struct LocationPickerView: View {
     private func confirmSelection() {
         guard
             let item = selectedItem,
-            let coord = item.placemark.location?.coordinate
+            let coord = item.safeCoordinate
         else { return }
 
         let config = LocationReminderConfig(
@@ -236,5 +236,25 @@ struct LocationPickerView: View {
         )
         onSelect(config)
         dismiss()
+    }
+}
+
+// MARK: - MKMapItem iOS 26 compatibility
+
+private extension MKMapItem {
+    var safeCoordinate: CLLocationCoordinate2D? {
+        if #available(iOS 26.0, *) {
+            location?.coordinate
+        } else {
+            placemark.location?.coordinate
+        }
+    }
+
+    var safeAddress: String? {
+        if #available(iOS 26.0, *) {
+            location.flatMap { _ in placemark.title } ?? name
+        } else {
+            placemark.title
+        }
     }
 }

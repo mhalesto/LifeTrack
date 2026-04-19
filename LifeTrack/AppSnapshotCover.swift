@@ -27,7 +27,7 @@ enum AppSnapshotCover {
         window.addSubview(hosting.view)
         window.layoutIfNeeded()
 
-        objc_setAssociatedObject(hosting.view, &hostingKey, hosting, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        objc_setAssociatedObject(hosting.view as UIView, &hostingKey, hosting, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
     static func hide(animated: Bool = true) {

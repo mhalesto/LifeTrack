@@ -52,10 +52,9 @@ struct HabitTrackerView: View {
 
     @MainActor
     private func recomputeSummaries() async {
-        let result = await Task.detached(priority: .userInitiated) {
-            HabitEngine.summaries(from: self.tasks)
-        }.value
-        summaries = result
+        // Yield so the spinner renders before synchronous computation runs
+        await Task.yield()
+        summaries = HabitEngine.summaries(from: tasks)
         isLoading = false
     }
 

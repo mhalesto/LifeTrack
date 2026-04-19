@@ -535,6 +535,7 @@ struct StatisticsView: View {
         }
     }
 
+    @MainActor
     private func refreshStats(showLoader: Bool = true) {
         let refreshID = UUID()
         statsRefreshID = refreshID
