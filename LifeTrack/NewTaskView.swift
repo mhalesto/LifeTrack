@@ -8,6 +8,7 @@
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
+import VisionKit
 
 struct NewTaskView: View {
     @Environment(\.dismiss) private var dismiss
@@ -36,6 +37,7 @@ struct NewTaskView: View {
     @State private var documentSuggestedDueDate: Date?
     @State private var documentKeywords: [String]
     @State private var isImportingDocument = false
+    @State private var isScanningDocument = false
     @State private var isAnalyzingDocument = false
     @State private var isShowingCategoryManager = false
     @State private var isShowingTaskDataExchange = false
@@ -132,6 +134,13 @@ struct NewTaskView: View {
                 allowsMultipleSelection: false,
                 onCompletion: handleDocumentImport
             )
+            .fullScreenCover(isPresented: $isScanningDocument) {
+                DocumentScannerView { result in
+                    isScanningDocument = false
+                    handleScanResult(result)
+                }
+                .ignoresSafeArea()
+            }
             .sheet(isPresented: $isShowingCategoryManager) {
                 CategoryManagerView { option in
                     categoryRawValue = option.id
@@ -479,7 +488,29 @@ struct NewTaskView: View {
 
     private var documentCard: some View {
         SectionCardView {
-            SectionHeaderView(title: "Document", subtitle: "Attach a file stored locally with this task.")
+            SectionHeaderView(title: "Document", subtitle: "Scan a document or attach a file stored locally with this task.")
+
+            HStack(spacing: LifeTrackTheme.Spacing.small) {
+                DocumentCaptureButton(
+                    title: "Scan",
+                    subtitle: "Use camera",
+                    symbolName: "doc.viewfinder",
+                    tint: LifeTrackTheme.ColorPalette.accent,
+                    isAvailable: DocumentScanAvailability.isSupported
+                ) {
+                    isScanningDocument = true
+                }
+
+                DocumentCaptureButton(
+                    title: "Attach",
+                    subtitle: "From files",
+                    symbolName: "paperclip",
+                    tint: LifeTrackTheme.ColorPalette.success,
+                    isAvailable: true
+                ) {
+                    isImportingDocument = true
+                }
+            }
 
             AttachmentButton(
                 documentDisplayName: documentDisplayName,
@@ -581,6 +612,35 @@ struct NewTaskView: View {
         documentStorageName = nil
         documentDisplayName = nil
         clearDocumentAnalysis()
+    }
+
+    private func handleScanResult(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            defer { try? FileManager.default.removeItem(at: url) }
+
+            do {
+                let pendingDocumentStorageName = documentStorageName
+                let storedDocument = try DocumentStore.saveSecurityScopedFile(from: url)
+                if pendingDocumentStorageName != originalDocumentStorageName {
+                    DocumentStore.delete(storageName: pendingDocumentStorageName)
+                }
+                documentStorageName = storedDocument.storageName
+                documentDisplayName = storedDocument.displayName
+                documentError = nil
+                analyzeDocument(storageName: storedDocument.storageName, displayName: storedDocument.displayName)
+                LifeTrackHaptics.lightImpact()
+            } catch {
+                documentError = "Scan could not be saved."
+                isAnalyzingDocument = false
+            }
+        case .failure(let error):
+            if case DocumentScannerView.ScanError.cancelled = error {
+                return
+            }
+            documentError = "Scan could not be completed."
+            isAnalyzingDocument = false
+        }
     }
 
     private func handleDocumentImport(_ result: Result<[URL], Error>) {
@@ -1253,6 +1313,57 @@ private struct DocumentSuggestionRow: View {
         }
         .padding(10)
         .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.86), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+    }
+}
+
+private struct DocumentCaptureButton: View {
+    let title: String
+    let subtitle: String
+    let symbolName: String
+    let tint: Color
+    let isAvailable: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(tint.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(1)
+
+                    Text(isAvailable ? subtitle : "Unavailable")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(11)
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.82), lineWidth: 0.8)
+            }
+            .opacity(isAvailable ? 1 : 0.5)
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97, pressedOpacity: 0.93))
+        .disabled(!isAvailable)
+    }
+}
+
+enum DocumentScanAvailability {
+    static var isSupported: Bool {
+        VNDocumentCameraViewController.isSupported
     }
 }
 

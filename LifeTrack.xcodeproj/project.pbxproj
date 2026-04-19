@@ -497,6 +497,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "LifeTrack uses the camera so you can scan a document and turn it into a task.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LifeTrack uses the microphone to create tasks from your voice.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "LifeTrack lets you choose a profile photo for your local app avatar.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LifeTrack uses speech recognition to transcribe spoken task details.";
@@ -533,6 +534,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "LifeTrack uses the camera so you can scan a document and turn it into a task.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LifeTrack uses the microphone to create tasks from your voice.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "LifeTrack lets you choose a profile photo for your local app avatar.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LifeTrack uses speech recognition to transcribe spoken task details.";
