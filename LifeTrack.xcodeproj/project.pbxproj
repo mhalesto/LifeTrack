@@ -8,6 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		5B27EE4A5F534790A118BA33 /* NotificationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76124E7C741E4028A87AE4EF /* NotificationViewController.swift */; };
+		5EA0B00000000000000000F0 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E1 /* ShareViewController.swift */; };
+		5EA0B00000000000000000F1 /* SharedInboxPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E2 /* SharedInboxPayload.swift */; };
+		5EA0B00000000000000000F2 /* SharedInboxPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E2 /* SharedInboxPayload.swift */; };
+		5EA0B00000000000000000F3 /* LifeTrackShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E0 /* LifeTrackShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		987C15AE045B4251AA6EF384 /* LifeTrackReminderNotificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20C197A37A04E7482CE77B7 /* LifeTrackReminderNotificationView.swift */; };
 		C3BC15F4831D459D843E29EA /* LifeTrackNotificationContentExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 983DB111F429489ABB1A88C2 /* LifeTrackNotificationContentExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -27,6 +31,13 @@
 			remoteGlobalIDString = 5BA3D3852F938ABF00929A9A;
 			remoteInfo = LifeTrack;
 		};
+		5EA0C0000000000000000105 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5BA3D37E2F938ABF00929A9A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5EA0C0000000000000000104;
+			remoteInfo = LifeTrackShareExtension;
+		};
 		AE1E1159853A4132B0384822 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 5BA3D37E2F938ABF00929A9A /* Project object */;
@@ -44,6 +55,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				C3BC15F4831D459D843E29EA /* LifeTrackNotificationContentExtension.appex in Embed App Extensions */,
+				5EA0B00000000000000000F3 /* LifeTrackShareExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -54,6 +66,11 @@
 		5BA3D3862F938ABF00929A9A /* LifeTrack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LifeTrack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5BA3D3952F938AC100929A9A /* LifeTrackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LifeTrackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5BA3D39F2F938AC100929A9A /* LifeTrackUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LifeTrackUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EA0A00000000000000000E0 /* LifeTrackShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LifeTrackShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EA0A00000000000000000E1 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		5EA0A00000000000000000E2 /* SharedInboxPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedInboxPayload.swift; sourceTree = "<group>"; };
+		5EA0A00000000000000000E3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5EA0A00000000000000000E4 /* LifeTrackShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LifeTrackShareExtension.entitlements; sourceTree = "<group>"; };
 		76124E7C741E4028A87AE4EF /* NotificationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationViewController.swift; sourceTree = "<group>"; };
 		983DB111F429489ABB1A88C2 /* LifeTrackNotificationContentExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LifeTrackNotificationContentExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3CBFF25FAFC42BEA7F37B8F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -107,6 +124,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5EA0C0000000000000000102 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -120,11 +144,23 @@
 			path = LifeTrackNotificationContentExtension;
 			sourceTree = "<group>";
 		};
+		5EA0C0000000000000000100 /* LifeTrackShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				5EA0A00000000000000000E3 /* Info.plist */,
+				5EA0A00000000000000000E4 /* LifeTrackShareExtension.entitlements */,
+				5EA0A00000000000000000E1 /* ShareViewController.swift */,
+				5EA0A00000000000000000E2 /* SharedInboxPayload.swift */,
+			);
+			path = LifeTrackShareExtension;
+			sourceTree = "<group>";
+		};
 		5BA3D37D2F938ABF00929A9A = {
 			isa = PBXGroup;
 			children = (
 				5BA3D3882F938ABF00929A9A /* LifeTrack */,
 				29B39D107D994F84ACEEE81B /* LifeTrackNotificationContentExtension */,
+				5EA0C0000000000000000100 /* LifeTrackShareExtension */,
 				5BA3D3982F938AC100929A9A /* LifeTrackTests */,
 				5BA3D3A22F938AC100929A9A /* LifeTrackUITests */,
 				5BA3D3872F938ABF00929A9A /* Products */,
@@ -136,6 +172,7 @@
 			children = (
 				5BA3D3862F938ABF00929A9A /* LifeTrack.app */,
 				983DB111F429489ABB1A88C2 /* LifeTrackNotificationContentExtension.appex */,
+				5EA0A00000000000000000E0 /* LifeTrackShareExtension.appex */,
 				5BA3D3952F938AC100929A9A /* LifeTrackTests.xctest */,
 				5BA3D39F2F938AC100929A9A /* LifeTrackUITests.xctest */,
 			);
@@ -158,6 +195,7 @@
 			);
 			dependencies = (
 				E373C28E4E7C410FBF2B378A /* PBXTargetDependency */,
+				5EA0C0000000000000000106 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				5BA3D3882F938ABF00929A9A /* LifeTrack */,
@@ -168,6 +206,25 @@
 			productName = LifeTrack;
 			productReference = 5BA3D3862F938ABF00929A9A /* LifeTrack.app */;
 			productType = "com.apple.product-type.application";
+		};
+		5EA0C0000000000000000104 /* LifeTrackShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5EA0C0000000000000000109 /* Build configuration list for PBXNativeTarget "LifeTrackShareExtension" */;
+			buildPhases = (
+				5EA0C0000000000000000101 /* Sources */,
+				5EA0C0000000000000000102 /* Frameworks */,
+				5EA0C0000000000000000103 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LifeTrackShareExtension;
+			packageProductDependencies = (
+			);
+			productName = LifeTrackShareExtension;
+			productReference = 5EA0A00000000000000000E0 /* LifeTrackShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		5BA3D3942F938AC100929A9A /* LifeTrackTests */ = {
 			isa = PBXNativeTarget;
@@ -258,6 +315,9 @@
 					F00F6D0C8F48418983FD1820 = {
 						CreatedOnToolsVersion = 26.2;
 					};
+					5EA0C0000000000000000104 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 				};
 			};
 			buildConfigurationList = 5BA3D3812F938ABF00929A9A /* Build configuration list for PBXProject "LifeTrack" */;
@@ -276,6 +336,7 @@
 			targets = (
 				5BA3D3852F938ABF00929A9A /* LifeTrack */,
 				F00F6D0C8F48418983FD1820 /* LifeTrackNotificationContentExtension */,
+				5EA0C0000000000000000104 /* LifeTrackShareExtension */,
 				5BA3D3942F938AC100929A9A /* LifeTrackTests */,
 				5BA3D39E2F938AC100929A9A /* LifeTrackUITests */,
 			);
@@ -311,6 +372,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5EA0C0000000000000000103 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -318,6 +386,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5EA0B00000000000000000F2 /* SharedInboxPayload.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -344,6 +413,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5EA0C0000000000000000101 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5EA0B00000000000000000F0 /* ShareViewController.swift in Sources */,
+				5EA0B00000000000000000F1 /* SharedInboxPayload.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -361,6 +439,11 @@
 			isa = PBXTargetDependency;
 			target = F00F6D0C8F48418983FD1820 /* LifeTrackNotificationContentExtension */;
 			targetProxy = AE1E1159853A4132B0384822 /* PBXContainerItemProxy */;
+		};
+		5EA0C0000000000000000106 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5EA0C0000000000000000104 /* LifeTrackShareExtension */;
+			targetProxy = 5EA0C0000000000000000105 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -491,6 +574,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LifeTrack/LifeTrack.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
@@ -528,6 +612,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LifeTrack/LifeTrack.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
@@ -557,6 +642,68 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5EA0C0000000000000000107 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = LifeTrackShareExtension/LifeTrackShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
+				DEVELOPMENT_TEAM = B98QD8MH9U;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LifeTrackShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.currenttech.LifeTrack.ShareExtension;
+				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5EA0C0000000000000000108 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = LifeTrackShareExtension/LifeTrackShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
+				DEVELOPMENT_TEAM = B98QD8MH9U;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LifeTrackShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.currenttech.LifeTrack.ShareExtension;
+				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -748,6 +895,15 @@
 			buildConfigurations = (
 				8F22ED45DDB3496C97264621 /* Debug */,
 				B713CB671AF0410AB88D7567 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5EA0C0000000000000000109 /* Build configuration list for PBXNativeTarget "LifeTrackShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5EA0C0000000000000000107 /* Debug */,
+				5EA0C0000000000000000108 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -16,6 +16,27 @@ enum DocumentStore {
     private static let folderName = "TaskDocuments"
     private static let shareFolderName = "LifeTrackSharedDocuments"
 
+    static func adoptFromAppGroup(sourceURL: URL, preferredDisplayName: String?) throws -> StoredDocument {
+        let directory = try documentsDirectory()
+        let rawDisplayName = preferredDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackName = sourceURL.lastPathComponent
+        let displayName = (rawDisplayName?.isEmpty == false ? rawDisplayName! : fallbackName)
+        let storageName = "\(UUID().uuidString)-\(displayName)"
+        let destinationURL = directory.appendingPathComponent(storageName)
+
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: destinationURL.path
+        )
+
+        return StoredDocument(storageName: storageName, displayName: displayName)
+    }
+
     static func saveSecurityScopedFile(from sourceURL: URL) throws -> StoredDocument {
         let didAccess = sourceURL.startAccessingSecurityScopedResource()
         defer {

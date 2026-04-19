@@ -200,6 +200,7 @@ struct HomeView: View {
             refreshDashboardMessage(rotateSeed: false)
             openPendingNotificationTaskIfNeeded()
             showPendingReminderActionTipIfNeeded()
+            drainSharedInbox()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else {
@@ -213,6 +214,7 @@ struct HomeView: View {
             }
             openPendingNotificationTaskIfNeeded()
             showPendingReminderActionTipIfNeeded()
+            drainSharedInbox()
         }
         .onReceive(NotificationCenter.default.publisher(for: ReminderScheduler.actionTipDidBecomePendingNotification)) { _ in
             showPendingReminderActionTipIfNeeded()
@@ -1202,6 +1204,13 @@ struct HomeView: View {
             in: modelContext,
             retentionPeriod: binRetentionPeriod
         )
+    }
+
+    private func drainSharedInbox() {
+        let context = modelContext
+        Task { @MainActor in
+            await SharedInboxImporter.drain(context: context)
+        }
     }
 }
 
