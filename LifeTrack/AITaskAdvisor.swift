@@ -68,7 +68,7 @@ final class AITaskAdvisor: ObservableObject {
             overallInsight = parsed.insight
             lastRefreshed = Date()
         } catch {
-            self.error = "Analysis failed. Check your API key or try again."
+            self.error = error.localizedDescription
         }
     }
 
@@ -130,8 +130,10 @@ final class AITaskAdvisor: ObservableObject {
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw URLError(.badServerResponse)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            throw NSError(domain: "Anthropic", code: statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(statusCode): \(body)"])
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
