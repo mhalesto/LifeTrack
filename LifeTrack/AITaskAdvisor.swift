@@ -121,25 +121,32 @@ final class AITaskAdvisor: ObservableObject {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        req.timeoutInterval = 30
 
-        let body: [String: Any] = [
+        let bodyObj: [String: Any] = [
             "model": "claude-haiku-4-5-20251001",
             "max_tokens": 512,
             "messages": [["role": "user", "content": prompt]]
         ]
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        req.httpBody = try JSONSerialization.data(withJSONObject: bodyObj)
 
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        config.waitsForConnectivity = true
+        let session = URLSession(configuration: config)
+
+        let (data, response) = try await session.data(for: req)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let rawBody = String(data: data, encoding: .utf8) ?? "empty"
+
         guard statusCode == 200 else {
-            let body = String(data: data, encoding: .utf8) ?? "no body"
-            throw NSError(domain: "Anthropic", code: statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(statusCode): \(body)"])
+            throw NSError(domain: "Anthropic", code: statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(statusCode): \(rawBody.prefix(300))"])
         }
 
-        let rawBody = String(data: data, encoding: .utf8) ?? "empty"
         let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let text = (json?["content"] as? [[String: Any]])?.first?["text"] as? String else {
-            throw NSError(domain: "Anthropic", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected response: \(rawBody.prefix(300))"])
+            throw NSError(domain: "Anthropic", code: -1, userInfo: [NSLocalizedDescriptionKey: "Parse failed. Response: \(rawBody.prefix(300))"])
         }
         return text
     }
