@@ -5,6 +5,7 @@
 //  Created by Halalisani Mbanjwa on 2026/04/18.
 //
 
+import Foundation
 import SwiftData
 
 @MainActor
@@ -14,6 +15,7 @@ enum LifeTrackDataStore {
             LifeTask.self,
             CustomTaskCategory.self,
         ])
+        ensureDefaultStoreDirectoryExists()
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
@@ -22,4 +24,23 @@ enum LifeTrackDataStore {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
+
+    private static func ensureDefaultStoreDirectoryExists() {
+        let fileManager = FileManager.default
+        let groupIdentifier = "group.com.currenttech.LifeTrack"
+        let candidates = [
+            fileManager.containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier)?
+                .appendingPathComponent("Library/Application Support", isDirectory: true),
+            try? fileManager.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: false
+            )
+        ]
+
+        for url in candidates.compactMap({ $0 }) {
+            try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+    }
 }

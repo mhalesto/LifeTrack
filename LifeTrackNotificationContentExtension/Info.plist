@@ -25,11 +25,11 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>UNNotificationExtensionCategory</key>
-			<string>LIFETRACK_TASK_REMINDER</string>
+			<string>LIFETRACK_UNUSED_CATEGORY</string>
 			<key>UNNotificationExtensionDefaultContentHidden</key>
 			<false/>
 			<key>UNNotificationExtensionInitialContentSizeRatio</key>
-			<real>0.42</real>
+			<real>0.6</real>
 			<key>UNNotificationExtensionUserInteractionEnabled</key>
 			<true/>
 		</dict>

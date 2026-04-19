@@ -159,6 +159,15 @@ final class LifeTask {
     var deletedAt: Date?
     var createdAt: Date
     var updatedAt: Date
+    // Habit tracking
+    var habitGroupID: UUID?
+    var completedAt: Date?
+    // Location reminder
+    var locationReminderName: String?
+    var locationReminderLatitude: Double?
+    var locationReminderLongitude: Double?
+    var locationReminderRadius: Double?
+    var locationReminderOnArrival: Bool = true
 
     init(
         id: UUID = UUID(),
@@ -294,7 +303,7 @@ final class LifeTask {
             normalizedDueDate = followingDate
         }
 
-        return LifeTask(
+        let next = LifeTask(
             title: title,
             category: category,
             categoryRawValue: categoryRawValue,
@@ -308,5 +317,18 @@ final class LifeTask {
             createdAt: completedAt,
             updatedAt: completedAt
         )
+        next.habitGroupID = habitGroupID ?? id
+        next.locationReminderName = locationReminderName
+        next.locationReminderLatitude = locationReminderLatitude
+        next.locationReminderLongitude = locationReminderLongitude
+        next.locationReminderRadius = locationReminderRadius
+        next.locationReminderOnArrival = locationReminderOnArrival
+        return next
     }
+
+    var hasLocationReminder: Bool {
+        locationReminderLatitude != nil && locationReminderLongitude != nil
+    }
+
+    var isHabit: Bool { recurrence != .none }
 }

@@ -19,6 +19,7 @@ enum LifeTrackSettings {
         static let lastDashboardMessageText = "LifeTrack.settings.lastDashboardMessageText"
         static let reminderActionTipPending = "LifeTrack.notifications.reminderActionTipPending"
         static let reminderActionTipShown = "LifeTrack.notifications.reminderActionTipShown"
+        static let isProEnabled = "LifeTrack.settings.isProEnabled"
     }
 }
 

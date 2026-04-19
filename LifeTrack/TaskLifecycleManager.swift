@@ -5,6 +5,7 @@
 //  Created by Halalisani Mbanjwa on 2026/04/18.
 //
 
+import CoreLocation
 import Foundation
 import SwiftData
 
@@ -22,13 +23,22 @@ enum TaskLifecycleManager {
         task.updatedAt = now
 
         if wasCompleted {
+            task.completedAt = nil
             synchronizeReminder(for: task, customCategories: customCategories)
         } else {
+            task.completedAt = now
+            if task.isHabit && task.habitGroupID == nil {
+                task.habitGroupID = task.id
+            }
             ReminderScheduler.cancel(taskID: task.id)
+            LocationReminderManager.shared.cancelRegion(for: task.id)
 
             if let nextTask = task.nextRecurringTask(completedAt: now) {
                 modelContext.insert(nextTask)
                 synchronizeReminder(for: nextTask, customCategories: customCategories)
+                if nextTask.hasLocationReminder {
+                    LocationReminderManager.shared.scheduleRegion(for: nextTask)
+                }
             }
         }
 
@@ -106,14 +116,51 @@ enum TaskLifecycleManager {
         customCategories: [CustomTaskCategory]
     ) {
         let now = Date()
+        var reminderSnapshots: [ReminderSyncSnapshot] = []
+        reminderSnapshots.reserveCapacity(plan.count)
 
         for (task, date) in plan {
             task.dueDate = date
             task.updatedAt = now
-            synchronizeReminder(for: task, customCategories: customCategories)
+            reminderSnapshots.append(
+                ReminderSyncSnapshot(
+                    id: task.id,
+                    title: task.title,
+                    categoryTitle: task.categoryOption(customCategories: customCategories).title,
+                    dueDate: task.dueDate,
+                    isCompleted: task.isCompleted,
+                    isDeleted: task.isDeleted
+                )
+            )
         }
 
         try? modelContext.save()
+
+        let snapshots = reminderSnapshots
+        Task.detached(priority: .utility) {
+            for snapshot in snapshots {
+                if snapshot.isDeleted {
+                    ReminderScheduler.cancel(taskID: snapshot.id)
+                } else {
+                    ReminderScheduler.synchronizeReminder(
+                        taskID: snapshot.id,
+                        title: snapshot.title,
+                        categoryTitle: snapshot.categoryTitle,
+                        dueDate: snapshot.dueDate,
+                        isCompleted: snapshot.isCompleted
+                    )
+                }
+            }
+        }
+    }
+
+    private struct ReminderSyncSnapshot: Sendable {
+        let id: UUID
+        let title: String
+        let categoryTitle: String
+        let dueDate: Date
+        let isCompleted: Bool
+        let isDeleted: Bool
     }
 
     static func synchronizeReminder(

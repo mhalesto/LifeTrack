@@ -21,6 +21,7 @@ struct SettingsView: View {
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
     @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength = 1.0
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.isProEnabled) private var isProEnabled = false
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarImage: UIImage?
@@ -38,6 +39,7 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
                         header
+                        proCard
                         profileCard
                         themeCard
                         motionCard
@@ -270,6 +272,54 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
             }
+        }
+    }
+
+    private var proCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "Pro Plan", subtitle: "Unlock advanced productivity features.")
+
+            VStack(spacing: LifeTrackTheme.Spacing.medium) {
+                HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(red: 0.98, green: 0.82, blue: 0.25).opacity(0.18))
+                            .frame(width: 40, height: 40)
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.1))
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Pro Features")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        Text("Daily Planning Ritual, Habit Tracking & more")
+                            .font(.caption)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $isProEnabled)
+                        .labelsHidden()
+                        .tint(Color(red: 0.95, green: 0.75, blue: 0.1))
+                }
+
+                if isProEnabled {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        ProFeatureRow(symbol: "sunrise.fill", label: "Daily Planning Ritual", color: Color(red: 0.95, green: 0.55, blue: 0.1))
+                        ProFeatureRow(symbol: "flame.fill", label: "Habit Streaks", color: Color(red: 0.95, green: 0.3, blue: 0.2))
+                        ProFeatureRow(symbol: "location.fill", label: "Location Reminders", color: Color(red: 0.3, green: 0.6, blue: 0.95))
+                        ProFeatureRow(symbol: "heart.fill", label: "HealthKit Energy Scheduling", color: Color(red: 0.9, green: 0.25, blue: 0.45))
+                        ProFeatureRow(symbol: "trophy.fill", label: "Weekly Review Mode", color: Color(red: 0.35, green: 0.75, blue: 0.4))
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            .animation(.snappy(duration: 0.28), value: isProEnabled)
         }
     }
 
@@ -771,6 +821,24 @@ private struct ThemeSwatches: View {
         .overlay {
             Capsule()
                 .stroke(Color.white.opacity(0.7), lineWidth: 1)
+        }
+    }
+}
+
+private struct ProFeatureRow: View {
+    let symbol: String
+    let label: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 20)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
         }
     }
 }

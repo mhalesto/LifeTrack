@@ -16,6 +16,7 @@ struct HomeView: View {
 
     @State private var isShowingTemplatePicker = false
     @State private var isShowingTaskEditor = false
+    @State private var shouldAutoStartVoice = false
     @State private var isShowingSettings = false
     @State private var isShowingAvailabilitySheet = false
     @State private var navigationPath: [HomeRoute] = []
@@ -30,6 +31,9 @@ struct HomeView: View {
     @State private var dashboardMessageSeed = Int.random(in: 0...1_000_000)
     @State private var dashboardMessageSignal: DashboardMessageSignal?
     @State private var hasHandledInitialActivePhase = false
+    @State private var isShowingDailyRitual = false
+    @State private var isShowingHabits = false
+    @State private var streakCelebration: String?
     @State private var hasQueuedStartupMaintenance = false
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
@@ -37,6 +41,7 @@ struct HomeView: View {
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.lastDashboardMessageText) private var lastDashboardMessageText = ""
+    @AppStorage(LifeTrackSettings.Keys.isProEnabled) private var isProEnabled = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -108,6 +113,21 @@ struct HomeView: View {
                 }
             }
             .overlay(alignment: .top) {
+                if let celebration = streakCelebration {
+                    StreakCelebrationBanner(message: celebration) {
+                        streakCelebration = nil
+                    }
+                    .padding(.top, LifeTrackTheme.Spacing.medium)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: celebration) {
+                        try? await Task.sleep(nanoseconds: 2_800_000_000)
+                        await MainActor.run {
+                            withAnimation(.easeOut(duration: 0.3)) { streakCelebration = nil }
+                        }
+                    }
+                }
+            }
+            .overlay(alignment: .top) {
                 if let reminderActionTipState {
                     ReminderActionTipToast {
                         dismissReminderActionTip(id: reminderActionTipState.id)
@@ -155,6 +175,7 @@ struct HomeView: View {
             .sheet(isPresented: $isShowingTemplatePicker) {
                 TemplatePickerView(
                     onSelectBlank: openBlankTaskFromPicker,
+                    onSelectVoice: openVoiceTaskFromPicker,
                     onSelectTemplate: openTemplateFromPicker
                 )
             }
@@ -184,8 +205,31 @@ struct HomeView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
-            .sheet(isPresented: $isShowingTaskEditor) {
-                NewTaskView(template: selectedTemplate)
+            .sheet(isPresented: $isShowingTaskEditor, onDismiss: { shouldAutoStartVoice = false }) {
+                NewTaskView(template: selectedTemplate, autoStartVoice: shouldAutoStartVoice)
+            }
+            .sheet(isPresented: $isShowingHabits) {
+                HabitTrackerView(
+                    tasks: tasks.filter { !$0.isDeleted },
+                    customCategories: customCategories,
+                    onToggleCompletion: toggleCompletionWithStreak
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isShowingDailyRitual) {
+                DailyPlanningRitualView(
+                    tasks: activeTasks,
+                    customCategories: customCategories,
+                    onToggleCompletion: toggleCompletion,
+                    onReschedule: { task, date in
+                        task.dueDate = date
+                        task.updatedAt = Date()
+                        try? modelContext.save()
+                    }
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(item: $editingTask) { task in
                 NewTaskView(task: task)
@@ -194,6 +238,7 @@ struct HomeView: View {
         .tint(selectedTheme.accent)
         .onAppear {
             queueStartupMaintenanceIfNeeded()
+            LocationReminderManager.shared.restoreAllRegions(from: tasks.filter { !$0.isDeleted })
             if scenePhase == .active {
                 hasHandledInitialActivePhase = true
             }
@@ -215,6 +260,7 @@ struct HomeView: View {
             openPendingNotificationTaskIfNeeded()
             showPendingReminderActionTipIfNeeded()
             drainSharedInbox()
+            checkPendingVoiceLaunch()
         }
         .onReceive(NotificationCenter.default.publisher(for: ReminderScheduler.actionTipDidBecomePendingNotification)) { _ in
             showPendingReminderActionTipIfNeeded()
@@ -345,6 +391,30 @@ struct HomeView: View {
 
             ScrollView(.horizontal) {
                 HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                    if isProEnabled {
+                        QuickActionButton(
+                            title: "Plan My Day",
+                            subtitle: "Daily ritual",
+                            symbolName: "sunrise.fill",
+                            tint: Color(red: 0.95, green: 0.65, blue: 0.1),
+                            width: metrics.quickActionWideWidth,
+                            height: metrics.quickActionHeight,
+                            iconSize: metrics.quickActionIconSize,
+                            action: { isShowingDailyRitual = true }
+                        )
+
+                        QuickActionButton(
+                            title: "Habits",
+                            subtitle: "Streaks",
+                            symbolName: "flame.fill",
+                            tint: Color(red: 0.95, green: 0.35, blue: 0.15),
+                            width: metrics.quickActionWidth,
+                            height: metrics.quickActionHeight,
+                            iconSize: metrics.quickActionIconSize,
+                            action: { isShowingHabits = true }
+                        )
+                    }
+
                     QuickActionButton(
                         title: "New task",
                         subtitle: "Start fresh",
@@ -942,14 +1012,78 @@ struct HomeView: View {
 
     private func openBlankTaskFromPicker() {
         selectedTemplate = nil
+        shouldAutoStartVoice = false
         isShowingTemplatePicker = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             isShowingTaskEditor = true
         }
     }
 
+    private func openVoiceTaskFromPicker() {
+        selectedTemplate = nil
+        shouldAutoStartVoice = true
+        isShowingTemplatePicker = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            isShowingTaskEditor = true
+        }
+    }
+
+    private func toggleCompletionWithStreak(for task: LifeTask) {
+        let wasCompleted = task.isCompleted
+        toggleCompletion(for: task)
+        if !wasCompleted && task.isHabit && isProEnabled {
+            let streak = HabitEngine.currentStreak(for: task, in: tasks.filter { !$0.isDeleted })
+            if streak > 0 {
+                withAnimation(.snappy) {
+                    streakCelebration = streak == 1
+                        ? "🔥 Habit started! Keep it up."
+                        : "🔥 \(streak)-day streak! You're on fire."
+                }
+            }
+        }
+    }
+
+    private func checkPendingVoiceLaunch() {
+        let defaults = UserDefaults(suiteName: "group.com.currenttech.LifeTrack")
+
+        if defaults?.bool(forKey: "pendingVoiceTaskLaunch") == true {
+            defaults?.set(false, forKey: "pendingVoiceTaskLaunch")
+            selectedTemplate = nil
+            shouldAutoStartVoice = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isShowingTaskEditor = true
+            }
+            return
+        }
+
+        if defaults?.bool(forKey: "pendingBlankTaskLaunch") == true {
+            defaults?.set(false, forKey: "pendingBlankTaskLaunch")
+            selectedTemplate = nil
+            shouldAutoStartVoice = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isShowingTaskEditor = true
+            }
+            return
+        }
+
+        if defaults?.bool(forKey: "pendingFocusLaunch") == true {
+            defaults?.set(false, forKey: "pendingFocusLaunch")
+            // Home dashboard already shows focus — bring app to foreground is enough
+            return
+        }
+
+        if defaults?.bool(forKey: "pendingQuickComplete") == true {
+            defaults?.set(false, forKey: "pendingQuickComplete")
+            if let topTask = priorityTasks.first(where: { !$0.isCompleted }) {
+                toggleCompletion(for: topTask)
+            }
+            return
+        }
+    }
+
     private func openTemplateFromPicker(_ template: TaskTemplate) {
         selectedTemplate = template
+        shouldAutoStartVoice = false
         isShowingTemplatePicker = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             isShowingTaskEditor = true
@@ -1145,25 +1279,21 @@ struct HomeView: View {
         let focusIDs = Set(focusRecommendations.map(\.task.id))
         let plan = DailyFocusPlanner.resetSchedule(for: activeTasks, focusIDs: focusIDs)
 
-        performWithOptionalAnimation {
-            TaskLifecycleManager.applySchedule(
-                plan,
-                in: modelContext,
-                customCategories: customCategories
-            )
-        }
+        TaskLifecycleManager.applySchedule(
+            plan,
+            in: modelContext,
+            customCategories: customCategories
+        )
     }
 
     private func rescheduleOverdueTasks() {
         let plan = DailyFocusPlanner.overdueReschedulePlan(for: activeTasks)
 
-        performWithOptionalAnimation {
-            TaskLifecycleManager.applySchedule(
-                plan,
-                in: modelContext,
-                customCategories: customCategories
-            )
-        }
+        TaskLifecycleManager.applySchedule(
+            plan,
+            in: modelContext,
+            customCategories: customCategories
+        )
     }
 
     private func performWithOptionalAnimation(_ updates: () -> Void) {
@@ -1220,6 +1350,33 @@ private enum HomeRoute: Hashable {
     case availabilityCalendar
     case documents
     case taskData(TaskDataExchangeEntryMode)
+}
+
+private struct StreakCelebrationBanner: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(message)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+            Spacer()
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+        }
+        .padding(.horizontal, LifeTrackTheme.Spacing.large)
+        .padding(.vertical, 12)
+        .background(
+            Color(red: 0.9, green: 0.35, blue: 0.1).opacity(0.95),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+    }
 }
 
 private struct HomeLayoutMetrics {
