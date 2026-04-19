@@ -36,9 +36,6 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            coverAppSnapshot()
-        }
     }
 
     private func completeInitialSplash() async {
@@ -60,7 +57,9 @@ struct ContentView: View {
         case .active:
             guard !isShowingLaunchSplash else { return }
             AppSnapshotCover.hide(animated: true)
-        case .inactive, .background:
+        case .inactive:
+            break
+        case .background:
             coverAppSnapshot()
         @unknown default:
             break
