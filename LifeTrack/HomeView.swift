@@ -34,6 +34,7 @@ struct HomeView: View {
     @State private var isShowingDailyRitual = false
     @State private var isShowingHabits = false
     @State private var isShowingWeeklyReview = false
+    @State private var isShowingAISuggestions = false
     @State private var streakCelebration: String?
     @State private var hasQueuedStartupMaintenance = false
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
@@ -230,6 +231,9 @@ struct HomeView: View {
             .sheet(isPresented: $isShowingPaywall) {
                 PaywallView()
                     .environmentObject(subscriptionManager)
+            }
+            .sheet(isPresented: $isShowingAISuggestions) {
+                AITaskSuggestionsView(tasks: tasks)
             }
             .sheet(isPresented: $isShowingDailyRitual) {
                 DailyPlanningRitualView(
@@ -438,6 +442,19 @@ struct HomeView: View {
                             iconSize: metrics.quickActionIconSize,
                             action: { isShowingWeeklyReview = true }
                         )
+
+                        if subscriptionManager.tier >= .ultimate {
+                            QuickActionButton(
+                                title: "AI Suggestions",
+                                subtitle: "Smart focus",
+                                symbolName: "sparkles",
+                                tint: Color(red: 0.95, green: 0.72, blue: 0.1),
+                                width: metrics.quickActionWideWidth,
+                                height: metrics.quickActionHeight,
+                                iconSize: metrics.quickActionIconSize,
+                                action: { isShowingAISuggestions = true }
+                            )
+                        }
                     }
 
                     QuickActionButton(

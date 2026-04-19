@@ -23,6 +23,7 @@ struct SettingsView: View {
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
     @State private var isShowingPaywall = false
+    @AppStorage(LifeTrackSettings.Keys.claudeAPIKey) private var claudeAPIKey = ""
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarImage: UIImage?
@@ -41,6 +42,9 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
                         header
                         proCard
+                        if subscriptionManager.tier >= .ultimate {
+                            aiCard
+                        }
                         profileCard
                         themeCard
                         motionCard
@@ -337,6 +341,53 @@ struct SettingsView: View {
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
                 .environmentObject(subscriptionManager)
+        }
+    }
+
+    private var aiCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "AI Settings", subtitle: "Required for AI Task Suggestions.")
+
+            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
+                HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color(red: 0.95, green: 0.72, blue: 0.1).opacity(0.15))
+                            .frame(width: 40, height: 40)
+                        Image(systemName: "key.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.95, green: 0.72, blue: 0.1))
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Claude API Key")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        Text("Get yours at console.anthropic.com")
+                            .font(.caption)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    }
+                }
+
+                SecureField("sk-ant-...", text: $claudeAPIKey)
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(10)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(LifeTrackTheme.ColorPalette.hairline, lineWidth: 0.8)
+                    }
+
+                if !claudeAPIKey.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("API key saved")
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    }
+                    .font(.caption)
+                }
+            }
         }
     }
 

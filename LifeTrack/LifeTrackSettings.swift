@@ -20,6 +20,7 @@ enum LifeTrackSettings {
         static let reminderActionTipPending = "LifeTrack.notifications.reminderActionTipPending"
         static let reminderActionTipShown = "LifeTrack.notifications.reminderActionTipShown"
         static let isProEnabled = "LifeTrack.settings.isProEnabled"
+        static let claudeAPIKey = "LifeTrack.settings.claudeAPIKey"
     }
 }
 
