@@ -21,6 +21,7 @@ struct DailyPlanningRitualView: View {
     @State private var selectedTaskIDs: Set<UUID> = []
     @State private var taskDurations: [UUID: Int] = [:]
     @State private var stepTransitionForward = true
+    @State private var energyLevel: EnergyLevel = .unknown
 
     private var yesterdayTasks: [LifeTask] {
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
@@ -31,7 +32,7 @@ struct DailyPlanningRitualView: View {
     }
 
     private var todayCandidates: [DailyFocusRecommendation] {
-        DailyFocusPlanner.recommendations(from: tasks)
+        DailyFocusPlanner.recommendations(from: tasks, energyLevel: energyLevel)
     }
 
     private var selectedTasks: [LifeTask] {
@@ -67,6 +68,10 @@ struct DailyPlanningRitualView: View {
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                 }
             }
+        }
+        .task {
+            await HealthKitEnergyReader.shared.requestAuthorizationAndRefresh()
+            energyLevel = HealthKitEnergyReader.shared.energyLevel
         }
         .onAppear {
             if yesterdayTasks.isEmpty && step == .yesterdayReview {
@@ -114,6 +119,7 @@ struct DailyPlanningRitualView: View {
                 candidates: todayCandidates,
                 customCategories: customCategories,
                 selectedIDs: $selectedTaskIDs,
+                energyLevel: energyLevel,
                 onContinue: advanceStep
             )
         case .timeBox:
@@ -275,6 +281,7 @@ private struct PickFocusStep: View {
     let candidates: [DailyFocusRecommendation]
     let customCategories: [CustomTaskCategory]
     @Binding var selectedIDs: Set<UUID>
+    let energyLevel: EnergyLevel
     let onContinue: () -> Void
 
     private var selectedCount: Int { selectedIDs.count }
@@ -288,6 +295,12 @@ private struct PickFocusStep: View {
                 title: "What Matters Most?",
                 subtitle: "Pick 1–5 tasks to commit to today. \(selectedCount > 0 ? "\(selectedCount) selected." : "")"
             )
+
+            if energyLevel != .unknown {
+                EnergyBanner(level: energyLevel)
+                    .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+                    .padding(.bottom, LifeTrackTheme.Spacing.small)
+            }
 
             ScrollView {
                 VStack(spacing: LifeTrackTheme.Spacing.small) {
@@ -514,6 +527,38 @@ private struct LaunchDayStep: View {
                     icon: "sunrise.fill"
                 )
             }
+        }
+    }
+}
+
+// MARK: - Energy Banner
+
+private struct EnergyBanner: View {
+    let level: EnergyLevel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: level.sfSymbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(level.color)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(level.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(level.color)
+                Text(level.plannerNote)
+                    .font(.caption2)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+        }
+        .padding(LifeTrackTheme.Spacing.medium)
+        .background(level.color.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(level.color.opacity(0.2), lineWidth: 1)
         }
     }
 }

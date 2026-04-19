@@ -57,7 +57,11 @@ enum DailyFocusReason: String, CaseIterable, Hashable {
 
 @MainActor
 enum DailyFocusPlanner {
-    static func recommendations(from tasks: [LifeTask], calendar: Calendar = .current) -> [DailyFocusRecommendation] {
+    static func recommendations(
+        from tasks: [LifeTask],
+        energyLevel: EnergyLevel = .unknown,
+        calendar: Calendar = .current
+    ) -> [DailyFocusRecommendation] {
         let openTasks = tasks.filter { !$0.isDeleted && !$0.isCompleted }
 
         let rankedTasks = openTasks
@@ -65,7 +69,7 @@ enum DailyFocusPlanner {
                 DailyFocusRecommendation(
                     task: task,
                     reason: reason(for: task, calendar: calendar),
-                    score: score(for: task, calendar: calendar)
+                    score: score(for: task, calendar: calendar, energyLevel: energyLevel)
                 )
             }
             .sorted { first, second in
@@ -127,7 +131,7 @@ enum DailyFocusPlanner {
             }
     }
 
-    private static func score(for task: LifeTask, calendar: Calendar) -> Int {
+    private static func score(for task: LifeTask, calendar: Calendar, energyLevel: EnergyLevel = .unknown) -> Int {
         let now = Date()
         let dayDistance = calendar.dateComponents(
             [.day],
@@ -152,6 +156,9 @@ enum DailyFocusPlanner {
         if task.documentSuggestedDueDate != nil || !task.documentKeywords.isEmpty {
             score += 10
         }
+
+        // Energy-aware adjustment: on low energy, boost short tasks, deprioritise long ones
+        score += energyLevel.scoreDelta(for: task.estimatedDurationMinutes)
 
         return score
     }
