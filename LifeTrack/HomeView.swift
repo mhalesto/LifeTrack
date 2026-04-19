@@ -33,6 +33,7 @@ struct HomeView: View {
     @State private var hasHandledInitialActivePhase = false
     @State private var isShowingDailyRitual = false
     @State private var isShowingHabits = false
+    @State private var isShowingWeeklyReview = false
     @State private var streakCelebration: String?
     @State private var hasQueuedStartupMaintenance = false
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
@@ -213,6 +214,14 @@ struct HomeView: View {
                     tasks: tasks.filter { !$0.isDeleted },
                     customCategories: customCategories,
                     onToggleCompletion: toggleCompletionWithStreak
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isShowingWeeklyReview) {
+                WeeklyReviewView(
+                    tasks: tasks,
+                    customCategories: customCategories
                 )
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
@@ -412,6 +421,17 @@ struct HomeView: View {
                             height: metrics.quickActionHeight,
                             iconSize: metrics.quickActionIconSize,
                             action: { isShowingHabits = true }
+                        )
+
+                        QuickActionButton(
+                            title: "Weekly Review",
+                            subtitle: "Reflect & plan",
+                            symbolName: "chart.bar.doc.horizontal.fill",
+                            tint: Color(red: 0.35, green: 0.6, blue: 0.95),
+                            width: metrics.quickActionWideWidth,
+                            height: metrics.quickActionHeight,
+                            iconSize: metrics.quickActionIconSize,
+                            action: { isShowingWeeklyReview = true }
                         )
                     }
 
