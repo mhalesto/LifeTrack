@@ -229,9 +229,9 @@ struct WeeklyReviewView: View {
 
         // Insert mind sweep tasks
         let newTitles = mindSweepTitles.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let nextWeek = cal.date(byAdding: .day, value: 7, to: now) ?? now
         for title in newTitles {
-            let task = LifeTask(title: title)
-            task.dueDate = cal.date(byAdding: .day, value: 7, to: now) ?? now
+            let task = LifeTask(title: title, category: .personal, dueDate: nextWeek)
             modelContext.insert(task)
         }
 

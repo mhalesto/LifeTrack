@@ -555,8 +555,10 @@ struct StatisticsView: View {
 
         chartProgress = 0
 
+        let calendar = Calendar.current  // capture on @MainActor before crossing to detached
+
         Task.detached(priority: .userInitiated) {
-            let snapshot = ProductivityStatsBuilder.snapshot(for: taskSnapshots, range: range)
+            let snapshot = ProductivityStatsBuilder.snapshot(for: taskSnapshots, range: range, calendar: calendar)
 
             await MainActor.run {
                 guard statsRefreshID == refreshID else {

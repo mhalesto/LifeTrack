@@ -26,10 +26,10 @@ final class LifeTrackNotificationDelegate: NSObject, UNUserNotificationCenterDel
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let actionIdentifier = response.actionIdentifier
-        let userInfo = response.notification.request.content.userInfo
+        // Extract String? here (Sendable) so non-Sendable [AnyHashable:Any] is never captured
+        let taskIDString = response.notification.request.content.userInfo["taskID"] as? String
 
         Task { @MainActor in
-            let taskIDString = userInfo[ReminderScheduler.taskIDUserInfoKey] as? String
             LifeTrackNotificationActionHandler.handle(
                 actionIdentifier: actionIdentifier,
                 taskIDString: taskIDString
