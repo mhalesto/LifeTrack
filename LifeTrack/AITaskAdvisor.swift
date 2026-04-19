@@ -136,9 +136,10 @@ final class AITaskAdvisor: ObservableObject {
             throw NSError(domain: "Anthropic", code: statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(statusCode): \(body)"])
         }
 
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let rawBody = String(data: data, encoding: .utf8) ?? "empty"
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let text = (json?["content"] as? [[String: Any]])?.first?["text"] as? String else {
-            throw URLError(.cannotParseResponse)
+            throw NSError(domain: "Anthropic", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected response: \(rawBody.prefix(300))"])
         }
         return text
     }
