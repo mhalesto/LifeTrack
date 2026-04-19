@@ -691,7 +691,10 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LifeTrack uses the camera so you can scan a document and turn it into a task.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "LifeTrack reads your sleep and heart rate variability to surface the right tasks for your energy level today.";\n\t\t\t\tINFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "LifeTrack uses your location to remind you of tasks when you arrive or leave a place.";\n\t\t\t\tINFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LifeTrack uses your location to remind you of tasks when you arrive or leave a place.";\n\t\t\t\tINFOPLIST_KEY_NSMicrophoneUsageDescription = "LifeTrack uses the microphone to create tasks from your voice.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "LifeTrack reads your sleep and heart rate variability to surface the right tasks for your energy level today.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "LifeTrack uses your location to remind you of tasks when you arrive or leave a place.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LifeTrack uses your location to remind you of tasks when you arrive or leave a place.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LifeTrack uses the microphone to create tasks from your voice.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "LifeTrack lets you choose a profile photo for your local app avatar.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LifeTrack uses speech recognition to transcribe spoken task details.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -729,7 +732,10 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LifeTrack uses the camera so you can scan a document and turn it into a task.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "LifeTrack reads your sleep and heart rate variability to surface the right tasks for your energy level today.";\n\t\t\t\tINFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "LifeTrack uses your location to remind you of tasks when you arrive or leave a place.";\n\t\t\t\tINFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LifeTrack uses your location to remind you of tasks when you arrive or leave a place.";\n\t\t\t\tINFOPLIST_KEY_NSMicrophoneUsageDescription = "LifeTrack uses the microphone to create tasks from your voice.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "LifeTrack reads your sleep and heart rate variability to surface the right tasks for your energy level today.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "LifeTrack uses your location to remind you of tasks when you arrive or leave a place.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LifeTrack uses your location to remind you of tasks when you arrive or leave a place.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LifeTrack uses the microphone to create tasks from your voice.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "LifeTrack lets you choose a profile photo for your local app avatar.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LifeTrack uses speech recognition to transcribe spoken task details.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
