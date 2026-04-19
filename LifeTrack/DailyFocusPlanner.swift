@@ -158,7 +158,7 @@ enum DailyFocusPlanner {
         }
 
         // Energy-aware adjustment: on low energy, boost short tasks, deprioritise long ones
-        score += energyLevel.scoreDelta(for: task.estimatedDurationMinutes)
+        score += energyLevel.scoreDelta(for: task.estimatedDurationMinutes ?? 0)
 
         return score
     }
