@@ -50,6 +50,8 @@ struct NewTaskView: View {
     @State private var lastVoiceGeneratedTitle = ""
     @State private var didApplyVoiceCategory = false
     @State private var didApplyVoiceDueDate = false
+    @State private var didApplyDocumentSuggestion = false
+    @State private var documentScrollRequest: UUID?
 
     private let durationOptions = [15, 30, 45, 60, 90, 120]
 
@@ -82,23 +84,25 @@ struct NewTaskView: View {
                 LifeTrackTheme.appBackground
                     .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
-                        header
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+                            header
 
-                        taskDataShortcutCard
+                            taskDataShortcutCard
 
-                        voiceCard
+                            voiceCard
 
-                        taskCard
+                            taskCard
+                                .id(NewTaskViewAnchor.taskCard)
 
-                        planningCard
+                            planningCard
 
-                        dateCard
+                            dateCard
 
-                        notesCard
+                            notesCard
 
-                        documentCard
+                            documentCard
 
                         if templateAction == .email {
                             templateActionCard
@@ -108,11 +112,19 @@ struct NewTaskView: View {
                             statusCard
                         }
                     }
-                    .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
-                    .padding(.top, LifeTrackTheme.Spacing.medium)
-                    .padding(.bottom, 30)
+                        .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+                        .padding(.top, LifeTrackTheme.Spacing.medium)
+                        .padding(.bottom, 30)
+                    }
+                    .scrollIndicators(.hidden)
+                    .onChange(of: documentScrollRequest) { _, newValue in
+                        guard newValue != nil else { return }
+                        withAnimation(.easeOut(duration: 0.28)) {
+                            scrollProxy.scrollTo(NewTaskViewAnchor.taskCard, anchor: .top)
+                        }
+                        documentScrollRequest = nil
+                    }
                 }
-                .scrollIndicators(.hidden)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -542,6 +554,7 @@ struct NewTaskView: View {
                     suggestedDueDate: documentSuggestedDueDate,
                     keywords: documentKeywords,
                     extractedText: documentExtractedText,
+                    hasApplied: didApplyDocumentSuggestion,
                     onApplySuggestion: applyDocumentSuggestion
                 )
             }
@@ -703,6 +716,7 @@ struct NewTaskView: View {
         documentSuggestedTitle = nil
         documentSuggestedDueDate = nil
         documentKeywords = []
+        didApplyDocumentSuggestion = false
     }
 
     private var hasDocumentAnalysis: Bool {
@@ -714,23 +728,42 @@ struct NewTaskView: View {
     }
 
     private func applyDocumentSuggestion() {
+        var didChange = false
+
         if let suggestedTitle = documentSuggestedTitle, !suggestedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            title = suggestedTitle
+            withAnimation(.easeOut(duration: 0.2)) {
+                title = suggestedTitle
+            }
+            didChange = true
         }
 
         if let documentSuggestedDueDate {
-            dueDate = documentSuggestedDueDate
+            withAnimation(.easeOut(duration: 0.2)) {
+                dueDate = documentSuggestedDueDate
+            }
+            didChange = true
         }
 
         if documentKeywords.contains("insurance") || documentKeywords.contains("invoice") || documentKeywords.contains("bill") || documentKeywords.contains("tax") {
             categoryRawValue = TaskCategory.finance.rawValue
             pendingCategoryOption = nil
+            didChange = true
         } else if documentKeywords.contains("appointment") || documentKeywords.contains("medical") {
             categoryRawValue = TaskCategory.health.rawValue
             pendingCategoryOption = nil
+            didChange = true
         } else if documentKeywords.contains("school") || documentKeywords.contains("application") {
             categoryRawValue = TaskCategory.personal.rawValue
             pendingCategoryOption = nil
+            didChange = true
+        }
+
+        if didChange {
+            LifeTrackHaptics.lightImpact()
+            withAnimation(.easeOut(duration: 0.22)) {
+                didApplyDocumentSuggestion = true
+            }
+            documentScrollRequest = UUID()
         }
     }
 
@@ -865,6 +898,10 @@ struct NewTaskView: View {
 
         return AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.86))
     }
+}
+
+private enum NewTaskViewAnchor: Hashable {
+    case taskCard
 }
 
 private enum DueDatePickerMode: String, Identifiable {
@@ -1212,6 +1249,7 @@ private struct DocumentIntelligenceView: View {
     let suggestedDueDate: Date?
     let keywords: [String]
     let extractedText: String
+    let hasApplied: Bool
     let onApplySuggestion: () -> Void
 
     var body: some View {
@@ -1242,11 +1280,28 @@ private struct DocumentIntelligenceView: View {
                     subtitle: suggestedDueDate.map { "Suggested due date: \($0.weekdayDateString)" } ?? "Suggested from the uploaded file."
                 )
 
-                LifeTrackPrimaryButton(
-                    title: "Apply Document Suggestion",
-                    systemImage: "wand.and.stars",
-                    action: onApplySuggestion
-                )
+                if hasApplied {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.callout.weight(.semibold))
+                        Text("Suggestion applied to task")
+                            .font(.callout.weight(.semibold))
+                    }
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.success)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LifeTrackTheme.ColorPalette.success.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                } else {
+                    LifeTrackPrimaryButton(
+                        title: "Apply Document Suggestion",
+                        systemImage: "wand.and.stars",
+                        action: onApplySuggestion
+                    )
+                }
             }
 
             if !keywords.isEmpty {
