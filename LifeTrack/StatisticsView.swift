@@ -67,10 +67,12 @@ struct StatisticsView: View {
                     } else {
                         summarySection
                             .statisticsEntrance(index: 2, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
-                        completedChart
+                        insightsSection
                             .statisticsEntrance(index: 3, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
-                        overdueChart
+                        completedChart
                             .statisticsEntrance(index: 4, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
+                        overdueChart
+                            .statisticsEntrance(index: 5, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
                     }
                 }
                 .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
@@ -224,6 +226,44 @@ struct StatisticsView: View {
                 }
                 .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
             }
+        }
+    }
+
+    private var insightsSection: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+            SectionHeaderView(
+                title: "Insights",
+                subtitle: "Spot the patterns behind your completions."
+            )
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: LifeTrackTheme.Spacing.medium) {
+                StreakInsightCard(
+                    currentStreak: statsSnapshot.currentStreak,
+                    bestStreak: statsSnapshot.bestStreak,
+                    animationID: selectedRange.id
+                )
+
+                FocusInsightCard(
+                    totalMinutes: statsSnapshot.focusMinutesCompleted,
+                    topEntry: statsSnapshot.focusByCategory.first,
+                    customCategories: customCategories,
+                    animationID: selectedRange.id
+                )
+            }
+
+            CategoryMixCard(
+                entries: statsSnapshot.categoryShare,
+                customCategories: customCategories,
+                chartProgress: chartProgress,
+                animationsEnabled: animationsEnabled
+            )
+
+            BestWeekdayCard(
+                weekdayBreakdown: statsSnapshot.weekdayBreakdown,
+                bestWeekday: statsSnapshot.bestWeekday,
+                chartProgress: chartProgress,
+                animationsEnabled: animationsEnabled
+            )
         }
     }
 
@@ -664,14 +704,44 @@ private struct ProductivityStatsSnapshot: Sendable {
     let totalOverdue: Int
     let bestPoint: ProductivityStatPoint?
     let completionRate: Int
+    let currentStreak: Int
+    let bestStreak: Int
+    let weekdayBreakdown: [WeekdayPoint]
+    let bestWeekday: WeekdayPoint?
+    let focusMinutesCompleted: Int
+    let focusByCategory: [CategoryShareEntry]
+    let categoryShare: [CategoryShareEntry]
 
     static let empty = ProductivityStatsSnapshot(
         points: [],
         totalCompleted: 0,
         totalOverdue: 0,
         bestPoint: nil,
-        completionRate: 0
+        completionRate: 0,
+        currentStreak: 0,
+        bestStreak: 0,
+        weekdayBreakdown: [],
+        bestWeekday: nil,
+        focusMinutesCompleted: 0,
+        focusByCategory: [],
+        categoryShare: []
     )
+}
+
+private struct WeekdayPoint: Sendable, Identifiable {
+    var id: Int { weekday }
+    let weekday: Int
+    let shortTitle: String
+    let fullTitle: String
+    let completedCount: Int
+}
+
+private struct CategoryShareEntry: Sendable, Identifiable {
+    var id: String { rawValue }
+    let rawValue: String
+    let completedCount: Int
+    let focusMinutes: Int
+    let percent: Double
 }
 
 private struct StatisticsTaskSnapshot: Sendable {
@@ -680,6 +750,8 @@ private struct StatisticsTaskSnapshot: Sendable {
     let updatedAt: Date
     let isCompleted: Bool
     let isDeleted: Bool
+    let categoryRawValue: String
+    let scheduledDurationMinutes: Int
 
     init(task: LifeTask) {
         id = task.id
@@ -687,6 +759,8 @@ private struct StatisticsTaskSnapshot: Sendable {
         updatedAt = task.updatedAt
         isCompleted = task.isCompleted
         isDeleted = task.isDeleted
+        categoryRawValue = task.categoryRawValue
+        scheduledDurationMinutes = task.scheduledDurationMinutes
     }
 
     func isOverdue(at date: Date) -> Bool {
@@ -1195,13 +1269,156 @@ private enum ProductivityStatsBuilder {
             ? Int((Double(totalCompleted) / Double(comparedTotal) * 100).rounded())
             : 0
 
+        let activeTasks = tasks.filter { !$0.isDeleted }
+        let interval = rangeInterval(for: range, calendar: calendar)
+        let streakData = streaks(for: activeTasks, calendar: calendar)
+        let weekdayBreakdown = weekdayBreakdown(for: activeTasks, interval: interval, calendar: calendar)
+        let bestWeekdayCandidate = weekdayBreakdown.max { $0.completedCount < $1.completedCount }
+        let bestWeekday = (bestWeekdayCandidate?.completedCount ?? 0) > 0 ? bestWeekdayCandidate : nil
+        let focus = focusStats(for: activeTasks, interval: interval)
+        let categoryShare = categoryShare(for: activeTasks, interval: interval)
+
         return ProductivityStatsSnapshot(
             points: points,
             totalCompleted: totalCompleted,
             totalOverdue: totalOverdue,
             bestPoint: bestPoint,
-            completionRate: completionRate
+            completionRate: completionRate,
+            currentStreak: streakData.current,
+            bestStreak: streakData.best,
+            weekdayBreakdown: weekdayBreakdown,
+            bestWeekday: bestWeekday,
+            focusMinutesCompleted: focus.totalMinutes,
+            focusByCategory: focus.byCategory,
+            categoryShare: categoryShare
         )
+    }
+
+    private static func rangeInterval(for range: StatisticsTimeRange, calendar: Calendar) -> DateInterval {
+        let now = Date()
+        let currentBucketStart = bucketStart(for: now, range: range, calendar: calendar)
+        let firstBucketStart = calendar.date(
+            byAdding: range.calendarComponent,
+            value: -(range.bucketCount - 1),
+            to: currentBucketStart
+        ) ?? currentBucketStart
+        let end = calendar.date(byAdding: range.calendarComponent, value: 1, to: currentBucketStart) ?? now
+        return DateInterval(start: firstBucketStart, end: end)
+    }
+
+    private static func streaks(for tasks: [StatisticsTaskSnapshot], calendar: Calendar) -> (current: Int, best: Int) {
+        let completionDays = Set(
+            tasks
+                .filter { $0.isCompleted }
+                .map { calendar.startOfDay(for: $0.updatedAt) }
+        )
+        guard !completionDays.isEmpty else {
+            return (0, 0)
+        }
+
+        let sorted = completionDays.sorted()
+        var best = 1
+        var run = 1
+        for index in 1..<sorted.count {
+            let previous = sorted[index - 1]
+            let day = sorted[index]
+            if let next = calendar.date(byAdding: .day, value: 1, to: previous),
+               calendar.isDate(next, inSameDayAs: day) {
+                run += 1
+                best = max(best, run)
+            } else {
+                run = 1
+            }
+        }
+
+        var current = 0
+        var cursor = calendar.startOfDay(for: Date())
+        if !completionDays.contains(cursor) {
+            if let yesterday = calendar.date(byAdding: .day, value: -1, to: cursor),
+               completionDays.contains(yesterday) {
+                cursor = yesterday
+            } else {
+                return (0, best)
+            }
+        }
+
+        while completionDays.contains(cursor) {
+            current += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else {
+                break
+            }
+            cursor = previous
+        }
+
+        return (current, max(best, current))
+    }
+
+    private static func weekdayBreakdown(
+        for tasks: [StatisticsTaskSnapshot],
+        interval: DateInterval,
+        calendar: Calendar
+    ) -> [WeekdayPoint] {
+        let completed = tasks.filter { $0.isCompleted && interval.contains($0.updatedAt) }
+        let byWeekday = Dictionary(grouping: completed) { calendar.component(.weekday, from: $0.updatedAt) }
+
+        let shortSymbols = calendar.veryShortStandaloneWeekdaySymbols
+        let longSymbols = calendar.standaloneWeekdaySymbols
+
+        return (1...7).map { weekday in
+            let idx = weekday - 1
+            let shortTitle = idx < shortSymbols.count ? shortSymbols[idx] : ""
+            let fullTitle = idx < longSymbols.count ? longSymbols[idx] : shortTitle
+            return WeekdayPoint(
+                weekday: weekday,
+                shortTitle: shortTitle,
+                fullTitle: fullTitle,
+                completedCount: byWeekday[weekday]?.count ?? 0
+            )
+        }
+    }
+
+    private static func focusStats(
+        for tasks: [StatisticsTaskSnapshot],
+        interval: DateInterval
+    ) -> (totalMinutes: Int, byCategory: [CategoryShareEntry]) {
+        let completed = tasks.filter { $0.isCompleted && interval.contains($0.updatedAt) }
+        let total = completed.reduce(0) { $0 + $1.scheduledDurationMinutes }
+        let byCategory = Dictionary(grouping: completed, by: \.categoryRawValue)
+
+        let entries = byCategory
+            .map { rawValue, items -> CategoryShareEntry in
+                let minutes = items.reduce(0) { $0 + $1.scheduledDurationMinutes }
+                let percent = total > 0 ? Double(minutes) / Double(total) : 0
+                return CategoryShareEntry(
+                    rawValue: rawValue,
+                    completedCount: items.count,
+                    focusMinutes: minutes,
+                    percent: percent
+                )
+            }
+            .sorted { $0.focusMinutes > $1.focusMinutes }
+
+        return (total, entries)
+    }
+
+    private static func categoryShare(
+        for tasks: [StatisticsTaskSnapshot],
+        interval: DateInterval
+    ) -> [CategoryShareEntry] {
+        let completed = tasks.filter { $0.isCompleted && interval.contains($0.updatedAt) }
+        let byCategory = Dictionary(grouping: completed, by: \.categoryRawValue)
+        let totalCount = completed.count
+
+        return byCategory
+            .map { rawValue, items in
+                CategoryShareEntry(
+                    rawValue: rawValue,
+                    completedCount: items.count,
+                    focusMinutes: items.reduce(0) { $0 + $1.scheduledDurationMinutes },
+                    percent: totalCount > 0 ? Double(items.count) / Double(totalCount) : 0
+                )
+            }
+            .sorted { $0.completedCount > $1.completedCount }
     }
 
     private static func points(
@@ -1488,6 +1705,375 @@ private struct StatisticsCountText: View {
 
             displayedValue = target
         }
+    }
+}
+
+private struct StreakInsightCard: View {
+    let currentStreak: Int
+    let bestStreak: Int
+    let animationID: String
+
+    @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
+
+    private var subtitle: String {
+        if currentStreak == 0 && bestStreak == 0 {
+            return "Complete a task to start a streak."
+        }
+        if currentStreak == 0 {
+            return "Best: \(bestStreak) day\(bestStreak == 1 ? "" : "s")"
+        }
+        if bestStreak > currentStreak {
+            return "Best: \(bestStreak) day\(bestStreak == 1 ? "" : "s")"
+        }
+        return "Personal best!"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+            HStack(alignment: .top) {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.warning)
+                    .frame(width: 32, height: 32)
+                    .background(LifeTrackTheme.ColorPalette.warning.opacity(0.12), in: Circle())
+
+                Spacer()
+
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    StatisticsCountText(
+                        value: currentStreak,
+                        suffix: "",
+                        animationID: animationID,
+                        animationsEnabled: animationsEnabled
+                    )
+                    .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(currentStreak == 1 ? "day" : "days")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Streak")
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text(subtitle)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 106, alignment: .leading)
+        .lifeTrackCard(padding: LifeTrackTheme.Spacing.medium, backgroundColor: LifeTrackTheme.ColorPalette.cardElevated)
+    }
+}
+
+private struct FocusInsightCard: View {
+    let totalMinutes: Int
+    let topEntry: CategoryShareEntry?
+    let customCategories: [CustomTaskCategory]
+    let animationID: String
+
+    @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
+
+    private var hours: Int { totalMinutes / 60 }
+    private var minutesRemainder: Int { totalMinutes % 60 }
+
+    private var topOption: TaskCategoryOption? {
+        guard let topEntry else { return nil }
+        return TaskCategoryOption.resolved(rawValue: topEntry.rawValue, customCategories: customCategories)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+            HStack(alignment: .top) {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    .frame(width: 32, height: 32)
+                    .background(LifeTrackTheme.ColorPalette.accent.opacity(0.12), in: Circle())
+
+                Spacer()
+
+                valueLabel
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Focus")
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                if let topOption, totalMinutes > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: topOption.symbolName)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(topOption.tint)
+                        Text("Top: \(topOption.title)")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .lineLimit(1)
+                    }
+                } else {
+                    Text("Scheduled minutes completed")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 106, alignment: .leading)
+        .lifeTrackCard(padding: LifeTrackTheme.Spacing.medium, backgroundColor: LifeTrackTheme.ColorPalette.cardElevated)
+    }
+
+    @ViewBuilder
+    private var valueLabel: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if totalMinutes == 0 {
+                Text("0")
+                    .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                Text("m")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            } else if hours > 0 {
+                StatisticsCountText(
+                    value: hours,
+                    suffix: "",
+                    animationID: "\(animationID)-h",
+                    animationsEnabled: animationsEnabled
+                )
+                .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text("h")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                if minutesRemainder > 0 {
+                    StatisticsCountText(
+                        value: minutesRemainder,
+                        suffix: "",
+                        animationID: "\(animationID)-m",
+                        animationsEnabled: animationsEnabled
+                    )
+                    .font(.system(.title3, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text("m")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+            } else {
+                StatisticsCountText(
+                    value: minutesRemainder,
+                    suffix: "",
+                    animationID: "\(animationID)-m",
+                    animationsEnabled: animationsEnabled
+                )
+                .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text("m")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+        }
+    }
+}
+
+private struct CategoryMixCard: View {
+    let entries: [CategoryShareEntry]
+    let customCategories: [CustomTaskCategory]
+    let chartProgress: Double
+    let animationsEnabled: Bool
+
+    private var topEntries: [CategoryShareEntry] {
+        Array(entries.prefix(5))
+    }
+
+    private var totalCompleted: Int {
+        entries.reduce(0) { $0 + $1.completedCount }
+    }
+
+    var body: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Category Mix",
+                subtitle: "Where your completed tasks land.",
+                trailing: totalCompleted > 0 ? totalCompleted.formatted() : nil
+            )
+
+            if topEntries.isEmpty {
+                emptyState
+            } else {
+                VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+                    stackedBar
+                    legend
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private var stackedBar: some View {
+        GeometryReader { geo in
+            HStack(spacing: 2) {
+                ForEach(topEntries) { entry in
+                    let option = TaskCategoryOption.resolved(rawValue: entry.rawValue, customCategories: customCategories)
+                    let progress = animationsEnabled ? chartProgress : 1
+                    let width = max(0, geo.size.width * CGFloat(entry.percent) * progress)
+                    Rectangle()
+                        .fill(option.tint)
+                        .frame(width: width)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: 16)
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.6), lineWidth: 0.7)
+        }
+    }
+
+    private var legend: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(topEntries) { entry in
+                let option = TaskCategoryOption.resolved(rawValue: entry.rawValue, customCategories: customCategories)
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(option.tint)
+                        .frame(width: 9, height: 9)
+
+                    Text(option.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(1)
+
+                    Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                    Text("\(entry.completedCount) · \(Int((entry.percent * 100).rounded()))%")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .monospacedDigit()
+                }
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.small) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .frame(width: 26, height: 26)
+                .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Circle())
+
+            Text("Completed tasks in this range will be grouped by category here.")
+                .font(.footnote)
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct BestWeekdayCard: View {
+    let weekdayBreakdown: [WeekdayPoint]
+    let bestWeekday: WeekdayPoint?
+    let chartProgress: Double
+    let animationsEnabled: Bool
+
+    var body: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Best Day of Week",
+                subtitle: subtitle,
+                trailing: bestWeekday.map { "\($0.completedCount)" }
+            )
+
+            if bestWeekday == nil {
+                emptyState
+            } else {
+                chart
+            }
+        }
+    }
+
+    private var subtitle: String {
+        guard let bestWeekday else {
+            return "Your strongest day will emerge here."
+        }
+        let suffix = bestWeekday.completedCount == 1 ? "completion" : "completions"
+        return "\(bestWeekday.fullTitle) leads with \(bestWeekday.completedCount) \(suffix)."
+    }
+
+    private var chart: some View {
+        Chart(weekdayBreakdown) { point in
+            BarMark(
+                x: .value("Day", point.shortTitle),
+                y: .value("Completed", animatedValue(point.completedCount)),
+                width: .ratio(0.65)
+            )
+            .foregroundStyle(barStyle(for: point))
+            .cornerRadius(5)
+        }
+        .chartXScale(domain: weekdayBreakdown.map(\.shortTitle))
+        .chartXAxis {
+            AxisMarks(values: weekdayBreakdown.map(\.shortTitle)) { value in
+                AxisValueLabel {
+                    if let title = value.as(String.self) {
+                        Text(title)
+                            .font(.caption2)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    }
+                }
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) {
+                AxisGridLine()
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.7))
+                AxisValueLabel()
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+        }
+        .chartYScale(domain: 0...max(1, weekdayBreakdown.map(\.completedCount).max() ?? 1))
+        .frame(height: 170)
+        .animation(animationsEnabled ? .smooth(duration: 0.85) : nil, value: chartProgress)
+    }
+
+    private func barStyle(for point: WeekdayPoint) -> AnyShapeStyle {
+        if point.weekday == bestWeekday?.weekday {
+            return AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient)
+        }
+        return AnyShapeStyle(LifeTrackTheme.ColorPalette.accent.opacity(0.28))
+    }
+
+    private var emptyState: some View {
+        HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.small) {
+            Image(systemName: "calendar")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .frame(width: 26, height: 26)
+                .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Circle())
+
+            Text("Complete tasks across the week to discover your strongest day.")
+                .font(.footnote)
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func animatedValue(_ value: Int) -> Double {
+        animationsEnabled ? Double(value) * chartProgress : Double(value)
     }
 }
 
