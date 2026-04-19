@@ -12,6 +12,8 @@
 		5EA0B00000000000000000F1 /* SharedInboxPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E2 /* SharedInboxPayload.swift */; };
 		5EA0B00000000000000000F2 /* SharedInboxPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E2 /* SharedInboxPayload.swift */; };
 		5EA0B00000000000000000F3 /* LifeTrackShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E0 /* LifeTrackShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5EA0B00000000000000000F4 /* LifeTrackShareTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E5 /* LifeTrackShareTheme.swift */; };
+		5EA0B00000000000000000F5 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E6 /* ShareSheetView.swift */; };
 		987C15AE045B4251AA6EF384 /* LifeTrackReminderNotificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20C197A37A04E7482CE77B7 /* LifeTrackReminderNotificationView.swift */; };
 		C3BC15F4831D459D843E29EA /* LifeTrackNotificationContentExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 983DB111F429489ABB1A88C2 /* LifeTrackNotificationContentExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -71,6 +73,8 @@
 		5EA0A00000000000000000E2 /* SharedInboxPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedInboxPayload.swift; sourceTree = "<group>"; };
 		5EA0A00000000000000000E3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5EA0A00000000000000000E4 /* LifeTrackShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LifeTrackShareExtension.entitlements; sourceTree = "<group>"; };
+		5EA0A00000000000000000E5 /* LifeTrackShareTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeTrackShareTheme.swift; sourceTree = "<group>"; };
+		5EA0A00000000000000000E6 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
 		76124E7C741E4028A87AE4EF /* NotificationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationViewController.swift; sourceTree = "<group>"; };
 		983DB111F429489ABB1A88C2 /* LifeTrackNotificationContentExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LifeTrackNotificationContentExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3CBFF25FAFC42BEA7F37B8F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -150,6 +154,8 @@
 				5EA0A00000000000000000E3 /* Info.plist */,
 				5EA0A00000000000000000E4 /* LifeTrackShareExtension.entitlements */,
 				5EA0A00000000000000000E1 /* ShareViewController.swift */,
+				5EA0A00000000000000000E5 /* LifeTrackShareTheme.swift */,
+				5EA0A00000000000000000E6 /* ShareSheetView.swift */,
 				5EA0A00000000000000000E2 /* SharedInboxPayload.swift */,
 			);
 			path = LifeTrackShareExtension;
@@ -418,6 +424,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				5EA0B00000000000000000F0 /* ShareViewController.swift in Sources */,
+				5EA0B00000000000000000F4 /* LifeTrackShareTheme.swift in Sources */,
+				5EA0B00000000000000000F5 /* ShareSheetView.swift in Sources */,
 				5EA0B00000000000000000F1 /* SharedInboxPayload.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
