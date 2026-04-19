@@ -18,12 +18,15 @@ struct StatisticsView: View {
     @State private var selectedRange: StatisticsTimeRange = .days
     @State private var hasAppeared = false
     @State private var chartProgress = 1.0
+    @State private var statsSnapshot = ProductivityStatsSnapshot.empty
+    @State private var isPreparingStats = true
+    @State private var statsRefreshID = UUID()
     @State private var selectedSummaryAction: StatisticsSummaryAction?
     @State private var editingTask: LifeTask?
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
 
     private var points: [ProductivityStatPoint] {
-        ProductivityStatsBuilder.points(for: activeTasks, range: selectedRange)
+        statsSnapshot.points
     }
 
     private var activeTasks: [LifeTask] {
@@ -31,24 +34,19 @@ struct StatisticsView: View {
     }
 
     private var totalCompleted: Int {
-        points.reduce(0) { $0 + $1.completedCount }
+        statsSnapshot.totalCompleted
     }
 
     private var totalOverdue: Int {
-        points.reduce(0) { $0 + $1.overdueCount }
+        statsSnapshot.totalOverdue
     }
 
     private var bestPoint: ProductivityStatPoint? {
-        points.max { $0.completedCount < $1.completedCount }
+        statsSnapshot.bestPoint
     }
 
     private var completionRate: Int {
-        let total = totalCompleted + totalOverdue
-        guard total > 0 else {
-            return 0
-        }
-
-        return Int((Double(totalCompleted) / Double(total) * 100).rounded())
+        statsSnapshot.completionRate
     }
 
     var body: some View {
@@ -62,12 +60,18 @@ struct StatisticsView: View {
                         .statisticsEntrance(index: 0, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
                     rangeSelector
                         .statisticsEntrance(index: 1, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
-                    summarySection
-                        .statisticsEntrance(index: 2, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
-                    completedChart
-                        .statisticsEntrance(index: 3, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
-                    overdueChart
-                        .statisticsEntrance(index: 4, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
+
+                    if isPreparingStats {
+                        statisticsLoadingState
+                            .statisticsEntrance(index: 2, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
+                    } else {
+                        summarySection
+                            .statisticsEntrance(index: 2, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
+                        completedChart
+                            .statisticsEntrance(index: 3, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
+                        overdueChart
+                            .statisticsEntrance(index: 4, isVisible: hasAppeared, animationsEnabled: animationsEnabled)
+                    }
                 }
                 .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
                 .padding(.top, LifeTrackTheme.Spacing.large)
@@ -78,14 +82,16 @@ struct StatisticsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             runEntranceAnimation()
-            runChartAnimation()
+            refreshStats()
         }
         .onChange(of: selectedRange) { _, _ in
-            runChartAnimation()
+            refreshStats()
         }
         .onChange(of: animationsEnabled) { _, _ in
             runEntranceAnimation()
-            runChartAnimation()
+            if !isPreparingStats {
+                runChartAnimation()
+            }
         }
         .sheet(item: $selectedSummaryAction) { action in
             StatisticsSummaryActionSheet(
@@ -125,6 +131,31 @@ struct StatisticsView: View {
 
     private var rangeSelector: some View {
         StatisticsRangeSelector(selectedRange: $selectedRange)
+    }
+
+    private var statisticsLoadingState: some View {
+        SectionCardView {
+            HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.medium) {
+                ProgressView()
+                    .tint(LifeTrackTheme.ColorPalette.accent)
+                    .scaleEffect(1.05)
+                    .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
+                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Preparing Statistics")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text("Building the chart snapshot locally.")
+                        .font(.footnote)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 128, alignment: .center)
+        }
     }
 
     private var summarySection: some View {
@@ -222,13 +253,20 @@ struct StatisticsView: View {
                 .cornerRadius(5)
             }
             .chartXAxis {
-                AxisMarks(values: .stride(by: selectedRange.axisComponent)) { value in
+                AxisMarks(values: selectedRange.axisDates(for: points)) { value in
                     AxisGridLine()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
                     AxisTick()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.hairline)
-                    AxisValueLabel(format: selectedRange.axisFormat)
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(selectedRange.axisLabel(for: date))
+                                .font(.caption2)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        }
+                    }
                 }
             }
             .chartYAxis {
@@ -291,13 +329,20 @@ struct StatisticsView: View {
                 .symbolSize(point.overdueCount == 0 ? 0 : 38 * chartProgress)
             }
             .chartXAxis {
-                AxisMarks(values: .stride(by: selectedRange.axisComponent)) { value in
+                AxisMarks(values: selectedRange.axisDates(for: points)) { value in
                     AxisGridLine()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
                     AxisTick()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.hairline)
-                    AxisValueLabel(format: selectedRange.axisFormat)
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(selectedRange.axisLabel(for: date))
+                                .font(.caption2)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        }
+                    }
                 }
             }
             .chartYAxis {
@@ -418,12 +463,14 @@ struct StatisticsView: View {
                 customCategories: customCategories
             )
         }
+        refreshStats(showLoader: false)
     }
 
     private func delete(_ task: LifeTask) {
         performWithOptionalAnimation {
             TaskLifecycleManager.delete(task, in: modelContext)
         }
+        refreshStats(showLoader: false)
     }
 
     private func openTaskFromSummaryAction(_ task: LifeTask) {
@@ -445,6 +492,48 @@ struct StatisticsView: View {
 
         withAnimation(.snappy) {
             updates()
+        }
+    }
+
+    private func refreshStats(showLoader: Bool = true) {
+        let refreshID = UUID()
+        statsRefreshID = refreshID
+
+        let taskSnapshots = tasks.map(StatisticsTaskSnapshot.init(task:))
+        let range = selectedRange
+
+        if showLoader {
+            if animationsEnabled {
+                withAnimation(.snappy(duration: 0.18)) {
+                    isPreparingStats = true
+                }
+            } else {
+                isPreparingStats = true
+            }
+        }
+
+        chartProgress = 0
+
+        Task.detached(priority: .userInitiated) {
+            let snapshot = ProductivityStatsBuilder.snapshot(for: taskSnapshots, range: range)
+
+            await MainActor.run {
+                guard statsRefreshID == refreshID else {
+                    return
+                }
+
+                statsSnapshot = snapshot
+
+                if animationsEnabled {
+                    withAnimation(.snappy(duration: 0.22)) {
+                        isPreparingStats = false
+                    }
+                } else {
+                    isPreparingStats = false
+                }
+
+                runChartAnimation()
+            }
         }
     }
 
@@ -477,7 +566,7 @@ struct StatisticsView: View {
     }
 }
 
-private enum StatisticsTimeRange: String, CaseIterable, Identifiable {
+private enum StatisticsTimeRange: String, CaseIterable, Identifiable, Sendable {
     case days
     case weeks
     case months
@@ -524,33 +613,85 @@ private enum StatisticsTimeRange: String, CaseIterable, Identifiable {
         }
     }
 
-    var axisComponent: Calendar.Component {
+    func axisDates(for points: [ProductivityStatPoint]) -> [Date] {
+        let dates = points.map(\.date)
+
         switch self {
-        case .days: .day
-        case .weeks: .weekOfYear
-        case .months: .month
+        case .days:
+            return dates.atReadableAxisIndexes([0, 3, 6, 9, 13])
+        case .weeks:
+            return dates.atReadableAxisIndexes([0, 2, 4, 6, 7])
+        case .months:
+            return dates
         }
     }
 
-    var axisFormat: Date.FormatStyle {
+    func axisLabel(for date: Date) -> String {
         switch self {
-        case .days:
-            return Date.FormatStyle().month(.abbreviated).day()
-        case .weeks:
-            return Date.FormatStyle().month(.abbreviated).day()
+        case .days, .weeks:
+            return date.formatted(Date.FormatStyle().day().month(.abbreviated))
         case .months:
-            return Date.FormatStyle().month(.abbreviated)
+            return date.formatted(Date.FormatStyle().month(.abbreviated))
         }
     }
 }
 
-private struct ProductivityStatPoint: Identifiable {
-    let id = UUID()
+private extension Array where Element == Date {
+    func atReadableAxisIndexes(_ indexes: [Int]) -> [Date] {
+        indexes.compactMap { index in
+            guard indices.contains(index) else {
+                return nil
+            }
+
+            return self[index]
+        }
+    }
+}
+
+private struct ProductivityStatPoint: Identifiable, Sendable {
+    var id: Date { date }
+
     let date: Date
     let endDate: Date
     let label: String
     let completedCount: Int
     let overdueCount: Int
+}
+
+private struct ProductivityStatsSnapshot: Sendable {
+    let points: [ProductivityStatPoint]
+    let totalCompleted: Int
+    let totalOverdue: Int
+    let bestPoint: ProductivityStatPoint?
+    let completionRate: Int
+
+    static let empty = ProductivityStatsSnapshot(
+        points: [],
+        totalCompleted: 0,
+        totalOverdue: 0,
+        bestPoint: nil,
+        completionRate: 0
+    )
+}
+
+private struct StatisticsTaskSnapshot: Sendable {
+    let id: UUID
+    let dueDate: Date
+    let updatedAt: Date
+    let isCompleted: Bool
+    let isDeleted: Bool
+
+    init(task: LifeTask) {
+        id = task.id
+        dueDate = task.dueDate
+        updatedAt = task.updatedAt
+        isCompleted = task.isCompleted
+        isDeleted = task.isDeleted
+    }
+
+    func isOverdue(at date: Date) -> Bool {
+        !isDeleted && !isCompleted && dueDate < date
+    }
 }
 
 private enum StatisticsSummaryAction: String, Identifiable {
@@ -1040,7 +1181,34 @@ private struct StatisticsSummaryEmptyView: View {
 }
 
 private enum ProductivityStatsBuilder {
-    static func points(for tasks: [LifeTask], range: StatisticsTimeRange, calendar: Calendar = .current) -> [ProductivityStatPoint] {
+    static func snapshot(
+        for tasks: [StatisticsTaskSnapshot],
+        range: StatisticsTimeRange,
+        calendar: Calendar = .current
+    ) -> ProductivityStatsSnapshot {
+        let points = points(for: tasks, range: range, calendar: calendar)
+        let totalCompleted = points.reduce(0) { $0 + $1.completedCount }
+        let totalOverdue = points.reduce(0) { $0 + $1.overdueCount }
+        let bestPoint = points.max { $0.completedCount < $1.completedCount }
+        let comparedTotal = totalCompleted + totalOverdue
+        let completionRate = comparedTotal > 0
+            ? Int((Double(totalCompleted) / Double(comparedTotal) * 100).rounded())
+            : 0
+
+        return ProductivityStatsSnapshot(
+            points: points,
+            totalCompleted: totalCompleted,
+            totalOverdue: totalOverdue,
+            bestPoint: bestPoint,
+            completionRate: completionRate
+        )
+    }
+
+    private static func points(
+        for tasks: [StatisticsTaskSnapshot],
+        range: StatisticsTimeRange,
+        calendar: Calendar = .current
+    ) -> [ProductivityStatPoint] {
         let now = Date()
         let currentBucketStart = bucketStart(for: now, range: range, calendar: calendar)
         let firstBucketStart = calendar.date(
@@ -1048,6 +1216,7 @@ private enum ProductivityStatsBuilder {
             value: -(range.bucketCount - 1),
             to: currentBucketStart
         ) ?? currentBucketStart
+        let activeTasks = tasks.filter { !$0.isDeleted }
 
         return (0..<range.bucketCount).compactMap { offset in
             guard
@@ -1057,12 +1226,12 @@ private enum ProductivityStatsBuilder {
                 return nil
             }
 
-            let completedCount = tasks.filter { task in
+            let completedCount = activeTasks.filter { task in
                 task.isCompleted && task.updatedAt >= bucketStart && task.updatedAt < bucketEnd
             }.count
 
-            let overdueCount = tasks.filter { task in
-                task.isOverdue && task.dueDate >= bucketStart && task.dueDate < bucketEnd
+            let overdueCount = activeTasks.filter { task in
+                task.isOverdue(at: now) && task.dueDate >= bucketStart && task.dueDate < bucketEnd
             }.count
 
             return ProductivityStatPoint(

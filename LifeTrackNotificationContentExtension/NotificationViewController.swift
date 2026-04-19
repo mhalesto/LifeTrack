@@ -11,11 +11,13 @@ import UserNotifications
 import UserNotificationsUI
 
 final class NotificationViewController: UIViewController, UNNotificationContentExtension {
+    private let compactContentHeight: CGFloat = 224
     private var hostingController: UIHostingController<LifeTrackReminderNotificationView>?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
+        preferredContentSize = CGSize(width: view.bounds.width, height: compactContentHeight)
 
         let hostingController = UIHostingController(
             rootView: LifeTrackReminderNotificationView(
@@ -38,10 +40,14 @@ final class NotificationViewController: UIViewController, UNNotificationContentE
         self.hostingController = hostingController
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        preferredContentSize = CGSize(width: view.bounds.width, height: compactContentHeight)
+    }
+
     func didReceive(_ notification: UNNotification) {
         let model = LifeTrackReminderNotificationModel(content: notification.request.content)
         hostingController?.rootView = LifeTrackReminderNotificationView(model: model)
-        preferredContentSize = CGSize(width: view.bounds.width, height: 270)
+        preferredContentSize = CGSize(width: view.bounds.width, height: compactContentHeight)
     }
 }
-

@@ -30,7 +30,7 @@ struct HomeView: View {
     @State private var dashboardMessageSeed = Int.random(in: 0...1_000_000)
     @State private var dashboardMessageSignal: DashboardMessageSignal?
     @State private var hasHandledInitialActivePhase = false
-    @State private var hasSyncedRemindersForSession = false
+    @State private var hasQueuedStartupMaintenance = false
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
@@ -193,8 +193,7 @@ struct HomeView: View {
         }
         .tint(selectedTheme.accent)
         .onAppear {
-            purgeExpiredBinItems()
-            synchronizeUpcomingRemindersIfNeeded()
+            queueStartupMaintenanceIfNeeded()
             if scenePhase == .active {
                 hasHandledInitialActivePhase = true
             }
@@ -1176,18 +1175,20 @@ struct HomeView: View {
         }
     }
 
-    private func syncReminder(for task: LifeTask) {
-        TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
-    }
-
-    private func synchronizeUpcomingRemindersIfNeeded() {
-        guard !hasSyncedRemindersForSession else {
+    private func queueStartupMaintenanceIfNeeded() {
+        guard !hasQueuedStartupMaintenance else {
             return
         }
 
-        hasSyncedRemindersForSession = true
-        for task in activeTasks where !task.isCompleted {
-            TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        hasQueuedStartupMaintenance = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            purgeExpiredBinItems()
         }
     }
 

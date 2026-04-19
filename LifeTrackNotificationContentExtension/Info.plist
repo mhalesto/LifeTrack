@@ -27,9 +27,9 @@
 			<key>UNNotificationExtensionCategory</key>
 			<string>LIFETRACK_TASK_REMINDER</string>
 			<key>UNNotificationExtensionDefaultContentHidden</key>
-			<true/>
+			<false/>
 			<key>UNNotificationExtensionInitialContentSizeRatio</key>
-			<real>0.72</real>
+			<real>0.42</real>
 			<key>UNNotificationExtensionUserInteractionEnabled</key>
 			<true/>
 		</dict>

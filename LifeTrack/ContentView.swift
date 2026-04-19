@@ -7,26 +7,69 @@
 
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
-    @State private var isShowingSplash = true
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var isShowingLaunchSplash = true
 
     var body: some View {
         ZStack {
-            HomeView()
+            LifeTrackTheme.appBackground
+                .ignoresSafeArea()
 
-            if isShowingSplash {
+            if !isShowingLaunchSplash {
+                HomeView()
+                    .transition(.opacity)
+            }
+
+            if isShowingLaunchSplash {
                 SplashScreenView()
-                    .transition(.opacity.combined(with: .scale(scale: 1.02)))
-                    .zIndex(1)
+                    .transition(.opacity)
+                    .zIndex(2)
             }
         }
         .task {
-            try? await Task.sleep(nanoseconds: 1_650_000_000)
-            withAnimation(.easeInOut(duration: 0.42)) {
-                isShowingSplash = false
+            await completeInitialSplash()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            handleScenePhaseChange(phase)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            coverAppSnapshot()
+        }
+    }
+
+    private func completeInitialSplash() async {
+        try? await Task.sleep(nanoseconds: 950_000_000)
+
+        guard !Task.isCancelled else {
+            return
+        }
+
+        await MainActor.run {
+            withAnimation(.easeOut(duration: 0.18)) {
+                isShowingLaunchSplash = false
             }
         }
+    }
+
+    private func handleScenePhaseChange(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            guard !isShowingLaunchSplash else { return }
+            AppSnapshotCover.hide(animated: true)
+        case .inactive, .background:
+            coverAppSnapshot()
+        @unknown default:
+            break
+        }
+    }
+
+    private func coverAppSnapshot() {
+        guard !isShowingLaunchSplash else { return }
+        AppSnapshotCover.show()
     }
 }
 

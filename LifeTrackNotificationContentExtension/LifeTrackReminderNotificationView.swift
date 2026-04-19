@@ -123,15 +123,17 @@ struct LifeTrackReminderNotificationView: View {
 
                 actionStrip
             }
-            .padding(16)
+            .padding(14)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(theme.hairline.opacity(0.9), lineWidth: 0.8)
         }
-        .shadow(color: theme.shadow, radius: 18, x: 0, y: 10)
-        .padding(3)
+        .shadow(color: theme.shadow, radius: 10, x: 0, y: 5)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
     }
 
     private var header: some View {
@@ -139,14 +141,14 @@ struct LifeTrackReminderNotificationView: View {
             ZStack {
                 Circle()
                     .fill(theme.accentSoft)
-                    .frame(width: 52, height: 52)
+                    .frame(width: 46, height: 46)
 
                 Circle()
                     .stroke(theme.accent.opacity(0.20), lineWidth: 8)
-                    .frame(width: 38, height: 38)
+                    .frame(width: 34, height: 34)
 
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 23, weight: .semibold))
+                    .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(theme.accent)
             }
 
@@ -163,10 +165,10 @@ struct LifeTrackReminderNotificationView: View {
             Spacer(minLength: 8)
 
             Text(model.dueTimeText)
-                .font(.system(.subheadline, design: theme.fontDesign, weight: .bold))
+                .font(.system(.caption, design: theme.fontDesign, weight: .bold))
                 .foregroundStyle(theme.accent)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
                 .background(theme.accentSoft, in: Capsule())
         }
     }
@@ -198,7 +200,7 @@ struct LifeTrackReminderNotificationView: View {
         }
         .foregroundStyle(tint)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 9)
+        .padding(.vertical, 8)
         .padding(.horizontal, 8)
         .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
@@ -364,6 +366,5 @@ private extension Color {
             theme: .dreamy
         )
     )
-    .frame(width: 350, height: 270)
+    .frame(width: 350, height: 224)
 }
-
