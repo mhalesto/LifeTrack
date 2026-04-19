@@ -21,7 +21,8 @@ struct SettingsView: View {
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
     @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength = 1.0
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
-    @AppStorage(LifeTrackSettings.Keys.isProEnabled) private var isProEnabled = false
+    @EnvironmentObject private var subscriptionManager: SubscriptionManager
+    @State private var isShowingPaywall = false
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarImage: UIImage?
@@ -277,49 +278,65 @@ struct SettingsView: View {
 
     private var proCard: some View {
         SectionCardView {
-            SectionHeaderView(title: "Pro Plan", subtitle: "Unlock advanced productivity features.")
+            SectionHeaderView(title: "Subscription", subtitle: "Manage your LifeTrack plan.")
 
             VStack(spacing: LifeTrackTheme.Spacing.medium) {
                 HStack(spacing: LifeTrackTheme.Spacing.medium) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color(red: 0.98, green: 0.82, blue: 0.25).opacity(0.18))
+                            .fill(subscriptionManager.tier.accentColor.opacity(0.18))
                             .frame(width: 40, height: 40)
-                        Image(systemName: "star.fill")
+                        Image(systemName: subscriptionManager.tier == .free ? "lock.fill" : "checkmark.seal.fill")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.1))
+                            .foregroundStyle(subscriptionManager.tier.accentColor)
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Pro Features")
+                        Text("\(subscriptionManager.tier.displayName) Plan")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                        Text("Daily Planning Ritual, Habit Tracking & more")
+                        Text(subscriptionManager.tier.tagline)
                             .font(.caption)
                             .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     }
 
                     Spacer()
 
-                    Toggle("", isOn: $isProEnabled)
-                        .labelsHidden()
-                        .tint(Color(red: 0.95, green: 0.75, blue: 0.1))
+                    if subscriptionManager.tier == .free {
+                        Button("Upgrade") {
+                            isShowingPaywall = true
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
+                    }
                 }
 
-                if isProEnabled {
+                if subscriptionManager.tier > .free {
                     Divider()
 
                     VStack(alignment: .leading, spacing: 8) {
-                        ProFeatureRow(symbol: "sunrise.fill", label: "Daily Planning Ritual", color: Color(red: 0.95, green: 0.55, blue: 0.1))
-                        ProFeatureRow(symbol: "flame.fill", label: "Habit Streaks", color: Color(red: 0.95, green: 0.3, blue: 0.2))
-                        ProFeatureRow(symbol: "location.fill", label: "Location Reminders", color: Color(red: 0.3, green: 0.6, blue: 0.95))
-                        ProFeatureRow(symbol: "heart.fill", label: "HealthKit Energy Scheduling", color: Color(red: 0.9, green: 0.25, blue: 0.45))
-                        ProFeatureRow(symbol: "trophy.fill", label: "Weekly Review Mode", color: Color(red: 0.35, green: 0.75, blue: 0.4))
+                        ForEach(subscriptionManager.tier.features) { feature in
+                            ProFeatureRow(symbol: feature.icon, label: feature.title, color: feature.color)
+                        }
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
+
+                    Button("Manage or Upgrade") {
+                        isShowingPaywall = true
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    .frame(maxWidth: .infinity)
                 }
             }
-            .animation(.snappy(duration: 0.28), value: isProEnabled)
+            .animation(.snappy(duration: 0.28), value: subscriptionManager.tier)
+        }
+        .sheet(isPresented: $isShowingPaywall) {
+            PaywallView()
+                .environmentObject(subscriptionManager)
         }
     }
 

@@ -12,6 +12,7 @@ import UserNotifications
 @main
 struct LifeTrackApp: App {
     private let sharedModelContainer: ModelContainer
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
 
     init() {
         sharedModelContainer = LifeTrackDataStore.sharedModelContainer
@@ -22,6 +23,7 @@ struct LifeTrackApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(subscriptionManager)
         }
         .modelContainer(sharedModelContainer)
     }

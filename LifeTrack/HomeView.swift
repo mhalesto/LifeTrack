@@ -42,7 +42,8 @@ struct HomeView: View {
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.lastDashboardMessageText) private var lastDashboardMessageText = ""
-    @AppStorage(LifeTrackSettings.Keys.isProEnabled) private var isProEnabled = false
+    @EnvironmentObject private var subscriptionManager: SubscriptionManager
+    @State private var isShowingPaywall = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -226,6 +227,10 @@ struct HomeView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $isShowingPaywall) {
+                PaywallView()
+                    .environmentObject(subscriptionManager)
+            }
             .sheet(isPresented: $isShowingDailyRitual) {
                 DailyPlanningRitualView(
                     tasks: activeTasks,
@@ -400,7 +405,7 @@ struct HomeView: View {
 
             ScrollView(.horizontal) {
                 HStack(spacing: LifeTrackTheme.Spacing.medium) {
-                    if isProEnabled {
+                    if subscriptionManager.tier >= .standard {
                         QuickActionButton(
                             title: "Plan My Day",
                             subtitle: "Daily ritual",
@@ -1051,7 +1056,7 @@ struct HomeView: View {
     private func toggleCompletionWithStreak(for task: LifeTask) {
         let wasCompleted = task.isCompleted
         toggleCompletion(for: task)
-        if !wasCompleted && task.isHabit && isProEnabled {
+        if !wasCompleted && task.isHabit && subscriptionManager.tier >= .standard {
             let streak = HabitEngine.currentStreak(for: task, in: tasks.filter { !$0.isDeleted })
             if streak > 0 {
                 withAnimation(.snappy) {
