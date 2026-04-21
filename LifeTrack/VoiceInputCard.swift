@@ -13,9 +13,32 @@ struct VoiceInputCard: View {
     let audioLevel: CGFloat
     let feedbackMessage: String
     let authorizationMessage: String?
+    let isEnhancing: Bool
     let onToggleRecording: () -> Void
     let onApplyTranscript: () -> Void
     let onClearTranscript: () -> Void
+
+    init(
+        transcript: Binding<String>,
+        isRecording: Bool,
+        audioLevel: CGFloat,
+        feedbackMessage: String,
+        authorizationMessage: String?,
+        isEnhancing: Bool = false,
+        onToggleRecording: @escaping () -> Void,
+        onApplyTranscript: @escaping () -> Void,
+        onClearTranscript: @escaping () -> Void
+    ) {
+        self._transcript = transcript
+        self.isRecording = isRecording
+        self.audioLevel = audioLevel
+        self.feedbackMessage = feedbackMessage
+        self.authorizationMessage = authorizationMessage
+        self.isEnhancing = isEnhancing
+        self.onToggleRecording = onToggleRecording
+        self.onApplyTranscript = onApplyTranscript
+        self.onClearTranscript = onClearTranscript
+    }
 
     var body: some View {
         SectionCardView {
@@ -78,6 +101,22 @@ struct VoiceInputCard: View {
                     RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
                         .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8)
                 }
+            }
+
+            if isEnhancing {
+                HStack(spacing: 7) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .tint(Color(red: 0.95, green: 0.72, blue: 0.1))
+                    Text("Enhancing with AI…")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color(red: 0.95, green: 0.72, blue: 0.1))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(red: 0.95, green: 0.72, blue: 0.1).opacity(0.1), in: Capsule())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .leading)))
             }
 
             if let authorizationMessage {

@@ -607,6 +607,13 @@ private struct SummaryStep: View {
     let renderedCard: UIImage?
     let onFinish: () -> Void
 
+    @State private var aiNarrative: String?
+    @State private var loadingNarrative = false
+
+    private var hasAIAccess: Bool {
+        SubscriptionManager.shared.tier == .ultimate && ClaudeAPIClient.shared.isConfigured
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             weeklyStepHeader(
@@ -622,6 +629,11 @@ private struct SummaryStep: View {
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                         .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
                         .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+
+                    if hasAIAccess {
+                        aiNarrativeCard
+                            .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+                    }
 
                     if let image = renderedCard {
                         ShareLink(
@@ -644,6 +656,55 @@ private struct SummaryStep: View {
 
             weeklyActionButton(title: "Start the Week!", icon: "sunrise.fill", action: onFinish)
         }
+        .task {
+            guard hasAIAccess, aiNarrative == nil else { return }
+            loadingNarrative = true
+            aiNarrative = await WeeklyDigestService.shared.narrative(
+                weekStart: summary.weekStart,
+                weekEnd: summary.weekEnd,
+                completed: summary.completedCount,
+                rescheduled: summary.rescheduledCount,
+                newIdeas: summary.newIdeasCount,
+                nextWeekCount: summary.nextWeekCount,
+                topCategoryName: summary.topCategoryName,
+                longestStreak: summary.longestStreakThisWeek
+            )
+            loadingNarrative = false
+        }
+    }
+
+    private var aiNarrativeCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.95, green: 0.72, blue: 0.1))
+                Text("AI recap")
+                    .font(.caption.weight(.heavy))
+                    .tracking(1.2)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+            if let aiNarrative {
+                Text(aiNarrative)
+                    .font(.subheadline)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if loadingNarrative {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading your week…")
+                        .font(.subheadline)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+            } else {
+                Text("Unavailable right now.")
+                    .font(.subheadline)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+        }
+        .padding(LifeTrackTheme.Spacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LifeTrackTheme.ColorPalette.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

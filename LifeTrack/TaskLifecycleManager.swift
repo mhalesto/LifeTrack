@@ -11,11 +11,15 @@ import SwiftData
 
 @MainActor
 enum TaskLifecycleManager {
-    static func toggleCompletion(
-        for task: LifeTask,
-        in modelContext: ModelContext,
-        customCategories: [CustomTaskCategory]
-    ) {
+    struct PendingToggle {
+        let task: LifeTask
+        let wasCompleted: Bool
+        let now: Date
+    }
+
+    /// Flips the in-memory completion state only. Safe to call inside
+    /// `withAnimation` — no reminders, CoreLocation, or save happen here.
+    static func beginToggleCompletion(for task: LifeTask) -> PendingToggle {
         let wasCompleted = task.isCompleted
         let now = Date()
 
@@ -24,16 +28,33 @@ enum TaskLifecycleManager {
 
         if wasCompleted {
             task.completedAt = nil
-            synchronizeReminder(for: task, customCategories: customCategories)
         } else {
             task.completedAt = now
             if task.isHabit && task.habitGroupID == nil {
                 task.habitGroupID = task.id
             }
+        }
+
+        return PendingToggle(task: task, wasCompleted: wasCompleted, now: now)
+    }
+
+    /// Runs the side effects (reminders, location regions, next recurring
+    /// task, save). Kept off the animation transaction so the tick/fade
+    /// commits immediately.
+    static func finishToggleCompletion(
+        _ pending: PendingToggle,
+        in modelContext: ModelContext,
+        customCategories: [CustomTaskCategory]
+    ) {
+        let task = pending.task
+
+        if pending.wasCompleted {
+            synchronizeReminder(for: task, customCategories: customCategories)
+        } else {
             ReminderScheduler.cancel(taskID: task.id)
             LocationReminderManager.shared.cancelRegion(for: task.id)
 
-            if let nextTask = task.nextRecurringTask(completedAt: now) {
+            if let nextTask = task.nextRecurringTask(completedAt: pending.now) {
                 modelContext.insert(nextTask)
                 synchronizeReminder(for: nextTask, customCategories: customCategories)
                 if nextTask.hasLocationReminder {
@@ -43,6 +64,15 @@ enum TaskLifecycleManager {
         }
 
         try? modelContext.save()
+    }
+
+    static func toggleCompletion(
+        for task: LifeTask,
+        in modelContext: ModelContext,
+        customCategories: [CustomTaskCategory]
+    ) {
+        let pending = beginToggleCompletion(for: task)
+        finishToggleCompletion(pending, in: modelContext, customCategories: customCategories)
     }
 
     @discardableResult
@@ -82,6 +112,37 @@ enum TaskLifecycleManager {
         ReminderScheduler.cancel(taskID: task.id)
         DocumentStore.delete(storageName: task.documentStorageName)
         modelContext.delete(task)
+        try? modelContext.save()
+    }
+
+    static func archiveOldCompletedTasks(
+        from tasks: [LifeTask],
+        in modelContext: ModelContext,
+        archivePeriod: CompletedArchivePeriod? = nil
+    ) {
+        let archivePeriod = archivePeriod ?? .current
+        guard archivePeriod.ageLimit != nil else {
+            return
+        }
+
+        let now = Date()
+        let candidates = tasks.filter { task in
+            guard task.isCompleted, task.deletedAt == nil, let completedAt = task.completedAt else {
+                return false
+            }
+            return archivePeriod.shouldArchive(completedAt: completedAt, referenceDate: now)
+        }
+
+        guard !candidates.isEmpty else {
+            return
+        }
+
+        for task in candidates {
+            ReminderScheduler.cancel(taskID: task.id)
+            task.deletedAt = now
+            task.updatedAt = now
+        }
+
         try? modelContext.save()
     }
 

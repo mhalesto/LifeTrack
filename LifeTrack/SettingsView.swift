@@ -21,6 +21,7 @@ struct SettingsView: View {
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
     @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength = 1.0
     @AppStorage(LifeTrackSettings.Keys.binRetentionPeriod) private var binRetentionRawValue = TaskBinRetentionPeriod.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.completedArchivePeriod) private var completedArchiveRawValue = CompletedArchivePeriod.fallback.rawValue
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
     @State private var isShowingPaywall = false
     @AppStorage(LifeTrackSettings.Keys.claudeAPIKey) private var claudeAPIKey = ""
@@ -41,14 +42,15 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
                         header
+                        profileCard
                         proCard
                         if subscriptionManager.tier >= .ultimate {
                             aiCard
                         }
-                        profileCard
                         themeCard
                         motionCard
                         taskDataCard
+                        archiveCard
                         binCard
                     }
                     .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
@@ -78,9 +80,15 @@ struct SettingsView: View {
             .onChange(of: selectedPhotoItem) { _, newItem in
                 importAvatar(from: newItem)
             }
-            .onAppear(perform: purgeExpiredBinItems)
+            .onAppear {
+                purgeExpiredBinItems()
+                archiveOldCompletedTasks()
+            }
             .onChange(of: binRetentionRawValue) { _, _ in
                 purgeExpiredBinItems()
+            }
+            .onChange(of: completedArchiveRawValue) { _, _ in
+                archiveOldCompletedTasks()
             }
             .sheet(isPresented: isShowingAvatarCropper) {
                 if let pendingAvatarImage {
@@ -100,21 +108,39 @@ struct SettingsView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
             Text("Settings")
                 .font(.lifeTrackHero)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-            Text("Personalize how LifeTrack greets you and feels day to day.")
-                .font(.subheadline)
-                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
+            InfoTipButton(message: "Personalize how LifeTrack greets you and feels day to day.")
+
+            Spacer(minLength: 0)
         }
     }
 
     private var profileCard: some View {
         SectionCardView {
-            SectionHeaderView(title: "Profile", subtitle: "Name and avatar.")
+            HStack(alignment: .top) {
+                SectionHeaderView(title: "Profile", subtitle: "Name and avatar.")
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+                Button {
+                    isShowingPaywall = true
+                } label: {
+                    let isFree = subscriptionManager.tier == .free
+                    Text(isFree ? "Upgrade" : "Manage")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(isFree ? Color.white : LifeTrackTheme.ColorPalette.accent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            isFree ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.accentSoft,
+                            in: Capsule()
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(subscriptionManager.tier == .free ? "Upgrade subscription" : "Manage subscription")
+            }
 
             HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.large) {
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
@@ -284,7 +310,7 @@ struct SettingsView: View {
         SectionCardView {
             SectionHeaderView(title: "Subscription", subtitle: "Manage your LifeTrack plan.")
 
-            VStack(spacing: LifeTrackTheme.Spacing.medium) {
+            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
                 HStack(spacing: LifeTrackTheme.Spacing.medium) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -304,36 +330,33 @@ struct SettingsView: View {
                             .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     }
 
-                    Spacer()
+                    Spacer(minLength: LifeTrackTheme.Spacing.small)
 
-                    if subscriptionManager.tier == .free {
-                        Button("Upgrade") {
-                            isShowingPaywall = true
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
+                    Button(subscriptionManager.tier == .free ? "Upgrade" : "Manage") {
+                        isShowingPaywall = true
                     }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(subscriptionManager.tier == .free ? Color.white : LifeTrackTheme.ColorPalette.accent)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(
+                        subscriptionManager.tier == .free
+                            ? LifeTrackTheme.ColorPalette.accent
+                            : LifeTrackTheme.ColorPalette.accentSoft,
+                        in: Capsule()
+                    )
                 }
 
                 if subscriptionManager.tier > .free {
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         ForEach(subscriptionManager.tier.features) { feature in
                             ProFeatureRow(symbol: feature.icon, label: feature.title, color: feature.color)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .transition(.opacity.combined(with: .move(edge: .top)))
-
-                    Button("Manage or Upgrade") {
-                        isShowingPaywall = true
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                    .frame(maxWidth: .infinity)
                 }
             }
             .animation(.snappy(duration: 0.28), value: subscriptionManager.tier)
@@ -386,6 +409,68 @@ struct SettingsView: View {
                             .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     }
                     .font(.caption)
+                }
+            }
+        }
+    }
+
+    private var archiveCard: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Archive",
+                subtitle: "Move old completed tasks out of the dashboard to keep things fast."
+            )
+
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: "archivebox")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    .frame(width: 42, height: 42)
+                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(completedCount == 1 ? "1 completed task" : "\(completedCount) completed tasks")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(completedArchivePeriod == .off ? "No tasks will be archived automatically." : "Completed tasks move to Bin after \(completedArchivePeriod.title.lowercased()).")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+            }
+            .padding(12)
+            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Archive completed tasks older than")
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 96), spacing: 8, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(CompletedArchivePeriod.allCases) { period in
+                        Button {
+                            withAnimation(.snappy) {
+                                completedArchiveRawValue = period.rawValue
+                            }
+                        } label: {
+                            CompletedArchiveChip(
+                                period: period,
+                                isSelected: completedArchivePeriod == period
+                            )
+                        }
+                        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.92))
+                    }
                 }
             }
         }
@@ -472,44 +557,62 @@ struct SettingsView: View {
                 subtitle: "Import and export backups or spreadsheet-ready task lists."
             )
 
-            HStack(spacing: LifeTrackTheme.Spacing.medium) {
-                Image(systemName: "tray.and.arrow.down.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                    .frame(width: 42, height: 42)
-                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+            taskDataRow(
+                symbol: "tray.and.arrow.down.fill",
+                title: "JSON, CSV, and TSV",
+                subtitle: "Import, export, and share task lists.",
+                destination: TaskDataExchangeView()
+            )
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("JSON, CSV, and TSV")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+            if subscriptionManager.tier >= .ultimate {
+                Divider()
 
-                    Text("Includes title, due date, category label, status, priority, recurrence, duration, and notes.")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: LifeTrackTheme.Spacing.small)
-
-                NavigationLink {
-                    TaskDataExchangeView()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
-                        .frame(width: 32, height: 32)
-                        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: Circle())
-                }
-                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
-                .accessibilityLabel("Open Task Data")
+                taskDataRow(
+                    symbol: "icloud.fill",
+                    title: "iCloud Backup & Export",
+                    subtitle: "Full backup with restore. Save to iCloud Drive.",
+                    destination: CloudBackupView()
+                )
             }
-            .padding(12)
-            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
-                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+        }
+    }
+
+    private func taskDataRow<D: View>(symbol: String, title: String, subtitle: String, destination: D) -> some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                .frame(width: 42, height: 42)
+                .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                Text(subtitle)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            NavigationLink {
+                destination
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                    .frame(width: 32, height: 32)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: Circle())
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
     }
 
@@ -521,8 +624,16 @@ struct SettingsView: View {
         TaskBinRetentionPeriod(rawValue: binRetentionRawValue) ?? .fallback
     }
 
+    private var completedArchivePeriod: CompletedArchivePeriod {
+        CompletedArchivePeriod(rawValue: completedArchiveRawValue) ?? .fallback
+    }
+
     private var binCount: Int {
         tasks.filter(\.isDeleted).count
+    }
+
+    private var completedCount: Int {
+        tasks.filter { $0.isCompleted && !$0.isDeleted }.count
     }
 
     private var cleanedNickname: String {
@@ -601,6 +712,14 @@ struct SettingsView: View {
         )
     }
 
+    private func archiveOldCompletedTasks() {
+        TaskLifecycleManager.archiveOldCompletedTasks(
+            from: tasks,
+            in: modelContext,
+            archivePeriod: completedArchivePeriod
+        )
+    }
+
     private func dismissKeyboardIfNeeded(for tapLocation: CGPoint) {
         guard focusedField != nil else {
             return
@@ -627,6 +746,37 @@ private struct NicknameInputFramePreferenceKey: PreferenceKey {
 
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
         value = nextValue()
+    }
+}
+
+private struct CompletedArchiveChip: View {
+    let period: CompletedArchivePeriod
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(period.title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(isSelected ? .white : LifeTrackTheme.ColorPalette.primaryText)
+                .lineLimit(1)
+
+            Text(period.subtitle)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(isSelected ? Color.white.opacity(0.82) : LifeTrackTheme.ColorPalette.secondaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.88)
+        }
+        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(
+            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82)),
+            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(isSelected ? Color.white.opacity(0.24) : LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+        }
     }
 }
 

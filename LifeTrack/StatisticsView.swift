@@ -1258,7 +1258,7 @@ private struct StatisticsSummaryEmptyView: View {
 }
 
 private enum ProductivityStatsBuilder {
-    static func snapshot(
+    nonisolated static func snapshot(
         for tasks: [StatisticsTaskSnapshot],
         range: StatisticsTimeRange,
         calendar: Calendar
@@ -1297,7 +1297,7 @@ private enum ProductivityStatsBuilder {
         )
     }
 
-    private static func rangeInterval(for range: StatisticsTimeRange, calendar: Calendar) -> DateInterval {
+    nonisolated private static func rangeInterval(for range: StatisticsTimeRange, calendar: Calendar) -> DateInterval {
         let now = Date()
         let currentBucketStart = bucketStart(for: now, range: range, calendar: calendar)
         let firstBucketStart = calendar.date(
@@ -1309,7 +1309,7 @@ private enum ProductivityStatsBuilder {
         return DateInterval(start: firstBucketStart, end: end)
     }
 
-    private static func streaks(for tasks: [StatisticsTaskSnapshot], calendar: Calendar) -> (current: Int, best: Int) {
+    nonisolated private static func streaks(for tasks: [StatisticsTaskSnapshot], calendar: Calendar) -> (current: Int, best: Int) {
         let completionDays = Set(
             tasks
                 .filter { $0.isCompleted }
@@ -1356,7 +1356,7 @@ private enum ProductivityStatsBuilder {
         return (current, max(best, current))
     }
 
-    private static func weekdayBreakdown(
+    nonisolated private static func weekdayBreakdown(
         for tasks: [StatisticsTaskSnapshot],
         interval: DateInterval,
         calendar: Calendar
@@ -1380,7 +1380,7 @@ private enum ProductivityStatsBuilder {
         }
     }
 
-    private static func focusStats(
+    nonisolated private static func focusStats(
         for tasks: [StatisticsTaskSnapshot],
         interval: DateInterval
     ) -> (totalMinutes: Int, byCategory: [CategoryShareEntry]) {
@@ -1404,7 +1404,7 @@ private enum ProductivityStatsBuilder {
         return (total, entries)
     }
 
-    private static func categoryShare(
+    nonisolated private static func categoryShare(
         for tasks: [StatisticsTaskSnapshot],
         interval: DateInterval
     ) -> [CategoryShareEntry] {
@@ -1424,7 +1424,7 @@ private enum ProductivityStatsBuilder {
             .sorted { $0.completedCount > $1.completedCount }
     }
 
-    private static func points(
+    nonisolated private static func points(
         for tasks: [StatisticsTaskSnapshot],
         range: StatisticsTimeRange,
         calendar: Calendar = .current
@@ -1464,7 +1464,7 @@ private enum ProductivityStatsBuilder {
         }
     }
 
-    private static func bucketStart(for date: Date, range: StatisticsTimeRange, calendar: Calendar) -> Date {
+    nonisolated private static func bucketStart(for date: Date, range: StatisticsTimeRange, calendar: Calendar) -> Date {
         switch range {
         case .days:
             return calendar.startOfDay(for: date)
@@ -1475,7 +1475,7 @@ private enum ProductivityStatsBuilder {
         }
     }
 
-    private static func label(for date: Date, range: StatisticsTimeRange) -> String {
+    nonisolated private static func label(for date: Date, range: StatisticsTimeRange) -> String {
         switch range {
         case .days, .weeks:
             return date.formatted(Date.FormatStyle().month(.abbreviated).day())
@@ -1645,68 +1645,27 @@ private struct StatisticsCountText: View {
     let animationsEnabled: Bool
 
     @State private var displayedValue = 0
-    @State private var countTask: Task<Void, Never>?
 
     var body: some View {
         Text("\(displayedValue.formatted())\(suffix)")
             .contentTransition(animationsEnabled ? .numericText(value: Double(displayedValue)) : .identity)
-            .onAppear {
-                startCount()
-            }
-            .onChange(of: value) { _, _ in
-                startCount()
-            }
-            .onChange(of: animationID) { _, _ in
-                startCount()
-            }
-            .onChange(of: animationsEnabled) { _, _ in
-                startCount()
-            }
-            .onDisappear {
-                countTask?.cancel()
-            }
+            .onAppear { snap() }
+            .onChange(of: value) { _, _ in animate() }
+            .onChange(of: animationID) { _, _ in animate() }
+            .onChange(of: animationsEnabled) { _, _ in animate() }
     }
 
-    @MainActor
-    private func startCount() {
-        countTask?.cancel()
+    private func snap() {
+        displayedValue = value
+    }
 
+    private func animate() {
         guard animationsEnabled else {
             displayedValue = value
             return
         }
-
-        let target = max(value, 0)
-        displayedValue = 0
-
-        guard target > 0 else {
-            return
-        }
-
-        let duration = target > 100 ? 1.45 : 1.05
-        let frameDelay: UInt64 = 16_666_667
-
-        countTask = Task { @MainActor in
-            let startedAt = Date()
-
-            while !Task.isCancelled {
-                let elapsed = Date().timeIntervalSince(startedAt)
-                let progress = min(elapsed / duration, 1)
-                let easedProgress = 1 - pow(1 - progress, 3)
-                displayedValue = min(Int((Double(target) * easedProgress).rounded()), target)
-
-                if progress >= 1 {
-                    break
-                }
-
-                try? await Task.sleep(nanoseconds: frameDelay)
-            }
-
-            guard !Task.isCancelled else {
-                return
-            }
-
-            displayedValue = target
+        withAnimation(.easeOut(duration: value > 100 ? 1.45 : 1.05)) {
+            displayedValue = value
         }
     }
 }

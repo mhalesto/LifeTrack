@@ -12,6 +12,7 @@ struct VoiceTaskDraft: Equatable {
     var notes: String?
     var category: TaskCategory?
     var dueDate: Date?
+    var priority: TaskPriority?
 }
 
 enum VoiceTaskParser {

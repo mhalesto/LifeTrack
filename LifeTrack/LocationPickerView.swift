@@ -251,7 +251,10 @@ private extension MKMapItem {
     }
 
     var safeAddress: String? {
-        // No clean address-string API in iOS 26 yet; placemark.title still works
-        placemark.title
+        if #available(iOS 26.0, *) {
+            name
+        } else {
+            placemark.title
+        }
     }
 }

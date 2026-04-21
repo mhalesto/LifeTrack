@@ -55,6 +55,7 @@ struct TaskRowView: View {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: leadingIconSize * 0.78, weight: .semibold))
                     .foregroundStyle(task.isCompleted ? LifeTrackTheme.ColorPalette.success : LifeTrackTheme.ColorPalette.tertiaryText)
+                    .contentTransition(.symbolEffect(.replace))
                     .frame(width: leadingIconSize, height: leadingIconSize)
             }
             .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.9, pressedOpacity: 0.9))

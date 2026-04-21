@@ -125,14 +125,14 @@ struct TaskBinView: View {
     }
 
     private var taskSection: some View {
-        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
-            SectionHeaderView(
-                title: "Deleted Tasks",
-                trailing: deletedTasks.isEmpty ? nil : deletedTasks.count.formatted(),
-                infoMessage: "Restoring a task returns it to the dashboard and recreates a reminder if its due date is still in the future."
-            )
-
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
             if deletedTasks.isEmpty {
+                SectionHeaderView(
+                    title: "Deleted Tasks",
+                    trailing: nil,
+                    infoMessage: "Restoring a task returns it to the dashboard and recreates a reminder if its due date is still in the future."
+                )
+
                 SectionCardView {
                     HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
                         Image(systemName: "trash")
@@ -146,7 +146,7 @@ struct TaskBinView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-                            Text("Deleted tasks will appear here unless your Bin setting is set to Immediately.")
+                            Text("Deleted and auto-archived tasks will appear here unless your Bin setting is set to Immediately.")
                                 .font(.footnote)
                                 .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -154,23 +154,50 @@ struct TaskBinView: View {
                     }
                 }
             } else {
-                VStack(spacing: LifeTrackTheme.Spacing.small) {
-                    ForEach(deletedTasks) { task in
-                        TaskBinRow(
-                            task: task,
-                            categoryOption: task.categoryOption(customCategories: customCategories),
-                            expiresAt: task.deletedAt.map(retentionPeriod.expirationDate(from:)),
-                            onRestore: { restore(task) },
-                            onDeleteForever: { deleteForever(task) }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .scale(scale: 0.98))
-                        ))
-                    }
+                if !userDeletedTasks.isEmpty {
+                    binGroup(
+                        title: "Deleted",
+                        infoMessage: "Tasks you removed from the dashboard. Restore them to return to your active lists.",
+                        items: userDeletedTasks
+                    )
                 }
-                .animation(animationsEnabled ? .snappy(duration: 0.22) : nil, value: deletedTasks.map(\.id))
+
+                if !archivedTasks.isEmpty {
+                    binGroup(
+                        title: "Archived",
+                        infoMessage: "Completed tasks automatically archived based on your Keep Completed setting. Restore to bring them back to the dashboard.",
+                        items: archivedTasks
+                    )
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func binGroup(title: String, infoMessage: String, items: [LifeTask]) -> some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
+            SectionHeaderView(
+                title: title,
+                trailing: items.count.formatted(),
+                infoMessage: infoMessage
+            )
+
+            VStack(spacing: LifeTrackTheme.Spacing.small) {
+                ForEach(items) { task in
+                    TaskBinRow(
+                        task: task,
+                        categoryOption: task.categoryOption(customCategories: customCategories),
+                        expiresAt: task.deletedAt.map(retentionPeriod.expirationDate(from:)),
+                        onRestore: { restore(task) },
+                        onDeleteForever: { deleteForever(task) }
+                    )
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity.combined(with: .scale(scale: 0.98))
+                    ))
+                }
+            }
+            .animation(animationsEnabled ? .snappy(duration: 0.22) : nil, value: items.map(\.id))
         }
     }
 
@@ -180,6 +207,14 @@ struct TaskBinView: View {
             .sorted { first, second in
                 (first.deletedAt ?? first.updatedAt) > (second.deletedAt ?? second.updatedAt)
             }
+    }
+
+    private var archivedTasks: [LifeTask] {
+        deletedTasks.filter { $0.completedAt != nil }
+    }
+
+    private var userDeletedTasks: [LifeTask] {
+        deletedTasks.filter { $0.completedAt == nil }
     }
 
     private var retentionPeriod: TaskBinRetentionPeriod {

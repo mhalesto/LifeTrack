@@ -7,6 +7,87 @@
 
 import Foundation
 import UIKit
+import WidgetKit
+
+enum LifeTrackSharedGroup {
+    static let suiteName = "group.com.currenttech.LifeTrack"
+    static var defaults: UserDefaults? {
+        UserDefaults(suiteName: suiteName)
+    }
+}
+
+struct FocusWidgetSnapshot: Codable {
+    struct Item: Codable, Identifiable {
+        let id: String
+        let title: String
+        let dueDate: Date
+        let isOverdue: Bool
+        let isDueToday: Bool
+    }
+
+    static let userDefaultsKey = "widget.focusSnapshot"
+
+    let generatedAt: Date
+    let items: [Item]
+    let overdueCount: Int
+    let dueTodayCount: Int
+    let upcomingCount: Int
+}
+
+enum FocusWidgetSnapshotPublisher {
+    @MainActor
+    static func publish(
+        focusTasks: [LifeTask],
+        overdueCount: Int,
+        dueTodayCount: Int,
+        upcomingCount: Int,
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) {
+        let items: [FocusWidgetSnapshot.Item] = focusTasks.prefix(5).map { task in
+            FocusWidgetSnapshot.Item(
+                id: task.id.uuidString,
+                title: task.title,
+                dueDate: task.dueDate,
+                isOverdue: task.dueDate < referenceDate,
+                isDueToday: calendar.isDateInToday(task.dueDate)
+            )
+        }
+
+        let snapshot = FocusWidgetSnapshot(
+            generatedAt: referenceDate,
+            items: items,
+            overdueCount: overdueCount,
+            dueTodayCount: dueTodayCount,
+            upcomingCount: upcomingCount
+        )
+
+        guard let defaults = LifeTrackSharedGroup.defaults,
+              let data = try? JSONEncoder.snapshotEncoder.encode(snapshot)
+        else {
+            return
+        }
+
+        defaults.set(data, forKey: FocusWidgetSnapshot.userDefaultsKey)
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+}
+
+extension JSONEncoder {
+    static let snapshotEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+}
+
+extension JSONDecoder {
+    static let snapshotDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+}
 
 enum LifeTrackSettings {
     enum Keys {
@@ -16,11 +97,13 @@ enum LifeTrackSettings {
         static let animationsEnabled = "LifeTrack.settings.animationsEnabled"
         static let colorStrength = "LifeTrack.settings.colorStrength"
         static let binRetentionPeriod = "LifeTrack.settings.binRetentionPeriod"
+        static let completedArchivePeriod = "LifeTrack.settings.completedArchivePeriod"
         static let lastDashboardMessageText = "LifeTrack.settings.lastDashboardMessageText"
         static let reminderActionTipPending = "LifeTrack.notifications.reminderActionTipPending"
         static let reminderActionTipShown = "LifeTrack.notifications.reminderActionTipShown"
         static let isProEnabled = "LifeTrack.settings.isProEnabled"
         static let claudeAPIKey = "LifeTrack.settings.claudeAPIKey"
+        static let lastBackupDate = "LifeTrack.settings.lastBackupDate"
     }
 }
 
@@ -81,6 +164,63 @@ enum TaskBinRetentionPeriod: String, CaseIterable, Identifiable {
 
     func isExpired(deletedAt: Date, referenceDate: Date = Date()) -> Bool {
         referenceDate >= expirationDate(from: deletedAt)
+    }
+}
+
+enum CompletedArchivePeriod: String, CaseIterable, Identifiable {
+    case off
+    case thirtyDays
+    case ninetyDays
+    case sixMonths
+    case oneYear
+
+    var id: String { rawValue }
+
+    static let fallback: CompletedArchivePeriod = .ninetyDays
+
+    static var current: CompletedArchivePeriod {
+        let savedValue = UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.completedArchivePeriod) ?? fallback.rawValue
+        return CompletedArchivePeriod(rawValue: savedValue) ?? fallback
+    }
+
+    var title: String {
+        switch self {
+        case .off: "Keep everything"
+        case .thirtyDays: "30 days"
+        case .ninetyDays: "90 days"
+        case .sixMonths: "6 months"
+        case .oneYear: "1 year"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .off:
+            "Completed tasks stay on the dashboard forever."
+        case .thirtyDays:
+            "Move completed tasks to Bin after 30 days."
+        case .ninetyDays:
+            "A balanced archive window for most workflows."
+        case .sixMonths:
+            "Keep half a year of completed history on hand."
+        case .oneYear:
+            "Archive only after a full year of history."
+        }
+    }
+
+    var ageLimit: TimeInterval? {
+        switch self {
+        case .off: nil
+        case .thirtyDays: 30 * 24 * 60 * 60
+        case .ninetyDays: 90 * 24 * 60 * 60
+        case .sixMonths: 180 * 24 * 60 * 60
+        case .oneYear: 365 * 24 * 60 * 60
+        }
+    }
+
+    func shouldArchive(completedAt: Date, referenceDate: Date = Date()) -> Bool {
+        guard let ageLimit else { return false }
+        return referenceDate.timeIntervalSince(completedAt) >= ageLimit
     }
 }
 

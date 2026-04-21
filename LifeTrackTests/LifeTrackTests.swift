@@ -150,4 +150,125 @@ struct LifeTrackTests {
         #expect(draft.notes == nil)
     }
 
+    // MARK: - CompletedArchivePeriod
+
+    @Test func archivePeriodOffNeverArchives() {
+        let deepPast = Date(timeIntervalSinceNow: -365 * 24 * 60 * 60 * 10)
+        #expect(CompletedArchivePeriod.off.shouldArchive(completedAt: deepPast) == false)
+    }
+
+    @Test func archivePeriodArchivesWhenOlderThanLimit() {
+        let reference = Date()
+        let olderThanNinetyDays = reference.addingTimeInterval(-91 * 24 * 60 * 60)
+        #expect(CompletedArchivePeriod.ninetyDays.shouldArchive(
+            completedAt: olderThanNinetyDays,
+            referenceDate: reference
+        ) == true)
+    }
+
+    @Test func archivePeriodDoesNotArchiveRecentlyCompleted() {
+        let reference = Date()
+        let twoDaysAgo = reference.addingTimeInterval(-2 * 24 * 60 * 60)
+        #expect(CompletedArchivePeriod.thirtyDays.shouldArchive(
+            completedAt: twoDaysAgo,
+            referenceDate: reference
+        ) == false)
+    }
+
+    // MARK: - TaskBinRetentionPeriod
+
+    @Test func binRetentionExpiresAfterDuration() {
+        let reference = Date()
+        let deletedEightDaysAgo = reference.addingTimeInterval(-8 * 24 * 60 * 60)
+        #expect(TaskBinRetentionPeriod.sevenDays.isExpired(
+            deletedAt: deletedEightDaysAgo,
+            referenceDate: reference
+        ) == true)
+    }
+
+    @Test func binRetentionImmediateIsAlwaysExpired() {
+        let now = Date()
+        #expect(TaskBinRetentionPeriod.immediately.isExpired(
+            deletedAt: now,
+            referenceDate: now
+        ) == true)
+    }
+
+    // MARK: - DailyFocusPlanner
+
+    @MainActor
+    @Test func focusPlannerPrioritizesOverdueOverUpcoming() {
+        let now = Date()
+        let overdue = LifeTask(
+            title: "Overdue",
+            category: .work,
+            dueDate: now.addingTimeInterval(-86_400)
+        )
+        let upcoming = LifeTask(
+            title: "Upcoming",
+            category: .work,
+            dueDate: now.addingTimeInterval(86_400 * 5)
+        )
+
+        let recs = DailyFocusPlanner.recommendations(from: [upcoming, overdue])
+        #expect(recs.first?.task.title == "Overdue")
+        #expect(recs.first?.reason == .overdue)
+    }
+
+    @MainActor
+    @Test func focusPlannerReturnsAtLeastThreeWhenAvailable() {
+        let now = Date()
+        let tasks = (0..<6).map { index in
+            LifeTask(
+                title: "Task \(index)",
+                category: .work,
+                dueDate: now.addingTimeInterval(TimeInterval(index * 3600))
+            )
+        }
+
+        let recs = DailyFocusPlanner.recommendations(from: tasks)
+        #expect(recs.count >= 3 && recs.count <= 5)
+    }
+
+    @MainActor
+    @Test func focusPlannerShouldOfferResetWhenManyOverdue() {
+        let now = Date()
+        let overdueTasks = (0..<4).map { index in
+            LifeTask(
+                title: "Overdue \(index)",
+                category: .work,
+                dueDate: now.addingTimeInterval(-TimeInterval((index + 1) * 3600))
+            )
+        }
+        #expect(DailyFocusPlanner.shouldOfferReset(for: overdueTasks) == true)
+    }
+
+    @MainActor
+    @Test func focusPlannerDoesNotOfferResetForLightLoad() {
+        let now = Date()
+        let light = [
+            LifeTask(title: "One", category: .work, dueDate: now.addingTimeInterval(3600)),
+            LifeTask(title: "Two", category: .work, dueDate: now.addingTimeInterval(7200))
+        ]
+        #expect(DailyFocusPlanner.shouldOfferReset(for: light) == false)
+    }
+
+    @MainActor
+    @Test func focusPlannerResetScheduleAssignsSlotsToFocusTasks() {
+        let now = Date(timeIntervalSince1970: 1_766_016_000)
+        let a = LifeTask(title: "A", category: .work, dueDate: now.addingTimeInterval(-3600))
+        let b = LifeTask(title: "B", category: .work, dueDate: now.addingTimeInterval(-1800))
+        let c = LifeTask(title: "C", category: .work, dueDate: now.addingTimeInterval(3600))
+
+        let plan = DailyFocusPlanner.resetSchedule(
+            for: [a, b, c],
+            focusIDs: [a.id, b.id],
+            referenceDate: now
+        )
+
+        let focusTitles = plan.compactMap { ($0.0.id == a.id || $0.0.id == b.id) ? $0.0.title : nil }
+        #expect(focusTitles.contains("A"))
+        #expect(focusTitles.contains("B"))
+    }
+
 }
