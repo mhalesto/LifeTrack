@@ -158,40 +158,17 @@ enum TaskExchangeManager {
         "updated_at",
         "deleted_at",
         "document_name",
-        "document_keywords"
+        "document_keywords",
+        "advanced_fields"
     ]
 
-    static func templateData(format: TaskExchangeFormat) throws -> Data {
+    static func templateData(
+        format: TaskExchangeFormat,
+        templates: [TaskTemplate] = TaskTemplate.common
+    ) throws -> Data {
         let now = Date()
-        let calendar = Calendar.current
-        let firstDueDate = calendar.date(byAdding: .day, value: 1, to: now) ?? now
-        let secondDueDate = calendar.date(byAdding: .day, value: 7, to: now) ?? now
-        let records = [
-            TaskExchangeRecord(
-                title: "Pay electricity bill",
-                dueDateDate: dateString(firstDueDate),
-                dueDateTime: "09:00",
-                category: TaskCategory.finance.rawValue,
-                categoryLabel: TaskCategory.finance.title,
-                status: TaskExchangeStatus.inProgress.rawValue,
-                priority: TaskPriority.high.rawValue,
-                recurrence: TaskRecurrence.monthly.rawValue,
-                durationMinutes: 20,
-                notes: "Attach the invoice, confirm the amount, then mark complete."
-            ),
-            TaskExchangeRecord(
-                title: "Book dental appointment",
-                dueDateDate: dateString(secondDueDate),
-                dueDateTime: "14:30",
-                category: TaskCategory.health.rawValue,
-                categoryLabel: TaskCategory.health.title,
-                status: TaskExchangeStatus.inProgress.rawValue,
-                priority: TaskPriority.normal.rawValue,
-                recurrence: TaskRecurrence.none.rawValue,
-                durationMinutes: 30,
-                notes: "Replace these sample rows with your own tasks before importing."
-            )
-        ]
+        let resolvedTemplates = templates.isEmpty ? TaskTemplate.common : templates
+        let records = resolvedTemplates.map(templateExchangeRecord(for:))
 
         switch format {
         case .json:
@@ -206,6 +183,24 @@ enum TaskExchangeManager {
             let text = spreadsheetText(records: records, delimiter: format.delimiter)
             return Data(text.utf8)
         }
+    }
+
+    private static func templateExchangeRecord(for template: TaskTemplate) -> TaskExchangeRecord {
+        let advanced = template.sampleAdvancedFields
+        return TaskExchangeRecord(
+            title: template.title,
+            dueDateDate: dateString(template.dueDate),
+            dueDateTime: timeString(template.dueDate),
+            category: template.category.rawValue,
+            categoryLabel: template.category.title,
+            status: TaskExchangeStatus.inProgress.rawValue,
+            priority: template.priority.rawValue,
+            recurrence: template.recurrence.rawValue,
+            durationMinutes: template.estimatedDurationMinutes,
+            notes: template.notes,
+            templateAction: template.action == .none ? nil : template.action.rawValue,
+            advancedFields: advanced.isEmpty ? nil : advanced
+        )
     }
 
     static func exportData(
@@ -266,9 +261,10 @@ enum TaskExchangeManager {
 
     static func shareableTemplateURL(
         format: TaskExchangeFormat,
-        fileName: String
+        fileName: String,
+        templates: [TaskTemplate] = TaskTemplate.common
     ) throws -> URL {
-        let data = try templateData(format: format)
+        let data = try templateData(format: format, templates: templates)
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("LifeTrackTaskTemplates", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -389,6 +385,7 @@ enum TaskExchangeManager {
                     createdAt: createdAt,
                     updatedAt: updatedAt
                 )
+                task.advancedFields = sanitizedAdvancedFields(record.advancedFields, forCategoryRawValue: categoryRawValue)
                 modelContext.insert(task)
                 existingByID[taskID] = task
                 created += 1
@@ -434,7 +431,22 @@ enum TaskExchangeManager {
         task.priority = TaskPriority(rawValue: normalizedRawValue(record.priority)) ?? .normal
         task.recurrence = TaskRecurrence(rawValue: normalizedRawValue(record.recurrence)) ?? .none
         task.estimatedDurationMinutes = sanitizedDuration(record.durationMinutes)
+        task.advancedFields = sanitizedAdvancedFields(record.advancedFields, forCategoryRawValue: categoryRawValue)
         task.updatedAt = updatedAt
+    }
+
+    private static func sanitizedAdvancedFields(_ fields: [String: String]?, forCategoryRawValue rawValue: String) -> [String: String] {
+        guard let fields, !fields.isEmpty else { return [:] }
+        let category = TaskCategory(rawValue: rawValue) ?? .other
+        let allowedKeys = Set(category.advancedFields.map(\.rawValue))
+        guard !allowedKeys.isEmpty else { return [:] }
+
+        var result: [String: String] = [:]
+        for (key, value) in fields where allowedKeys.contains(key) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { result[key] = trimmed }
+        }
+        return result
     }
 
     private static func exportRecord(
@@ -461,7 +473,8 @@ enum TaskExchangeManager {
             updatedAt: isoDateString(task.updatedAt),
             deletedAt: task.deletedAt.map(isoDateString),
             documentDisplayName: task.documentDisplayName,
-            documentKeywords: task.documentKeywords
+            documentKeywords: task.documentKeywords,
+            advancedFields: task.advancedFields.isEmpty ? nil : task.advancedFields
         )
     }
 
@@ -530,7 +543,8 @@ enum TaskExchangeManager {
                 documentKeywords: firstValue(in: values, keys: ["document_keywords", "keywords"])?
                     .components(separatedBy: CharacterSet(charactersIn: ";,\n"))
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
+                    .filter { !$0.isEmpty },
+                advancedFields: decodeAdvancedFieldsFromCSV(firstValue(in: values, keys: ["advanced_fields", "advanced", "metadata"]))
             )
         }
     }
@@ -560,6 +574,7 @@ enum TaskExchangeManager {
     private static func spreadsheetRow(for record: TaskExchangeRecord) -> [String] {
         let duration = record.durationMinutes.map(String.init) ?? ""
         let keywords = record.documentKeywords?.joined(separator: "; ") ?? ""
+        let advanced = encodeAdvancedFieldsForCSV(record.advancedFields)
 
         return [
             record.id ?? "",
@@ -578,8 +593,38 @@ enum TaskExchangeManager {
             record.updatedAt ?? "",
             record.deletedAt ?? "",
             record.documentDisplayName ?? "",
-            keywords
+            keywords,
+            advanced
         ]
+    }
+
+    private static func encodeAdvancedFieldsForCSV(_ fields: [String: String]?) -> String {
+        guard let fields, !fields.isEmpty else { return "" }
+        return fields
+            .sorted(by: { $0.key < $1.key })
+            .map { "\($0.key)=\(escapeAdvancedValue($0.value))" }
+            .joined(separator: "; ")
+    }
+
+    private static func escapeAdvancedValue(_ value: String) -> String {
+        value.replacingOccurrences(of: ";", with: ",")
+    }
+
+    private static func decodeAdvancedFieldsFromCSV(_ raw: String?) -> [String: String]? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        var result: [String: String] = [:]
+        for pair in raw.components(separatedBy: ";") {
+            let trimmedPair = pair.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let equalsIndex = trimmedPair.firstIndex(of: "=") else { continue }
+            let key = trimmedPair[..<equalsIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = trimmedPair[trimmedPair.index(after: equalsIndex)...].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty, !value.isEmpty {
+                result[key] = value
+            }
+        }
+        return result.isEmpty ? nil : result
     }
 
     private static func resolvedCategoryRawValue(
@@ -807,7 +852,7 @@ enum TaskExchangeManager {
 
 private struct TaskExchangePackage: Codable {
     var appName = "LifeTrack"
-    var schemaVersion = 1
+    var schemaVersion = 2
     let exportedAt: String
     let tasks: [TaskExchangeRecord]
 }
@@ -832,6 +877,7 @@ private struct TaskExchangeRecord: Codable {
     var deletedAt: String?
     var documentDisplayName: String?
     var documentKeywords: [String]?
+    var advancedFields: [String: String]?
 
     init(
         id: String? = nil,
@@ -852,7 +898,8 @@ private struct TaskExchangeRecord: Codable {
         updatedAt: String? = nil,
         deletedAt: String? = nil,
         documentDisplayName: String? = nil,
-        documentKeywords: [String]? = nil
+        documentKeywords: [String]? = nil,
+        advancedFields: [String: String]? = nil
     ) {
         self.id = id
         self.title = title
@@ -873,6 +920,7 @@ private struct TaskExchangeRecord: Codable {
         self.deletedAt = deletedAt
         self.documentDisplayName = documentDisplayName
         self.documentKeywords = documentKeywords
+        self.advancedFields = advancedFields
     }
 }
 

@@ -21,7 +21,11 @@ struct NewTaskView: View {
     private let existingTask: LifeTask?
     private let originalDocumentStorageName: String?
     private let autoStartVoice: Bool
+    private let isFreshNewTask: Bool
     @State private var didAutoStartVoice = false
+    @State private var isShowingResumePrompt = false
+    @State private var pendingDraft: NewTaskDraft?
+    @State private var didOfferDraftResume = false
 
     @State private var title: String
     @State private var categoryRawValue: String
@@ -60,6 +64,8 @@ struct NewTaskView: View {
     @State private var locationConfig: LocationReminderConfig?
     @State private var isShowingLocationPicker = false
     @State private var isAIEnhancing = false
+    @State private var advancedFieldValues: [String: String] = [:]
+    @State private var isAdvancedExpanded = false
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
 
     private let durationOptions = [15, 30, 45, 60, 90, 120]
@@ -68,6 +74,7 @@ struct NewTaskView: View {
         existingTask = task
         originalDocumentStorageName = task?.documentStorageName
         self.autoStartVoice = autoStartVoice
+        self.isFreshNewTask = (task == nil && template == nil)
 
         let template = template
         _title = State(initialValue: task?.title ?? template?.title ?? "")
@@ -95,6 +102,8 @@ struct NewTaskView: View {
                 onArrival: task?.locationReminderOnArrival ?? true
             ))
         }
+        _advancedFieldValues = State(initialValue: task?.advancedFields ?? [:])
+        _isAdvancedExpanded = State(initialValue: !(task?.advancedFields.isEmpty ?? true))
     }
 
     var body: some View {
@@ -124,6 +133,8 @@ struct NewTaskView: View {
                             }
 
                             notesCard
+
+                            advancedFieldsCard
 
                             documentCard
 
@@ -210,6 +221,10 @@ struct NewTaskView: View {
                 if !didSave && documentStorageName != originalDocumentStorageName {
                     DocumentStore.delete(storageName: documentStorageName)
                 }
+
+                if isFreshNewTask && !didSave {
+                    persistDraftIfMeaningful()
+                }
             }
             .onChange(of: voiceInput.transcript) { _, newTranscript in
                 voiceTranscript = newTranscript
@@ -232,8 +247,124 @@ struct NewTaskView: View {
                         }
                     }
                 }
+
+                if isFreshNewTask && !didOfferDraftResume,
+                   let draft = NewTaskDraftStore.load() {
+                    didOfferDraftResume = true
+                    pendingDraft = draft
+                    isShowingResumePrompt = true
+                }
+            }
+            .confirmationDialog(
+                "Resume previous task?",
+                isPresented: $isShowingResumePrompt,
+                titleVisibility: .visible,
+                presenting: pendingDraft
+            ) { draft in
+                Button("Resume") {
+                    apply(draft: draft)
+                    pendingDraft = nil
+                }
+                Button("Discard", role: .destructive) {
+                    NewTaskDraftStore.clear()
+                    pendingDraft = nil
+                }
+                Button("Keep Editing Later", role: .cancel) {
+                    pendingDraft = nil
+                }
+            } message: { draft in
+                Text(resumePromptMessage(for: draft))
             }
         }
+    }
+
+    private func resumePromptMessage(for draft: NewTaskDraft) -> String {
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview: String
+        if !title.isEmpty {
+            preview = "\"\(title)\""
+        } else if !draft.voiceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            preview = "your voice note"
+        } else {
+            preview = "your unfinished task"
+        }
+        let relative = draft.savedAt.formatted(.relative(presentation: .named))
+        return "You have an unsaved task (\(preview)) from \(relative). Pick up where you left off?"
+    }
+
+    private func sanitizedAdvancedFields() -> [String: String] {
+        let allowedKeys = Set(selectedCategory.advancedFields.map(\.rawValue))
+        var result: [String: String] = [:]
+        for (key, value) in advancedFieldValues where allowedKeys.contains(key) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { result[key] = trimmed }
+        }
+        return result
+    }
+
+    private func currentDraftSnapshot() -> NewTaskDraft {
+        NewTaskDraft(
+            title: title,
+            notes: notes,
+            categoryRawValue: categoryRawValue,
+            dueDate: dueDate,
+            priorityRawValue: priority.rawValue,
+            recurrenceRawValue: recurrence.rawValue,
+            templateActionRawValue: templateAction.rawValue,
+            durationMinutes: durationMinutes,
+            voiceTranscript: voiceTranscript,
+            locationName: locationConfig?.name,
+            locationLatitude: locationConfig?.latitude,
+            locationLongitude: locationConfig?.longitude,
+            locationRadius: locationConfig?.radius,
+            locationOnArrival: locationConfig?.onArrival,
+            advancedFields: sanitizedAdvancedFields(),
+            savedAt: Date()
+        )
+    }
+
+    private func draftHasContent() -> Bool {
+        if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        if !voiceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        if locationConfig != nil { return true }
+        if priority != .normal { return true }
+        if recurrence != .none { return true }
+        if !sanitizedAdvancedFields().isEmpty { return true }
+        return false
+    }
+
+    private func persistDraftIfMeaningful() {
+        guard draftHasContent() else {
+            NewTaskDraftStore.clear()
+            return
+        }
+        NewTaskDraftStore.save(currentDraftSnapshot())
+    }
+
+    private func apply(draft: NewTaskDraft) {
+        title = draft.title
+        notes = draft.notes
+        categoryRawValue = draft.categoryRawValue
+        dueDate = draft.dueDate
+        priority = TaskPriority(rawValue: draft.priorityRawValue) ?? .normal
+        recurrence = TaskRecurrence(rawValue: draft.recurrenceRawValue) ?? .none
+        templateAction = TaskTemplateAction(rawValue: draft.templateActionRawValue) ?? .none
+        durationMinutes = draft.durationMinutes
+        voiceTranscript = draft.voiceTranscript
+        if let name = draft.locationName,
+           let lat = draft.locationLatitude,
+           let lon = draft.locationLongitude {
+            locationConfig = LocationReminderConfig(
+                name: name,
+                latitude: lat,
+                longitude: lon,
+                radius: draft.locationRadius ?? 150,
+                onArrival: draft.locationOnArrival ?? true
+            )
+        }
+        advancedFieldValues = draft.advancedFields
+        isAdvancedExpanded = !draft.advancedFields.isEmpty
     }
 
     private var header: some View {
@@ -600,6 +731,97 @@ struct NewTaskView: View {
                 }
             }
             .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8)
+            }
+        }
+    }
+
+    private var advancedFieldsCard: some View {
+        let fields = selectedCategory.advancedFields
+        return Group {
+            if !fields.isEmpty {
+                SectionCardView {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            isAdvancedExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.medium) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Advanced")
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                                Text("Extra \(selectedCategory.title.lowercased()) fields — optional.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                            if !advancedFilledKeys.isEmpty {
+                                Text("\(advancedFilledKeys.count)")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
+                            }
+                            Image(systemName: isAdvancedExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if isAdvancedExpanded {
+                        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+                            ForEach(fields) { field in
+                                advancedFieldRow(for: field)
+                            }
+                        }
+                        .padding(.top, LifeTrackTheme.Spacing.small)
+                    }
+                }
+            }
+        }
+    }
+
+    private var advancedFilledKeys: [String] {
+        selectedCategory.advancedFields
+            .map(\.rawValue)
+            .filter { key in
+                !(advancedFieldValues[key]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            }
+    }
+
+    @ViewBuilder
+    private func advancedFieldRow(for field: AdvancedTaskField) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: field.symbolName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                Text(field.title)
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+
+            TextField(
+                field.placeholder,
+                text: Binding(
+                    get: { advancedFieldValues[field.rawValue] ?? "" },
+                    set: { advancedFieldValues[field.rawValue] = $0 }
+                )
+            )
+            .font(.body)
+            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                LifeTrackTheme.ColorPalette.backgroundTop,
+                in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8)
@@ -995,6 +1217,11 @@ struct NewTaskView: View {
                 lastVoiceGeneratedNotes = n
             }
 
+            if let d = enhanced.dueDate {
+                dueDate = d
+                didApplyVoiceDueDate = true
+            }
+
             if let cat = enhanced.category {
                 categoryRawValue = cat.rawValue
                 didApplyVoiceCategory = true
@@ -1002,6 +1229,19 @@ struct NewTaskView: View {
 
             if let pri = enhanced.priority {
                 priority = pri
+            }
+
+            if !enhanced.advancedFields.isEmpty {
+                let allowedKeys = Set(selectedCategory.advancedFields.map(\.rawValue))
+                for (key, value) in enhanced.advancedFields where allowedKeys.contains(key) {
+                    let existing = advancedFieldValues[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    if existing.isEmpty {
+                        advancedFieldValues[key] = value
+                    }
+                }
+                if !advancedFieldValues.isEmpty {
+                    isAdvancedExpanded = true
+                }
             }
         }
     }
@@ -1038,6 +1278,7 @@ struct NewTaskView: View {
             task.locationReminderLongitude = locationConfig?.longitude
             task.locationReminderRadius = locationConfig?.radius
             task.locationReminderOnArrival = locationConfig?.onArrival ?? true
+            task.advancedFields = sanitizedAdvancedFields()
             task.updatedAt = now
         } else {
             task = LifeTask(
@@ -1066,6 +1307,7 @@ struct NewTaskView: View {
             task.locationReminderLongitude = locationConfig?.longitude
             task.locationReminderRadius = locationConfig?.radius
             task.locationReminderOnArrival = locationConfig?.onArrival ?? true
+            task.advancedFields = sanitizedAdvancedFields()
             if task.isHabit { task.habitGroupID = task.id }
             modelContext.insert(task)
         }
@@ -1099,6 +1341,9 @@ struct NewTaskView: View {
             LocationReminderManager.shared.scheduleRegion(for: task)
         }
         didSave = true
+        if isFreshNewTask {
+            NewTaskDraftStore.clear()
+        }
         dismiss()
     }
 

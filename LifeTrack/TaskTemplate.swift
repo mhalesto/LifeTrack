@@ -68,6 +68,27 @@ struct TaskTemplate: Identifiable {
         }
     }
 
+    /// Realistic placeholder values for the advanced fields tied to this template.
+    /// Used when generating the downloadable import template so users see a real example.
+    var sampleAdvancedFields: [String: String] {
+        switch id {
+        case "email":
+            return ["recipient": "jane@company.com"]
+        case "budget":
+            return [:]
+        case "checkup":
+            return ["provider": "Dr. Okafor, Oak Clinic"]
+        case "bill":
+            return ["amount": "$84.20", "payee": "Con Edison"]
+        case "medication":
+            return ["dosage": "500mg · twice daily"]
+        case "cleaning":
+            return ["area": "Kitchen, bathroom", "supplies": "Vacuum, wipes"]
+        default:
+            return [:]
+        }
+    }
+
     static var common: [TaskTemplate] {
         [
             TaskTemplate(

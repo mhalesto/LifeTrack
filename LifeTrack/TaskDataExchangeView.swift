@@ -30,6 +30,7 @@ struct TaskDataExchangeView: View {
 
     @State private var selectedExportFormat: TaskExchangeFormat = .json
     @State private var selectedTemplateFormat: TaskExchangeFormat = .csv
+    @State private var selectedTemplateIDs: Set<String> = Set(TaskTemplate.common.map(\.id))
     @State private var exportDocument = TaskExchangeFileDocument()
     @State private var templateDocument = TaskExchangeFileDocument()
     @State private var shareURL: URL?
@@ -95,6 +96,9 @@ struct TaskDataExchangeView: View {
             refreshShareURL()
         }
         .onChange(of: selectedTemplateFormat) { _, _ in
+            refreshTemplateShareURL()
+        }
+        .onChange(of: selectedTemplateIDs) { _, _ in
             refreshTemplateShareURL()
         }
         .fileImporter(
@@ -182,6 +186,62 @@ struct TaskDataExchangeView: View {
         }
     }
 
+    private var templateSelectionSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("Include templates")
+                    .font(.lifeTrackCaption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                Spacer(minLength: 8)
+
+                Text("\(selectedTemplateIDs.count) of \(TaskTemplate.common.count)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                Button(allTemplatesSelected ? "Clear" : "Select all") {
+                    if allTemplatesSelected {
+                        selectedTemplateIDs.removeAll()
+                    } else {
+                        selectedTemplateIDs = Set(TaskTemplate.common.map(\.id))
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+            }
+
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
+                spacing: 8
+            ) {
+                ForEach(TaskTemplate.common) { template in
+                    TemplateIncludeChip(
+                        template: template,
+                        isSelected: selectedTemplateIDs.contains(template.id)
+                    ) {
+                        toggleTemplate(template.id)
+                    }
+                }
+            }
+        }
+    }
+
+    private var allTemplatesSelected: Bool {
+        selectedTemplateIDs.count == TaskTemplate.common.count
+    }
+
+    private var selectedTemplates: [TaskTemplate] {
+        TaskTemplate.common.filter { selectedTemplateIDs.contains($0.id) }
+    }
+
+    private func toggleTemplate(_ id: String) {
+        if selectedTemplateIDs.contains(id) {
+            selectedTemplateIDs.remove(id)
+        } else {
+            selectedTemplateIDs.insert(id)
+        }
+    }
+
     private var templateCard: some View {
         SectionCardView {
             SectionHeaderView(
@@ -195,6 +255,8 @@ struct TaskDataExchangeView: View {
                 message: "Edit the sample rows in Excel, Numbers, Sheets, or a text editor, then import the completed file back into LifeTrack."
             )
 
+            templateSelectionSection
+
             TaskExchangeFormatPicker(
                 selectedFormat: $selectedTemplateFormat,
                 title: "Template format"
@@ -203,6 +265,7 @@ struct TaskDataExchangeView: View {
             LifeTrackPrimaryButton(
                 title: "Download Template",
                 systemImage: "square.and.arrow.down",
+                isDisabled: selectedTemplateIDs.isEmpty,
                 action: prepareTemplateExport
             )
 
@@ -373,8 +436,15 @@ struct TaskDataExchangeView: View {
     }
 
     private func prepareTemplateExport() {
+        guard !selectedTemplateIDs.isEmpty else {
+            feedback = .error("Pick at least one template to include.")
+            return
+        }
         do {
-            let data = try TaskExchangeManager.templateData(format: selectedTemplateFormat)
+            let data = try TaskExchangeManager.templateData(
+                format: selectedTemplateFormat,
+                templates: selectedTemplates
+            )
             templateDocument = TaskExchangeFileDocument(data: data)
             refreshTemplateShareURL()
             isExportingTemplate = true
@@ -403,10 +473,15 @@ struct TaskDataExchangeView: View {
     }
 
     private func refreshTemplateShareURL() {
+        guard !selectedTemplateIDs.isEmpty else {
+            templateShareURL = nil
+            return
+        }
         do {
             templateShareURL = try TaskExchangeManager.shareableTemplateURL(
                 format: selectedTemplateFormat,
-                fileName: templateFileName
+                fileName: templateFileName,
+                templates: selectedTemplates
             )
         } catch {
             templateShareURL = nil
@@ -757,6 +832,50 @@ private struct TaskExchangeFormatRow: View {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                 .stroke(isSelected ? LifeTrackTheme.ColorPalette.accent.opacity(0.28) : LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
+    }
+}
+
+private struct TemplateIncludeChip: View {
+    let template: TaskTemplate
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(isSelected ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.tertiaryText)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(template.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(1)
+                    Text(template.category.title)
+                        .font(.caption2)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                (isSelected ? LifeTrackTheme.ColorPalette.accentSoft : LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.6)),
+                in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    .stroke(
+                        isSelected ? LifeTrackTheme.ColorPalette.accent.opacity(0.55) : LifeTrackTheme.ColorPalette.hairline.opacity(0.9),
+                        lineWidth: isSelected ? 1.1 : 0.8
+                    )
+            }
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97))
+        .accessibilityLabel("\(template.title), \(isSelected ? "included" : "excluded")")
     }
 }
 

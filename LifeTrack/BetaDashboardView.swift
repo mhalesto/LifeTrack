@@ -1252,8 +1252,6 @@ struct BetaDashboardView: View {
     @State private var isShowingCustomize = false
     @State private var selectedSummaryKind: BetaSummaryKind?
     @State private var editingTask: LifeTask?
-    @State private var heroPagerIndex: Int = 0
-    @State private var lastHeroPagerInteraction: Date = .distantPast
 
     private var isEmbeddedAsHome: Bool {
         onOpenStatistics != nil || onOpenSettings != nil || onPresentSheet != nil
@@ -1632,35 +1630,11 @@ struct BetaDashboardView: View {
     }
 
     private var streakHeroPager: some View {
-        VStack(spacing: 10) {
-            TabView(selection: $heroPagerIndex) {
-                streakHeroCard.tag(0)
-                upgradeHeroCard.tag(1)
-                weeklyRhythmCard.tag(2)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 240)
-            .onChange(of: heroPagerIndex) { _, _ in
-                // Record any swipe so the timer doesn't fight a manual gesture
-                lastHeroPagerInteraction = Date()
-            }
-            .onReceive(Timer.publish(every: 7, on: .main, in: .common).autoconnect()) { now in
-                // Skip if the user swiped recently (within the last 6.5 s)
-                guard now.timeIntervalSince(lastHeroPagerInteraction) >= 6.5 else { return }
-                // No withAnimation — .page style owns the transition animation
-                heroPagerIndex = (heroPagerIndex + 1) % 3
-                lastHeroPagerInteraction = now
-            }
-
-            HStack(spacing: 7) {
-                ForEach(0..<3, id: \.self) { i in
-                    Capsule()
-                        .fill(i == heroPagerIndex ? BetaPalette.accent : BetaPalette.accent.opacity(0.25))
-                        .frame(width: i == heroPagerIndex ? 20 : 7, height: 7)
-                        .animation(.easeInOut(duration: 0.3), value: heroPagerIndex)
-                }
-            }
-        }
+        HeroPager(
+            page1: streakHeroCard,
+            page2: upgradeHeroCard,
+            page3: weeklyRhythmCard
+        )
     }
 
     private var upgradeHeroCard: some View {
@@ -3278,5 +3252,72 @@ private struct BetaSummaryTaskCard: View {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                 .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
         }
+    }
+}
+
+private struct HeroPager<P1: View, P2: View, P3: View>: View {
+    let page1: P1
+    let page2: P2
+    let page3: P3
+
+    @State private var currentIndex: Int? = 0
+    @State private var isDragging: Bool = false
+    @State private var lastInteraction: Date = .distantPast
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    page1.containerRelativeFrame(.horizontal).id(0)
+                    page2.containerRelativeFrame(.horizontal).id(1)
+                    page3.containerRelativeFrame(.horizontal).id(2)
+                }
+                .scrollTargetLayout()
+            }
+            .scrollIndicators(.hidden)
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $currentIndex)
+            .frame(height: 240)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if !isDragging { isDragging = true }
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                        lastInteraction = Date()
+                    }
+            )
+            .onChange(of: currentIndex) { _, _ in
+                lastInteraction = Date()
+            }
+            .onReceive(Timer.publish(every: 7, on: .main, in: .common).autoconnect()) { now in
+                guard !isDragging else { return }
+                guard now.timeIntervalSince(lastInteraction) >= 6.5 else { return }
+                let current = currentIndex ?? 0
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    currentIndex = (current + 1) % 3
+                }
+                lastInteraction = now
+            }
+
+            HeroPagerDots(currentIndex: currentIndex ?? 0, count: 3)
+        }
+    }
+}
+
+private struct HeroPagerDots: View {
+    let currentIndex: Int
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(0..<count, id: \.self) { i in
+                Capsule()
+                    .fill(i == currentIndex ? BetaPalette.accent : BetaPalette.accent.opacity(0.25))
+                    .frame(width: i == currentIndex ? 20 : 7, height: 7)
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: currentIndex)
     }
 }

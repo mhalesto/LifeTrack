@@ -156,6 +156,7 @@ final class LifeTask {
     var documentSuggestedTitle: String?
     var documentSuggestedDueDate: Date?
     var documentKeywordsRawValue: String = ""
+    var templateMetadataRawValue: String = ""
     var deletedAt: Date?
     var createdAt: Date
     var updatedAt: Date
@@ -268,6 +269,26 @@ final class LifeTask {
         }
         set {
             documentKeywordsRawValue = newValue.joined(separator: "\n")
+        }
+    }
+
+    var advancedFields: [String: String] {
+        get {
+            guard !templateMetadataRawValue.isEmpty,
+                  let data = templateMetadataRawValue.data(using: .utf8),
+                  let dict = try? JSONDecoder().decode([String: String].self, from: data)
+            else { return [:] }
+            return dict
+        }
+        set {
+            let cleaned = newValue.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            guard !cleaned.isEmpty,
+                  let data = try? JSONEncoder().encode(cleaned),
+                  let string = String(data: data, encoding: .utf8) else {
+                templateMetadataRawValue = ""
+                return
+            }
+            templateMetadataRawValue = string
         }
     }
 

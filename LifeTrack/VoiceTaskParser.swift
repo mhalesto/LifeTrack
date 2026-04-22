@@ -13,6 +13,7 @@ struct VoiceTaskDraft: Equatable {
     var category: TaskCategory?
     var dueDate: Date?
     var priority: TaskPriority?
+    var advancedFields: [String: String] = [:]
 }
 
 enum VoiceTaskParser {
@@ -22,9 +23,24 @@ enum VoiceTaskParser {
             return VoiceTaskDraft()
         }
 
-        let dueDate = detectedDueDate(in: cleanedTranscript, referenceDate: referenceDate)
+        var dueDate = detectedDueDate(in: cleanedTranscript, referenceDate: referenceDate)
+        let explicitHour = detectedExplicitHour(in: cleanedTranscript)
+        if let base = dueDate,
+           let (hour, minute) = explicitHour,
+           let overridden = Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: base) {
+            dueDate = overridden
+        }
         let residual = residualBody(from: cleanedTranscript)
-        let (title, notes) = splitTitleAndNotes(residual)
+        var (title, notes) = splitTitleAndNotes(residual)
+
+        if let (hour, minute) = explicitHour {
+            let bullet = "• " + formattedTimeBullet(hour: hour, minute: minute)
+            if let existing = notes, !existing.isEmpty {
+                notes = bullet + "\n" + existing
+            } else {
+                notes = bullet
+            }
+        }
 
         return VoiceTaskDraft(
             title: title,
@@ -55,15 +71,33 @@ enum VoiceTaskParser {
             "i need to ",
             "i have to ",
             "i want to ",
+            "i should ",
             "make sure to ",
             "can you remind me to "
         ]
 
-        let lowered = text.lowercased()
-        if let prefix = prefixes.first(where: { lowered.hasPrefix($0) }) {
-            return String(text.dropFirst(prefix.count))
+        var working = text
+        var loweredCopy = working.lowercased()
+        if let prefix = prefixes.first(where: { loweredCopy.hasPrefix($0) }) {
+            working = String(working.dropFirst(prefix.count))
+            loweredCopy = working.lowercased()
         }
-        return text
+
+        // Collapse filler "go to {verb}" / "go and {verb}" to just the verb.
+        let fillerVerbs = ["see", "check", "get", "buy", "meet", "visit", "fetch", "collect", "find", "do", "make", "pick up"]
+        for verb in fillerVerbs {
+            let patterns = [
+                "go to \(verb) ",
+                "go and \(verb) "
+            ]
+            for p in patterns where loweredCopy.hasPrefix(p) {
+                let dropCount = p.count - (verb.count + 1) // keep "{verb} "
+                working = String(working.dropFirst(dropCount))
+                return working
+            }
+        }
+
+        return working
     }
 
     private static func splitTitleAndNotes(_ text: String) -> (title: String?, notes: String?) {
@@ -176,8 +210,12 @@ enum VoiceTaskParser {
         #"\b(?:this|next|on)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"#,
         #"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"#,
         #"\bin\s+(?:\d+|one|two|three|four|five|six|seven)\s+days?\b"#,
-        // Absolute times often paired: "at 3pm", "at 15:00"
-        #"\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b"#
+        // Absolute times often paired: "at 3pm", "at 15:00", "at 6 o'clock"
+        #"\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?\s*(?:o['’]?clock)?\b"#,
+        // Bare "6 o'clock", "10 o'clock"
+        #"\b\d{1,2}\s*o['’]?clock\b"#,
+        // Bare trailing "o'clock"
+        #"\bo['’]?clock\b"#
     ]
 
     // MARK: - Category detection
@@ -240,6 +278,96 @@ enum VoiceTaskParser {
         }
 
         return nil
+    }
+
+    private static func formattedTimeBullet(hour: Int, minute: Int) -> String {
+        var components = DateComponents()
+        components.hour = hour
+        components.minute = minute
+        let cal = Calendar.current
+        if let date = cal.date(from: components) {
+            let formatter = DateFormatter()
+            formatter.locale = Locale.current
+            formatter.timeStyle = .short
+            return "At " + formatter.string(from: date)
+        }
+        return String(format: "At %02d:%02d", hour, minute)
+    }
+
+    /// Finds an explicit clock time in the transcript ("at 10", "10 o'clock",
+    /// "10:30 am", "at 10:30"). Returns (hour, minute) in 24-hour form, or nil.
+    /// Picks the LATEST occurring time so self-corrections ("at 12 no no not 12
+    /// it's 10") yield the corrected value.
+    /// "in the morning" biases 10 o'clock to 10:00; "in the evening/night" biases to 22:00.
+    private static func detectedExplicitHour(in transcript: String) -> (hour: Int, minute: Int)? {
+        let text = transcript.lowercased()
+
+        let patterns = [
+            #"(?:at\s+)?(\d{1,2}):(\d{2})\s*(am|pm|a\.m\.|p\.m\.)?"#,
+            #"(?:at\s+)(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)"#,
+            #"(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)"#,
+            #"(?:at\s+)?(\d{1,2})\s*o['’]?clock"#,
+            #"(?:at\s+)(\d{1,2})(?!\d)"#
+        ]
+
+        let preferEvening = text.contains("evening") || text.contains("tonight") || text.contains("night") || text.contains("pm")
+        let preferMorning = text.contains("morning") || text.contains("am")
+        let preferAfternoon = text.contains("afternoon")
+
+        var latest: (offset: Int, hour: Int, minute: Int)?
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            let matches = regex.matches(in: text, options: [], range: range)
+            for match in matches {
+                guard match.numberOfRanges >= 2,
+                      let hourRange = Range(match.range(at: 1), in: text),
+                      let hour = Int(text[hourRange]), hour >= 0, hour <= 23 else {
+                    continue
+                }
+
+                var minute = 0
+                if match.numberOfRanges >= 3,
+                   let r = Range(match.range(at: 2), in: text) {
+                    let piece = String(text[r]).lowercased()
+                    if let m = Int(piece) { minute = m }
+                }
+
+                var suffix = ""
+                if match.numberOfRanges >= 4, let r = Range(match.range(at: 3), in: text) {
+                    suffix = String(text[r]).lowercased()
+                } else if match.numberOfRanges >= 3, let r = Range(match.range(at: 2), in: text) {
+                    let piece = String(text[r]).lowercased()
+                    if piece.contains("p") || piece.contains("a") { suffix = piece }
+                }
+
+                var resolvedHour = hour
+                if suffix.contains("p") {
+                    if resolvedHour < 12 { resolvedHour += 12 }
+                } else if suffix.contains("a") {
+                    if resolvedHour == 12 { resolvedHour = 0 }
+                } else {
+                    if preferEvening && resolvedHour >= 1 && resolvedHour <= 11 {
+                        resolvedHour += 12
+                    } else if preferAfternoon && resolvedHour >= 1 && resolvedHour <= 7 {
+                        resolvedHour += 12
+                    } else if preferMorning && resolvedHour == 12 {
+                        resolvedHour = 0
+                    }
+                }
+
+                if resolvedHour < 0 || resolvedHour > 23 { continue }
+                if minute < 0 || minute > 59 { continue }
+
+                let offset = match.range.location
+                if latest == nil || offset > latest!.offset {
+                    latest = (offset, resolvedHour, minute)
+                }
+            }
+        }
+
+        return latest.map { ($0.hour, $0.minute) }
     }
 
     private static func detectedRelativeTime(in transcript: String, referenceDate: Date) -> Date? {
