@@ -947,6 +947,11 @@ struct BetaDashboardHomeView: View {
     @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && !$0.isCompleted }, sort: \LifeTask.dueDate, order: .forward)
     private var openTasks: [LifeTask]
 
+    @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && $0.isCompleted }, sort: \LifeTask.dueDate, order: .reverse)
+    private var completedTasks: [LifeTask]
+
+    private var allTasks: [LifeTask] { openTasks + completedTasks }
+
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
     @State private var navigationPath: [BetaHomeRoute] = []
@@ -991,7 +996,7 @@ struct BetaDashboardHomeView: View {
             .navigationDestination(for: BetaHomeRoute.self) { route in
                 switch route {
                 case .statistics:
-                    StatisticsView(tasks: openTasks)
+                    StatisticsView(tasks: allTasks)
                 case .calendar:
                     TaskCalendarView(
                         tasks: openTasks,
@@ -1248,6 +1253,7 @@ struct BetaDashboardView: View {
     @State private var selectedSummaryKind: BetaSummaryKind?
     @State private var editingTask: LifeTask?
     @State private var heroPagerIndex: Int = 0
+    @State private var lastHeroPagerInteraction: Date = .distantPast
 
     private var isEmbeddedAsHome: Bool {
         onOpenStatistics != nil || onOpenSettings != nil || onPresentSheet != nil
@@ -1634,10 +1640,17 @@ struct BetaDashboardView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(height: 240)
-            .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
-                withAnimation(.easeInOut(duration: 0.45)) {
+            .onChange(of: heroPagerIndex) { _, _ in
+                // Record any swipe so the timer doesn't fight a manual gesture
+                lastHeroPagerInteraction = Date()
+            }
+            .onReceive(Timer.publish(every: 7, on: .main, in: .common).autoconnect()) { now in
+                // Skip if the user swiped recently (within the last 6.5 s)
+                guard now.timeIntervalSince(lastHeroPagerInteraction) >= 6.5 else { return }
+                withAnimation(.easeInOut(duration: 0.5)) {
                     heroPagerIndex = (heroPagerIndex + 1) % 3
                 }
+                lastHeroPagerInteraction = now
             }
 
             HStack(spacing: 7) {
