@@ -1647,9 +1647,8 @@ struct BetaDashboardView: View {
             .onReceive(Timer.publish(every: 7, on: .main, in: .common).autoconnect()) { now in
                 // Skip if the user swiped recently (within the last 6.5 s)
                 guard now.timeIntervalSince(lastHeroPagerInteraction) >= 6.5 else { return }
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    heroPagerIndex = (heroPagerIndex + 1) % 3
-                }
+                // No withAnimation — .page style owns the transition animation
+                heroPagerIndex = (heroPagerIndex + 1) % 3
                 lastHeroPagerInteraction = now
             }
 

@@ -9,14 +9,18 @@
 import CryptoKit
 import Foundation
 
+// Defined outside ClaudeAPIClient so these string constants are nonisolated
+// and can be used as default parameter values without a @MainActor context.
+enum ClaudeModel {
+    static let haiku  = "claude-haiku-4-5-20251001"
+    static let sonnet = "claude-sonnet-4-6"
+}
+
 @MainActor
 final class ClaudeAPIClient {
     static let shared = ClaudeAPIClient()
 
-    enum Model {
-        static let haiku  = "claude-haiku-4-5-20251001"
-        static let sonnet = "claude-sonnet-4-6"
-    }
+    typealias Model = ClaudeModel
 
     enum ClientError: LocalizedError {
         case missingAPIKey
@@ -79,7 +83,7 @@ final class ClaudeAPIClient {
     func send(
         system: String,
         userContent: String,
-        model: String = Model.haiku,
+        model: String = ClaudeModel.haiku,
         maxTokens: Int = 512,
         cacheTTL: TimeInterval? = nil,
         cacheSystem: Bool = true
