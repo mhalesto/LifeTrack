@@ -18,6 +18,7 @@ struct MoneyOverviewView: View {
     @State private var selectedMonth = Date()
     @State private var currencyCode = MoneyCurrency.defaultCode
     @State private var isShowingLogMoney = false
+    @State private var isShowingIncomeEditor = false
     @State private var editingTask: LifeTask?
 
     var body: some View {
@@ -66,6 +67,16 @@ struct MoneyOverviewView: View {
             LogMoneyView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingIncomeEditor) {
+            MoneyIncomeEditorView(
+                month: selectedMonth,
+                currencyCode: currencyCode,
+                summary: summary,
+                onSave: saveIncomePlan
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(item: $editingTask) { task in
             NewTaskView(task: task)
@@ -154,6 +165,7 @@ struct MoneyOverviewView: View {
 
     private var overviewContent: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+            budgetProjectionCard
             summaryGrid
             plannedVsActualCard
             overviewTwoColumn
@@ -163,15 +175,19 @@ struct MoneyOverviewView: View {
 
     private var summaryGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: LifeTrackTheme.Spacing.medium) {
-            MoneySummaryCard(
-                title: "Income",
-                value: summary.actualIncome,
-                previousValue: previousSummary.actualIncome,
-                currencyCode: currencyCode,
-                subtitle: "This month",
-                symbolName: "arrow.down.circle",
-                tint: LifeTrackTheme.ColorPalette.success
-            )
+            Button { isShowingIncomeEditor = true } label: {
+                MoneySummaryCard(
+                    title: "Income",
+                    value: summary.actualIncome,
+                    previousValue: previousSummary.actualIncome,
+                    currencyCode: currencyCode,
+                    subtitle: "Tap to edit",
+                    symbolName: "arrow.down.circle",
+                    tint: LifeTrackTheme.ColorPalette.success,
+                    accessorySymbolName: "pencil"
+                )
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.985, pressedOpacity: 0.96))
             MoneySummaryCard(
                 title: "Spent",
                 value: summary.actualSpending,
@@ -199,6 +215,74 @@ struct MoneyOverviewView: View {
                 symbolName: "wallet.pass",
                 tint: LifeTrackTheme.ColorPalette.warning
             )
+        }
+    }
+
+    private var budgetProjectionCard: some View {
+        SectionCardView {
+            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+                HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Budget Projection")
+                            .font(.lifeTrackHeadline)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        Text("Projected month-end balance")
+                            .font(.footnote)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                        Text(MoneyFormatting.currency(projectedMonthEndBalance, code: currencyCode))
+                            .font(.system(.largeTitle, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
+
+                        Text(MoneyFormatting.signedCurrency(projectedMonthEndBalance - previousSummary.actualRemaining, code: currencyCode) + " vs prev month")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.success)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(LifeTrackTheme.ColorPalette.success.opacity(0.10), in: Capsule())
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "wallet.pass.fill")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                        .frame(width: 74, height: 74)
+                        .background(LifeTrackTheme.ColorPalette.accentSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+
+                Divider()
+
+                HStack(spacing: 0) {
+                    MoneyProjectionMetric(
+                        title: "Income",
+                        value: summary.plannedIncome > 0 ? summary.plannedIncome : summary.actualIncome,
+                        currencyCode: currencyCode,
+                        symbolName: "arrow.up",
+                        tint: LifeTrackTheme.ColorPalette.success
+                    )
+                    Divider().frame(height: 46)
+                    MoneyProjectionMetric(
+                        title: "Planned expenses",
+                        value: summary.plannedSpending,
+                        currencyCode: currencyCode,
+                        symbolName: "arrow.down",
+                        tint: LifeTrackTheme.ColorPalette.danger
+                    )
+                    Divider().frame(height: 46)
+                    MoneyProjectionMetric(
+                        title: "Savings forecast",
+                        value: summary.plannedSavings,
+                        currencyCode: currencyCode,
+                        symbolName: "chart.bar",
+                        tint: LifeTrackTheme.ColorPalette.accent
+                    )
+                }
+
+                MoneyProjectionChart(points: projectionPoints, currencyCode: currencyCode)
+            }
         }
     }
 
@@ -491,8 +575,117 @@ struct MoneyOverviewView: View {
         }
     }
 
+    private var projectedMonthEndBalance: Double {
+        projectionPoints.last?.balance ?? summary.actualRemaining
+    }
+
+    private var projectionPoints: [MoneyProjectionPoint] {
+        MoneyAnalytics.projectionPoints(
+            from: Date(),
+            days: 30,
+            entries: entries,
+            tasks: tasks,
+            currencyCode: currencyCode
+        )
+    }
+
     private func shiftMonth(_ offset: Int) {
         selectedMonth = Calendar.current.date(byAdding: .month, value: offset, to: selectedMonth) ?? selectedMonth
+    }
+
+    private func saveIncomePlan(plannedAmount: Double, actualAmount: Double, currencyCode: String, category: String, paymentDate: Date, notes: String) {
+        let cleanedCategory = category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Income" : category.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let interval = MoneyAnalytics.monthInterval(containing: selectedMonth)
+        let normalizedCurrency = MoneyCurrency.normalized(currencyCode)
+        self.currencyCode = normalizedCurrency
+        let now = Date()
+
+        let existingPlan = tasks.first {
+            $0.financialEnabled &&
+            !$0.isDeleted &&
+            $0.financialType == .income &&
+            MoneyCurrency.normalized($0.currencyCode) == normalizedCurrency &&
+            MoneyAnalytics.intervalContains(interval, $0.paymentDate ?? $0.dueDate)
+        }
+
+        if plannedAmount > 0 || existingPlan != nil {
+            let task = existingPlan ?? LifeTask(
+                title: "Monthly income plan",
+                category: .finance,
+                dueDate: paymentDate,
+                notes: "Planned income for \(MoneyAnalytics.monthTitle(for: selectedMonth)).",
+                recurrence: .monthly,
+                estimatedDurationMinutes: 15,
+                financialEnabled: true,
+                financialType: .income,
+                currencyCode: normalizedCurrency,
+                budgetCategory: cleanedCategory,
+                paymentDate: paymentDate,
+                includeInMonthlySpending: false,
+                markPlannedOnCreate: true,
+                createdAt: now,
+                updatedAt: now
+            )
+
+            task.financialEnabled = true
+            task.financialType = .income
+            task.plannedAmount = plannedAmount
+            task.currencyCode = normalizedCurrency
+            task.budgetCategory = cleanedCategory
+            task.paymentDate = paymentDate
+            task.dueDate = paymentDate
+            task.includeInMonthlySpending = false
+            task.markPlannedOnCreate = true
+            task.financialNotes = cleanedNotes
+            task.updatedAt = now
+
+            if existingPlan == nil {
+                modelContext.insert(task)
+            }
+        }
+
+        let existingActual = entries.first {
+            $0.type == .income &&
+            MoneyCurrency.normalized($0.currencyCode) == normalizedCurrency &&
+            MoneyAnalytics.amount(for: $0, in: interval) > 0 &&
+            ($0.notes.localizedCaseInsensitiveContains("income") || $0.category.localizedCaseInsensitiveContains("income"))
+        }
+
+        if actualAmount > 0 || existingActual != nil {
+            let entry = existingActual ?? MoneyEntry(
+                type: .income,
+                amount: actualAmount,
+                currencyCode: normalizedCurrency,
+                category: cleanedCategory,
+                dateScope: .month,
+                startDate: paymentDate,
+                notes: cleanedNotes.isEmpty ? "Monthly income" : cleanedNotes,
+                includeInMonthlySpending: false,
+                source: .manual,
+                createdAt: now,
+                updatedAt: now
+            )
+
+            entry.type = .income
+            entry.amount = actualAmount
+            entry.currencyCode = normalizedCurrency
+            entry.category = cleanedCategory
+            entry.dateScope = .month
+            entry.startDate = paymentDate
+            entry.endDate = nil
+            entry.notes = cleanedNotes.isEmpty ? "Monthly income" : cleanedNotes
+            entry.includeInMonthlySpending = false
+            entry.distributeAcrossPeriod = false
+            entry.source = .manual
+            entry.updatedAt = now
+
+            if existingActual == nil {
+                modelContext.insert(entry)
+            }
+        }
+
+        try? modelContext.save()
     }
 
     private func tabBackground(isSelected: Bool) -> some ShapeStyle {
@@ -535,6 +728,242 @@ private struct MoneyTrendPoint {
     var normalized: Double
 }
 
+private struct MoneyProjectionMetric: View {
+    let title: String
+    let value: Double
+    let currencyCode: String
+    let symbolName: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Image(systemName: symbolName)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.12), in: Circle())
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(MoneyFormatting.currency(value, code: currencyCode))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+    }
+}
+
+private struct MoneyProjectionChart: View {
+    let points: [MoneyProjectionPoint]
+    let currencyCode: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Cash flow")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                Spacer()
+                Text("Next 30 days")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Capsule())
+            }
+
+            GeometryReader { proxy in
+                let values = points.map(\.balance)
+                let minValue = values.min() ?? 0
+                let maxValue = values.max() ?? 1
+                let range = max(maxValue - minValue, 1)
+
+                ZStack(alignment: .leading) {
+                    VStack(spacing: 0) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            Divider()
+                            Spacer(minLength: 0)
+                        }
+                        Divider()
+                    }
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
+
+                    Path { path in
+                        for (index, point) in points.enumerated() {
+                            let x = points.count <= 1 ? 0 : proxy.size.width * CGFloat(index) / CGFloat(points.count - 1)
+                            let yRatio = (point.balance - minValue) / range
+                            let y = proxy.size.height - (proxy.size.height * CGFloat(yRatio))
+                            if index == 0 {
+                                path.move(to: CGPoint(x: x, y: y))
+                            } else {
+                                path.addLine(to: CGPoint(x: x, y: y))
+                            }
+                        }
+                    }
+                    .stroke(LifeTrackTheme.ColorPalette.accentGradient, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+
+                    if let last = points.last {
+                        Text(MoneyFormatting.currency(last.balance, code: currencyCode))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.86), in: Capsule())
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    }
+                }
+            }
+            .frame(height: 150)
+        }
+    }
+}
+
+private struct MoneyIncomeEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let month: Date
+    let summary: MoneyMonthlySummary
+    let onSave: (Double, Double, String, String, Date, String) -> Void
+
+    @State private var plannedText: String
+    @State private var actualText: String
+    @State private var currencyCode: String
+    @State private var category = "Income"
+    @State private var paymentDate: Date
+    @State private var notes = "Monthly income"
+
+    init(
+        month: Date,
+        currencyCode: String,
+        summary: MoneyMonthlySummary,
+        onSave: @escaping (Double, Double, String, String, Date, String) -> Void
+    ) {
+        self.month = month
+        self.summary = summary
+        self.onSave = onSave
+        _plannedText = State(initialValue: Self.amountInputString(summary.plannedIncome))
+        _actualText = State(initialValue: Self.amountInputString(summary.actualIncome))
+        _currencyCode = State(initialValue: MoneyCurrency.normalized(currencyCode))
+        _paymentDate = State(initialValue: month)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LifeTrackTheme.appBackground
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Edit Income")
+                                .font(.lifeTrackHero)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                            Text("Set planned income for forecasting and actual income for monthly reports.")
+                                .font(.subheadline)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        SectionCardView {
+                            MoneyAmountField(title: "Planned income", amountText: $plannedText, currencyCode: $currencyCode)
+                            MoneyAmountField(title: "Actual income", amountText: $actualText, currencyCode: $currencyCode)
+
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text("Category")
+                                    .font(.lifeTrackCaption)
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                TextField("Income", text: $category)
+                                    .font(.body.weight(.medium))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                            }
+
+                            DatePicker("Payment date", selection: $paymentDate, displayedComponents: .date)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                                .padding(11)
+                                .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text("Notes")
+                                    .font(.lifeTrackCaption)
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                TextField("Optional note", text: $notes, axis: .vertical)
+                                    .lineLimit(2...4)
+                                    .font(.body)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                            }
+                        }
+
+                        SectionCardView {
+                            SectionHeaderView(title: "Preview", subtitle: MoneyAnalytics.monthTitle(for: month))
+                            MoneyValueRow(
+                                title: "Forecast income",
+                                value: MoneyFormatting.currency(parseAmount(plannedText), code: currencyCode),
+                                symbolName: "calendar.badge.clock",
+                                tint: LifeTrackTheme.ColorPalette.accent
+                            )
+                            MoneyValueRow(
+                                title: "Actual income",
+                                value: MoneyFormatting.currency(parseAmount(actualText), code: currencyCode),
+                                symbolName: "arrow.down.circle",
+                                tint: LifeTrackTheme.ColorPalette.success
+                            )
+                        }
+                    }
+                    .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+                    .padding(.top, LifeTrackTheme.Spacing.large)
+                    .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(parseAmount(plannedText), parseAmount(actualText), currencyCode, category, paymentDate, notes)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private func parseAmount(_ value: String) -> Double {
+        var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        cleaned = cleaned.replacingOccurrences(of: #"[^0-9,.\-]"#, with: "", options: .regularExpression)
+        if cleaned.filter({ $0 == "," }).count == 1, !cleaned.contains(".") {
+            cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+        } else {
+            cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+        }
+        return max(Double(cleaned) ?? 0, 0)
+    }
+
+    private static func amountInputString(_ amount: Double) -> String {
+        guard amount > 0 else { return "" }
+        if amount.rounded(.down) == amount {
+            return String(Int(amount))
+        }
+        return String(format: "%.2f", amount)
+    }
+}
+
 private struct MoneySummaryCard: View {
     let title: String
     let value: Double
@@ -543,6 +972,7 @@ private struct MoneySummaryCard: View {
     let subtitle: String
     let symbolName: String
     let tint: Color
+    var accessorySymbolName: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -556,6 +986,12 @@ private struct MoneySummaryCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     .lineLimit(1)
+                Spacer(minLength: 0)
+                if let accessorySymbolName {
+                    Image(systemName: accessorySymbolName)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                }
             }
 
             Text(MoneyFormatting.currency(value, code: currencyCode))
@@ -576,7 +1012,9 @@ private struct MoneySummaryCard: View {
                 .background(deltaTint.opacity(0.10), in: Capsule())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .lifeTrackCard(padding: LifeTrackTheme.Spacing.medium, backgroundColor: LifeTrackTheme.ColorPalette.cardElevated)
+        .padding(LifeTrackTheme.Spacing.medium)
+        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(0.8), radius: 10, x: 0, y: 6)
     }
 
     private var deltaText: String {

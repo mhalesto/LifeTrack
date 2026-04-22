@@ -2670,7 +2670,8 @@ struct BetaDashboardView: View {
                             onToggleCompletion: { toggleFocusCompletion(task) },
                             onEdit: { editingTask = task },
                             onDelete: { deleteFocusTask(task) },
-                            categoryOption: task.categoryOption(customCategories: customCategories)
+                            categoryOption: task.categoryOption(customCategories: customCategories),
+                            showsBorder: false
                         )
                     }
 

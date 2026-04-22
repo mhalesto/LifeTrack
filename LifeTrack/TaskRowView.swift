@@ -16,6 +16,7 @@ struct TaskRowView: View {
     var categoryOption: TaskCategoryOption? = nil
     var verticalPadding: CGFloat = 12
     var leadingIconSize: CGFloat = 28
+    var showsBorder: Bool = true
 
     @State private var restingOffset: CGFloat = 0
     @GestureState private var dragOffset: CGFloat = 0
@@ -141,8 +142,10 @@ struct TaskRowView: View {
         .padding(.vertical, verticalPadding)
         .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
-                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
+            if showsBorder {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
+            }
         }
     }
 

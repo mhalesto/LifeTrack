@@ -91,6 +91,13 @@ struct MoneyImpactPreview: Equatable {
     var currencyCode: String
 }
 
+struct MoneyProjectionPoint: Identifiable, Equatable {
+    var date: Date
+    var balance: Double
+
+    var id: Date { date }
+}
+
 enum MoneyAnalytics {
     static func availableCurrencies(entries: [MoneyEntry], tasks: [LifeTask]) -> [String] {
         let entryCodes = entries.map { MoneyCurrency.normalized($0.currencyCode) }
@@ -359,6 +366,62 @@ enum MoneyAnalytics {
         date.formatted(Date.FormatStyle().month(.wide).year())
     }
 
+    static func projectionPoints(
+        from startDate: Date,
+        days: Int,
+        entries: [MoneyEntry],
+        tasks: [LifeTask],
+        currencyCode: String,
+        calendar: Calendar = .current
+    ) -> [MoneyProjectionPoint] {
+        let normalizedCurrency = MoneyCurrency.normalized(currencyCode)
+        let startDay = calendar.startOfDay(for: startDate)
+        let monthSummary = monthlySummary(for: startDate, entries: entries, tasks: tasks, currencyCode: normalizedCurrency, calendar: calendar)
+        var runningBalance = monthSummary.actualRemaining
+        let linkedEntryTaskIDs = Set(entries.compactMap(\.linkedTaskId))
+
+        return (0..<max(days, 1)).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: startDay),
+                  let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
+                return nil
+            }
+
+            let dayInterval = DateInterval(start: day, end: nextDay)
+
+            for entry in entries where MoneyCurrency.normalized(entry.currencyCode) == normalizedCurrency {
+                let value = amount(for: entry, in: dayInterval, calendar: calendar)
+                guard value > 0 else { continue }
+                switch entry.type {
+                case .income:
+                    runningBalance += value
+                case .expense, .debtPayment:
+                    if entry.includeInMonthlySpending { runningBalance -= value }
+                case .savings:
+                    runningBalance -= value
+                case .transfer:
+                    break
+                }
+            }
+
+            for task in tasks where task.financialEnabled && !task.isDeleted && MoneyCurrency.normalized(task.currencyCode) == normalizedCurrency {
+                guard !linkedEntryTaskIDs.contains(task.id) else { continue }
+                let taskDate = task.paymentDate ?? task.dueDate
+                guard intervalContains(dayInterval, taskDate) else { continue }
+                let amount = max(task.actualAmount ?? task.plannedAmount, 0)
+                switch task.financialType {
+                case .income, .reimbursement:
+                    runningBalance += amount
+                case .expense:
+                    if task.includeInMonthlySpending { runningBalance -= amount }
+                case .savings:
+                    runningBalance -= amount
+                }
+            }
+
+            return MoneyProjectionPoint(date: day, balance: runningBalance)
+        }
+    }
+
     private static func billStatus(for task: LifeTask, referenceDate: Date, calendar: Calendar) -> MoneyBillStatus {
         if task.actualAmount != nil || task.isCompleted {
             return .paid
@@ -377,7 +440,7 @@ enum MoneyAnalytics {
         return DateInterval(start: normalizedStart, end: normalizedEnd)
     }
 
-    private static func intervalContains(_ interval: DateInterval, _ date: Date) -> Bool {
+    static func intervalContains(_ interval: DateInterval, _ date: Date) -> Bool {
         date >= interval.start && date < interval.end
     }
 }
