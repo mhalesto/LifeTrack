@@ -1611,7 +1611,7 @@ struct BetaDashboardView: View {
         )
     }
 
-    // MARK: Streak hero pager
+    // MARK: Productivity hero pager
 
     private var weeklyCompletionCounts: [Int] {
         let cal = Calendar.current
@@ -1634,9 +1634,13 @@ struct BetaDashboardView: View {
 
     private var streakHeroPager: some View {
         HeroPager(
-            page1: streakHeroCard,
-            page2: upgradeHeroCard,
-            page3: weeklyRhythmCard
+            pages: [
+                AnyView(weeklyRhythmCard),
+                AnyView(todayPlanHeroCard),
+                AnyView(nextMoveHeroCard),
+                AnyView(streakHeroCard),
+                AnyView(upgradeHeroCard)
+            ]
         )
     }
 
@@ -1861,6 +1865,238 @@ struct BetaDashboardView: View {
         }
         .frame(minHeight: 240)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private var todayPlanHeroCard: some View {
+        let subtitle: String
+        if overdue > 0 {
+            subtitle = "\(overdue) overdue task\(overdue == 1 ? "" : "s") need a decision before new work."
+        } else if dueToday > 0 {
+            subtitle = "\(dueToday) task\(dueToday == 1 ? "" : "s") due today. Start with the clearest next step."
+        } else {
+            subtitle = "No tasks due today. Pull one upcoming item forward if you want momentum."
+        }
+
+        return productivityHeroShell {
+            VStack(alignment: .leading, spacing: 11) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Today's Plan")
+                        .font(.betaHeroTitle)
+                        .foregroundStyle(BetaPalette.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(BetaPalette.secondaryText)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 8) {
+                    heroMetricPill(
+                        title: "Due",
+                        value: dueToday.formatted(),
+                        subtitle: "today",
+                        tint: BetaPalette.statDueToday,
+                        symbolName: "sun.max.fill"
+                    )
+                    heroMetricPill(
+                        title: "Next",
+                        value: upcoming.formatted(),
+                        subtitle: "upcoming",
+                        tint: BetaPalette.statUpcoming,
+                        symbolName: "calendar"
+                    )
+                    heroMetricPill(
+                        title: "Risk",
+                        value: overdue.formatted(),
+                        subtitle: "overdue",
+                        tint: BetaPalette.statOverdue,
+                        symbolName: "exclamationmark.triangle.fill"
+                    )
+                }
+
+                Spacer(minLength: 0)
+
+                heroActionButton(title: "Plan My Day", systemImage: "wand.and.stars") {
+                    onPresentSheet?(.planMyDay)
+                }
+                .disabled(onPresentSheet == nil)
+                .opacity(onPresentSheet == nil ? 0.65 : 1)
+            }
+        }
+    }
+
+    private var nextMoveHeroCard: some View {
+        let completionShare = activeTasks.isEmpty ? 0 : Int((Double(completedTaskList.count) / Double(activeTasks.count)) * 100)
+        let subtitle: String
+        if overdue > 0 {
+            subtitle = "Clear or reschedule the backlog so today feels honest."
+        } else if upcoming > dueToday {
+            subtitle = "Your next seven days are loaded. Decide what deserves attention now."
+        } else {
+            subtitle = "Your queue is light. Review progress and keep priorities tidy."
+        }
+
+        return productivityHeroShell {
+            VStack(alignment: .leading, spacing: 11) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Next Best Move")
+                        .font(.betaHeroTitle)
+                        .foregroundStyle(BetaPalette.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(BetaPalette.secondaryText)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(spacing: 9) {
+                    heroProgressRow(
+                        title: "Open queue",
+                        value: "\(focusTasks.count)",
+                        progress: activeTasks.isEmpty ? 0 : Double(focusTasks.count) / Double(max(activeTasks.count, 1)),
+                        tint: BetaPalette.accent
+                    )
+                    heroProgressRow(
+                        title: "Completed share",
+                        value: "\(completionShare)%",
+                        progress: Double(completionShare) / 100,
+                        tint: BetaPalette.statCompleted
+                    )
+                    heroProgressRow(
+                        title: "Overdue pressure",
+                        value: "\(overdue)",
+                        progress: min(Double(overdue) / Double(max(focusTasks.count, 1)), 1),
+                        tint: BetaPalette.statOverdue
+                    )
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                Spacer(minLength: 0)
+
+                heroActionButton(title: "Open Review", systemImage: "chart.bar.fill") {
+                    onPresentSheet?(.review)
+                }
+                .disabled(onPresentSheet == nil)
+                .opacity(onPresentSheet == nil ? 0.65 : 1)
+            }
+        }
+    }
+
+    private func productivityHeroShell<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(BetaPalette.heroBackground)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                }
+                .shadow(color: BetaPalette.accentDeep.opacity(0.08), radius: 18, y: 8)
+
+            content()
+                .padding(.horizontal, 22)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
+        }
+        .frame(minHeight: 240)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private func heroMetricPill(title: String, value: String, subtitle: String, tint: Color, symbolName: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 18, height: 18)
+                    .background(tint.opacity(0.13), in: Circle())
+
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(BetaPalette.secondaryText)
+                    .lineLimit(1)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(BetaPalette.primaryText)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(BetaPalette.tertiaryText)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .frame(height: 68)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(Color.white.opacity(0.55), lineWidth: 1)
+        }
+    }
+
+    private func heroProgressRow(title: String, value: String, progress: Double, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(BetaPalette.primaryText)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(value)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(BetaPalette.secondaryText)
+                    .monospacedDigit()
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(tint.opacity(0.14))
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: max(8, proxy.size.width * CGFloat(min(max(progress, 0), 1))))
+                }
+            }
+            .frame(height: 7)
+        }
+    }
+
+    private func heroActionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .bold))
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 11)
+            .background(
+                LinearGradient(
+                    colors: [Color(hex: 0x1F1B2E), Color(hex: 0x2A2540)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                in: Capsule()
+            )
+            .shadow(color: Color.black.opacity(0.18), radius: 8, y: 4)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Streak hero card
@@ -3258,10 +3494,8 @@ private struct BetaSummaryTaskCard: View {
     }
 }
 
-private struct HeroPager<P1: View, P2: View, P3: View>: View {
-    let page1: P1
-    let page2: P2
-    let page3: P3
+private struct HeroPager: View {
+    let pages: [AnyView]
 
     @State private var currentIndex: Int? = 0
     @State private var isDragging: Bool = false
@@ -3271,9 +3505,11 @@ private struct HeroPager<P1: View, P2: View, P3: View>: View {
         VStack(spacing: 10) {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
-                    page1.containerRelativeFrame(.horizontal).id(0)
-                    page2.containerRelativeFrame(.horizontal).id(1)
-                    page3.containerRelativeFrame(.horizontal).id(2)
+                    ForEach(pages.indices, id: \.self) { index in
+                        pages[index]
+                            .containerRelativeFrame(.horizontal)
+                            .id(index)
+                    }
                 }
                 .scrollTargetLayout()
             }
@@ -3296,15 +3532,16 @@ private struct HeroPager<P1: View, P2: View, P3: View>: View {
             }
             .onReceive(Timer.publish(every: 7, on: .main, in: .common).autoconnect()) { now in
                 guard !isDragging else { return }
+                guard !pages.isEmpty else { return }
                 guard now.timeIntervalSince(lastInteraction) >= 6.5 else { return }
                 let current = currentIndex ?? 0
                 withAnimation(.easeInOut(duration: 0.45)) {
-                    currentIndex = (current + 1) % 3
+                    currentIndex = (current + 1) % pages.count
                 }
                 lastInteraction = now
             }
 
-            HeroPagerDots(currentIndex: currentIndex ?? 0, count: 3)
+            HeroPagerDots(currentIndex: currentIndex ?? 0, count: pages.count)
         }
     }
 }
