@@ -783,22 +783,37 @@ private struct MoneyProjectionChart: View {
                 let values = points.map(\.balance)
                 let minValue = values.min() ?? 0
                 let maxValue = values.max() ?? 1
-                let range = max(maxValue - minValue, 1)
+                let padding = max((maxValue - minValue) * 0.18, max(abs(maxValue) * 0.04, 1))
+                let lowerBound = minValue - padding
+                let upperBound = maxValue + padding
+                let range = max(upperBound - lowerBound, 1)
 
                 ZStack(alignment: .leading) {
-                    VStack(spacing: 0) {
-                        ForEach(0..<4, id: \.self) { _ in
-                            Divider()
-                            Spacer(minLength: 0)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(0..<5, id: \.self) { index in
+                            let ratio = Double(index) / 4
+                            HStack(spacing: 10) {
+                                Text(axisLabel(for: upperBound - (range * ratio)))
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                    .frame(width: 44, alignment: .leading)
+                                Rectangle()
+                                    .fill(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
+                                    .frame(height: 0.7)
+                            }
+                            if index < 4 {
+                                Spacer(minLength: 0)
+                            }
                         }
-                        Divider()
                     }
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
+                    .padding(.vertical, 4)
 
                     Path { path in
                         for (index, point) in points.enumerated() {
-                            let x = points.count <= 1 ? 0 : proxy.size.width * CGFloat(index) / CGFloat(points.count - 1)
-                            let yRatio = (point.balance - minValue) / range
+                            let plotX = CGFloat(54)
+                            let plotWidth = max(proxy.size.width - plotX, 1)
+                            let x = plotX + (points.count <= 1 ? 0 : plotWidth * CGFloat(index) / CGFloat(points.count - 1))
+                            let yRatio = (point.balance - lowerBound) / range
                             let y = proxy.size.height - (proxy.size.height * CGFloat(yRatio))
                             if index == 0 {
                                 path.move(to: CGPoint(x: x, y: y))
@@ -823,6 +838,24 @@ private struct MoneyProjectionChart: View {
             .frame(height: 150)
         }
     }
+
+    private func axisLabel(for value: Double) -> String {
+        let absValue = abs(value)
+        if absValue >= 1_000 {
+            return "\(currencyCodePrefix)\(Int(value / 1_000))K"
+        }
+        return "\(currencyCodePrefix)\(Int(value))"
+    }
+
+    private var currencyCodePrefix: String {
+        currencyCode == "ZAR" ? "R" : "\(currencyCode) "
+    }
+}
+
+private struct MoneyDeductionDraft: Identifiable, Equatable {
+    var id = UUID()
+    var title: String
+    var amountText: String
 }
 
 private struct MoneyIncomeEditorView: View {
@@ -833,11 +866,14 @@ private struct MoneyIncomeEditorView: View {
     let onSave: (Double, Double, String, String, Date, String) -> Void
 
     @State private var plannedText: String
-    @State private var actualText: String
+    @State private var grossText: String
     @State private var currencyCode: String
     @State private var category = "Income"
     @State private var paymentDate: Date
     @State private var notes = "Monthly income"
+    @State private var deductions: [MoneyDeductionDraft] = [
+        MoneyDeductionDraft(title: "Tax", amountText: "")
+    ]
 
     init(
         month: Date,
@@ -849,7 +885,7 @@ private struct MoneyIncomeEditorView: View {
         self.summary = summary
         self.onSave = onSave
         _plannedText = State(initialValue: Self.amountInputString(summary.plannedIncome))
-        _actualText = State(initialValue: Self.amountInputString(summary.actualIncome))
+        _grossText = State(initialValue: Self.amountInputString(summary.actualIncome))
         _currencyCode = State(initialValue: MoneyCurrency.normalized(currencyCode))
         _paymentDate = State(initialValue: month)
     }
@@ -874,7 +910,65 @@ private struct MoneyIncomeEditorView: View {
 
                         SectionCardView {
                             MoneyAmountField(title: "Planned income", amountText: $plannedText, currencyCode: $currencyCode)
-                            MoneyAmountField(title: "Actual income", amountText: $actualText, currencyCode: $currencyCode)
+                            MoneyAmountField(title: "Gross income", amountText: $grossText, currencyCode: $currencyCode)
+
+                            VStack(alignment: .leading, spacing: 9) {
+                                HStack {
+                                    Text("Monthly deductions")
+                                        .font(.lifeTrackCaption)
+                                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                    Spacer()
+                                    Button {
+                                        deductions.append(MoneyDeductionDraft(title: "Deduction", amountText: ""))
+                                    } label: {
+                                        Label("Add", systemImage: "plus")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                VStack(spacing: 8) {
+                                    ForEach($deductions) { $deduction in
+                                        HStack(spacing: 8) {
+                                            TextField("Name", text: $deduction.title)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                                                .tint(LifeTrackTheme.ColorPalette.accent)
+                                                .textFieldStyle(.plain)
+
+                                            TextField("0", text: $deduction.amountText)
+                                                .font(.subheadline.weight(.bold))
+                                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                                                .keyboardType(.decimalPad)
+                                                .multilineTextAlignment(.trailing)
+                                                .tint(LifeTrackTheme.ColorPalette.accent)
+                                                .textFieldStyle(.plain)
+                                                .frame(width: 94)
+
+                                            Button {
+                                                deductions.removeAll { $0.id == deduction.id }
+                                            } label: {
+                                                Image(systemName: "minus.circle.fill")
+                                                    .font(.system(size: 17, weight: .semibold))
+                                                    .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 10)
+                                        .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                                    }
+                                }
+                            }
+
+                            MoneyValueRow(
+                                title: "Net actual income",
+                                value: MoneyFormatting.currency(netActualIncome, code: currencyCode),
+                                symbolName: "equal.circle",
+                                tint: LifeTrackTheme.ColorPalette.success,
+                                subtitle: "Gross minus monthly deductions"
+                            )
 
                             VStack(alignment: .leading, spacing: 7) {
                                 Text("Category")
@@ -882,6 +976,9 @@ private struct MoneyIncomeEditorView: View {
                                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                                 TextField("Income", text: $category)
                                     .font(.body.weight(.medium))
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                                    .tint(LifeTrackTheme.ColorPalette.accent)
+                                    .textFieldStyle(.plain)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 10)
                                     .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
@@ -900,6 +997,9 @@ private struct MoneyIncomeEditorView: View {
                                 TextField("Optional note", text: $notes, axis: .vertical)
                                     .lineLimit(2...4)
                                     .font(.body)
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                                    .tint(LifeTrackTheme.ColorPalette.accent)
+                                    .textFieldStyle(.plain)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 10)
                                     .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
@@ -916,7 +1016,7 @@ private struct MoneyIncomeEditorView: View {
                             )
                             MoneyValueRow(
                                 title: "Actual income",
-                                value: MoneyFormatting.currency(parseAmount(actualText), code: currencyCode),
+                                value: MoneyFormatting.currency(netActualIncome, code: currencyCode),
                                 symbolName: "arrow.down.circle",
                                 tint: LifeTrackTheme.ColorPalette.success
                             )
@@ -935,7 +1035,7 @@ private struct MoneyIncomeEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(parseAmount(plannedText), parseAmount(actualText), currencyCode, category, paymentDate, notes)
+                        onSave(parseAmount(plannedText), netActualIncome, currencyCode, category, paymentDate, notesWithBreakdown)
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -953,6 +1053,36 @@ private struct MoneyIncomeEditorView: View {
             cleaned = cleaned.replacingOccurrences(of: ",", with: "")
         }
         return max(Double(cleaned) ?? 0, 0)
+    }
+
+    private var totalDeductions: Double {
+        deductions.reduce(0) { partial, deduction in
+            partial + parseAmount(deduction.amountText)
+        }
+    }
+
+    private var netActualIncome: Double {
+        max(parseAmount(grossText) - totalDeductions, 0)
+    }
+
+    private var notesWithBreakdown: String {
+        let cleanedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let deductionLines = deductions
+            .map { (title: $0.title.trimmingCharacters(in: .whitespacesAndNewlines), amount: parseAmount($0.amountText)) }
+            .filter { !$0.title.isEmpty && $0.amount > 0 }
+            .map { "\($0.title): \(MoneyFormatting.currency($0.amount, code: currencyCode))" }
+
+        var parts: [String] = []
+        if !cleanedNotes.isEmpty {
+            parts.append(cleanedNotes)
+        }
+        if parseAmount(grossText) > 0 {
+            parts.append("Gross income: \(MoneyFormatting.currency(parseAmount(grossText), code: currencyCode))")
+        }
+        if !deductionLines.isEmpty {
+            parts.append("Deductions: \(deductionLines.joined(separator: ", "))")
+        }
+        return parts.joined(separator: "\n")
     }
 
     private static func amountInputString(_ amount: Double) -> String {

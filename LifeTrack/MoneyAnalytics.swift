@@ -377,48 +377,51 @@ enum MoneyAnalytics {
         let normalizedCurrency = MoneyCurrency.normalized(currencyCode)
         let startDay = calendar.startOfDay(for: startDate)
         let monthSummary = monthlySummary(for: startDate, entries: entries, tasks: tasks, currencyCode: normalizedCurrency, calendar: calendar)
-        var runningBalance = monthSummary.actualRemaining
         let linkedEntryTaskIDs = Set(entries.compactMap(\.linkedTaskId))
+        let todayCutoff = calendar.date(byAdding: .day, value: 1, to: startDay) ?? startDay
+        let horizonEnd = calendar.date(byAdding: .day, value: max(days, 1), to: startDay) ?? startDay
+        let horizon = DateInterval(start: todayCutoff, end: horizonEnd)
+        var futureDelta: Double = 0
+
+        for entry in entries where MoneyCurrency.normalized(entry.currencyCode) == normalizedCurrency {
+            guard entry.startDate >= todayCutoff else { continue }
+            let value = amount(for: entry, in: horizon, calendar: calendar)
+            guard value > 0 else { continue }
+            switch entry.type {
+            case .income:
+                futureDelta += value
+            case .expense, .debtPayment:
+                if entry.includeInMonthlySpending { futureDelta -= value }
+            case .savings:
+                futureDelta -= value
+            case .transfer:
+                break
+            }
+        }
+
+        for task in tasks where task.financialEnabled && !task.isDeleted && MoneyCurrency.normalized(task.currencyCode) == normalizedCurrency {
+            guard !linkedEntryTaskIDs.contains(task.id) else { continue }
+            let taskDate = task.paymentDate ?? task.dueDate
+            guard taskDate >= todayCutoff, intervalContains(horizon, taskDate) else { continue }
+            let amount = max(task.actualAmount ?? task.plannedAmount, 0)
+            switch task.financialType {
+            case .income, .reimbursement:
+                futureDelta += amount
+            case .expense:
+                if task.includeInMonthlySpending { futureDelta -= amount }
+            case .savings:
+                futureDelta -= amount
+            }
+        }
 
         return (0..<max(days, 1)).compactMap { offset in
-            guard let day = calendar.date(byAdding: .day, value: offset, to: startDay),
-                  let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: startDay) else {
                 return nil
             }
-
-            let dayInterval = DateInterval(start: day, end: nextDay)
-
-            for entry in entries where MoneyCurrency.normalized(entry.currencyCode) == normalizedCurrency {
-                let value = amount(for: entry, in: dayInterval, calendar: calendar)
-                guard value > 0 else { continue }
-                switch entry.type {
-                case .income:
-                    runningBalance += value
-                case .expense, .debtPayment:
-                    if entry.includeInMonthlySpending { runningBalance -= value }
-                case .savings:
-                    runningBalance -= value
-                case .transfer:
-                    break
-                }
-            }
-
-            for task in tasks where task.financialEnabled && !task.isDeleted && MoneyCurrency.normalized(task.currencyCode) == normalizedCurrency {
-                guard !linkedEntryTaskIDs.contains(task.id) else { continue }
-                let taskDate = task.paymentDate ?? task.dueDate
-                guard intervalContains(dayInterval, taskDate) else { continue }
-                let amount = max(task.actualAmount ?? task.plannedAmount, 0)
-                switch task.financialType {
-                case .income, .reimbursement:
-                    runningBalance += amount
-                case .expense:
-                    if task.includeInMonthlySpending { runningBalance -= amount }
-                case .savings:
-                    runningBalance -= amount
-                }
-            }
-
-            return MoneyProjectionPoint(date: day, balance: runningBalance)
+            let progress = Double(offset) / Double(max(days - 1, 1))
+            let easedProgress = progress * progress * (3 - 2 * progress)
+            let balance = monthSummary.actualRemaining + (futureDelta * easedProgress)
+            return MoneyProjectionPoint(date: day, balance: balance)
         }
     }
 
