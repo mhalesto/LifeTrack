@@ -129,7 +129,7 @@ struct TaskDataExchangeView: View {
                 .font(.lifeTrackHero)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-            Text("Import or export tasks with statuses, due dates, categories, priority, recurrence, duration, and notes.")
+            Text("Import or export tasks with statuses, due dates, categories, priority, recurrence, duration, notes, and optional money fields.")
                 .font(.subheadline)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -175,6 +175,12 @@ struct TaskDataExchangeView: View {
                     symbolName: "circle.dotted",
                     title: "Status",
                     message: "Use `in_progress`, `done`, or `bin`. Common values like completed, open, deleted, and yes also work."
+                )
+
+                TaskExchangeRequirementRow(
+                    symbolName: "creditcard",
+                    title: "Money",
+                    message: "Optional fields like `financial_enabled`, `planned_amount`, `actual_amount`, and `currency_code` add budget metadata."
                 )
             }
 
@@ -401,7 +407,15 @@ struct TaskDataExchangeView: View {
             "priority",
             "recurrence",
             "duration_minutes",
-            "notes"
+            "notes",
+            "financial_enabled",
+            "financial_type",
+            "planned_amount",
+            "actual_amount",
+            "currency_code",
+            "budget_category",
+            "payment_date",
+            "include_in_monthly_spending"
         ]
     }
 

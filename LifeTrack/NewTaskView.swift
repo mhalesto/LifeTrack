@@ -66,6 +66,18 @@ struct NewTaskView: View {
     @State private var isAIEnhancing = false
     @State private var advancedFieldValues: [String: String] = [:]
     @State private var isAdvancedExpanded = false
+    @State private var financialEnabled = false
+    @State private var financialType: TaskFinancialType = .expense
+    @State private var plannedAmountText = ""
+    @State private var actualAmountText = ""
+    @State private var currencyCode = MoneyCurrency.defaultCode
+    @State private var budgetCategory = ""
+    @State private var hasPaymentDate = false
+    @State private var paymentDate = Date()
+    @State private var financialLinkOption: MoneyLinkOption = .none
+    @State private var financialNotes = ""
+    @State private var includeInMonthlySpending = true
+    @State private var markPlannedOnCreate = false
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
 
     private let durationOptions = [15, 30, 45, 60, 90, 120]
@@ -104,6 +116,19 @@ struct NewTaskView: View {
         }
         _advancedFieldValues = State(initialValue: task?.advancedFields ?? [:])
         _isAdvancedExpanded = State(initialValue: !(task?.advancedFields.isEmpty ?? true))
+        let templateWantsFinance = template?.id == "bill"
+        _financialEnabled = State(initialValue: task?.financialEnabled ?? templateWantsFinance)
+        _financialType = State(initialValue: task?.financialType ?? .expense)
+        _plannedAmountText = State(initialValue: Self.amountInputString(task?.plannedAmount))
+        _actualAmountText = State(initialValue: Self.amountInputString(task?.actualAmount))
+        _currencyCode = State(initialValue: task?.currencyCode ?? MoneyCurrency.defaultCode)
+        _budgetCategory = State(initialValue: task?.budgetCategory ?? (templateWantsFinance ? "Bills" : ""))
+        _hasPaymentDate = State(initialValue: task?.paymentDate != nil)
+        _paymentDate = State(initialValue: task?.paymentDate ?? task?.dueDate ?? template?.dueDate ?? Date())
+        _financialLinkOption = State(initialValue: MoneyLinkOption.resolved(budgetId: task?.linkedBudgetId, goalId: task?.linkedGoalId))
+        _financialNotes = State(initialValue: task?.financialNotes ?? "")
+        _includeInMonthlySpending = State(initialValue: task?.includeInMonthlySpending ?? true)
+        _markPlannedOnCreate = State(initialValue: task?.markPlannedOnCreate ?? templateWantsFinance)
     }
 
     var body: some View {
@@ -127,6 +152,8 @@ struct NewTaskView: View {
                             planningCard
 
                             dateCard
+
+                            financialDetailsCard
 
                             if subscriptionManager.tier >= .standard {
                                 locationCard
@@ -230,6 +257,11 @@ struct NewTaskView: View {
                 voiceTranscript = newTranscript
                 applyVoiceTranscript(newTranscript)
             }
+            .onChange(of: dueDate) { _, newDueDate in
+                if !hasPaymentDate {
+                    paymentDate = newDueDate
+                }
+            }
             .onChange(of: voiceInput.isRecording) { wasRecording, isNowRecording in
                 if wasRecording && !isNowRecording,
                    !voiceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -319,6 +351,18 @@ struct NewTaskView: View {
             locationRadius: locationConfig?.radius,
             locationOnArrival: locationConfig?.onArrival,
             advancedFields: sanitizedAdvancedFields(),
+            financialEnabled: financialEnabled,
+            financialTypeRawValue: financialType.rawValue,
+            plannedAmountText: plannedAmountText,
+            actualAmountText: actualAmountText,
+            currencyCode: currencyCode,
+            budgetCategory: budgetCategory,
+            hasPaymentDate: hasPaymentDate,
+            paymentDate: hasPaymentDate ? paymentDate : nil,
+            financialLinkRawValue: financialLinkOption.rawValue,
+            financialNotes: financialNotes,
+            includeInMonthlySpending: includeInMonthlySpending,
+            markPlannedOnCreate: markPlannedOnCreate,
             savedAt: Date()
         )
     }
@@ -331,6 +375,7 @@ struct NewTaskView: View {
         if priority != .normal { return true }
         if recurrence != .none { return true }
         if !sanitizedAdvancedFields().isEmpty { return true }
+        if financialEnabled { return true }
         return false
     }
 
@@ -365,6 +410,18 @@ struct NewTaskView: View {
         }
         advancedFieldValues = draft.advancedFields
         isAdvancedExpanded = !draft.advancedFields.isEmpty
+        financialEnabled = draft.financialEnabled ?? false
+        financialType = TaskFinancialType(rawValue: draft.financialTypeRawValue ?? "") ?? .expense
+        plannedAmountText = draft.plannedAmountText ?? ""
+        actualAmountText = draft.actualAmountText ?? ""
+        currencyCode = MoneyCurrency.normalized(draft.currencyCode ?? MoneyCurrency.defaultCode)
+        budgetCategory = draft.budgetCategory ?? ""
+        hasPaymentDate = draft.hasPaymentDate ?? false
+        paymentDate = draft.paymentDate ?? dueDate
+        financialLinkOption = MoneyLinkOption(rawValue: draft.financialLinkRawValue ?? "") ?? .none
+        financialNotes = draft.financialNotes ?? ""
+        includeInMonthlySpending = draft.includeInMonthlySpending ?? true
+        markPlannedOnCreate = draft.markPlannedOnCreate ?? false
     }
 
     private var header: some View {
@@ -661,6 +718,24 @@ struct NewTaskView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var financialDetailsCard: some View {
+        TaskFinancialDetailsSection(
+            isEnabled: $financialEnabled,
+            financialType: $financialType,
+            plannedAmountText: $plannedAmountText,
+            actualAmountText: $actualAmountText,
+            currencyCode: $currencyCode,
+            budgetCategory: $budgetCategory,
+            hasPaymentDate: $hasPaymentDate,
+            paymentDate: $paymentDate,
+            linkOption: $financialLinkOption,
+            notes: $financialNotes,
+            includeInMonthlySpending: $includeInMonthlySpending,
+            markPlannedOnCreate: $markPlannedOnCreate,
+            existingTaskHasActivity: existingTask?.hasFinancialActivity ?? false
+        )
     }
 
     private var durationSelector: some View {
@@ -1196,6 +1271,80 @@ struct NewTaskView: View {
         if let draftPriority = draft.priority, force {
             priority = draftPriority
         }
+
+        applyFinancialDraft(draft, force: force)
+    }
+
+    private func applyFinancialDraft(_ draft: VoiceTaskDraft, force: Bool) {
+        let hasFinancialValues =
+            draft.financialEnabled == true ||
+            draft.financialType != nil ||
+            draft.plannedAmount != nil ||
+            draft.actualAmount != nil ||
+            draft.currencyCode != nil ||
+            draft.budgetCategory != nil ||
+            draft.paymentDate != nil ||
+            draft.linkedBudgetId != nil ||
+            draft.linkedGoalId != nil ||
+            draft.includeInMonthlySpending != nil ||
+            draft.markPlannedOnCreate != nil ||
+            draft.financialNotes != nil
+
+        guard hasFinancialValues else { return }
+
+        let wasFinancialEnabled = financialEnabled
+        if force || !financialEnabled || draft.financialEnabled == true {
+            financialEnabled = true
+        }
+
+        if let draftType = draft.financialType, force || !wasFinancialEnabled {
+            financialType = draftType
+        }
+
+        if let plannedAmount = draft.plannedAmount,
+           force || plannedAmountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            plannedAmountText = Self.amountInputString(plannedAmount)
+        }
+
+        if let actualAmount = draft.actualAmount,
+           force || actualAmountText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            actualAmountText = Self.amountInputString(actualAmount)
+        }
+
+        if let draftCurrency = draft.currencyCode,
+           force || currencyCode == MoneyCurrency.defaultCode {
+            currencyCode = MoneyCurrency.normalized(draftCurrency)
+        }
+
+        if let draftBudgetCategory = draft.budgetCategory,
+           force || budgetCategory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            budgetCategory = draftBudgetCategory
+        }
+
+        if let draftPaymentDate = draft.paymentDate, force || !hasPaymentDate {
+            paymentDate = draftPaymentDate
+            hasPaymentDate = true
+        }
+
+        if (draft.linkedBudgetId != nil || draft.linkedGoalId != nil), force || !wasFinancialEnabled {
+            financialLinkOption = MoneyLinkOption.resolved(
+                budgetId: draft.linkedBudgetId,
+                goalId: draft.linkedGoalId
+            )
+        }
+
+        if let include = draft.includeInMonthlySpending, force || !wasFinancialEnabled {
+            includeInMonthlySpending = include
+        }
+
+        if let markPlanned = draft.markPlannedOnCreate, force || !wasFinancialEnabled {
+            markPlannedOnCreate = markPlanned
+        }
+
+        if let draftNotes = draft.financialNotes,
+           force || financialNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            financialNotes = draftNotes
+        }
     }
 
     private func enhanceVoiceDraftWithAI() async {
@@ -1243,6 +1392,8 @@ struct NewTaskView: View {
                     isAdvancedExpanded = true
                 }
             }
+
+            applyFinancialDraft(enhanced, force: false)
         }
     }
 
@@ -1279,6 +1430,7 @@ struct NewTaskView: View {
             task.locationReminderRadius = locationConfig?.radius
             task.locationReminderOnArrival = locationConfig?.onArrival ?? true
             task.advancedFields = sanitizedAdvancedFields()
+            applyFinancialDetails(to: task)
             task.updatedAt = now
         } else {
             task = LifeTask(
@@ -1308,6 +1460,7 @@ struct NewTaskView: View {
             task.locationReminderRadius = locationConfig?.radius
             task.locationReminderOnArrival = locationConfig?.onArrival ?? true
             task.advancedFields = sanitizedAdvancedFields()
+            applyFinancialDetails(to: task)
             if task.isHabit { task.habitGroupID = task.id }
             modelContext.insert(task)
         }
@@ -1345,6 +1498,37 @@ struct NewTaskView: View {
             NewTaskDraftStore.clear()
         }
         dismiss()
+    }
+
+    private func applyFinancialDetails(to task: LifeTask) {
+        task.financialEnabled = financialEnabled
+        task.financialType = financialType
+        task.plannedAmount = financialEnabled ? parseAmount(plannedAmountText) : 0
+        let actual = parseAmount(actualAmountText)
+        task.actualAmount = financialEnabled && actual > 0 ? actual : nil
+        task.currencyCode = MoneyCurrency.normalized(currencyCode)
+        task.budgetCategory = financialEnabled ? budgetCategory.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        task.paymentDate = financialEnabled && hasPaymentDate ? paymentDate : nil
+        task.linkedBudgetId = financialEnabled ? financialLinkOption.budgetId : nil
+        task.linkedGoalId = financialEnabled ? financialLinkOption.goalId : nil
+        task.includeInMonthlySpending = includeInMonthlySpending
+        task.markPlannedOnCreate = markPlannedOnCreate
+        task.financialNotes = financialEnabled ? financialNotes : ""
+    }
+
+    private func parseAmount(_ value: String) -> Double {
+        let normalized = value
+            .replacingOccurrences(of: ",", with: ".")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return Double(normalized) ?? 0
+    }
+
+    private static func amountInputString(_ amount: Double?) -> String {
+        guard let amount, amount > 0 else { return "" }
+        if amount.rounded(.down) == amount {
+            return String(Int(amount))
+        }
+        return String(format: "%.2f", amount)
     }
 
     private var selectedCategory: TaskCategory {

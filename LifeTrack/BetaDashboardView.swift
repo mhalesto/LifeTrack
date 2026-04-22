@@ -838,6 +838,7 @@ private enum BetaHomeRoute: Hashable {
     case documents
     case importTasks
     case exportTasks
+    case money
 }
 
 private struct BetaQuickAction: Identifiable {
@@ -1013,6 +1014,8 @@ struct BetaDashboardHomeView: View {
                     TaskDataExchangeView(initialMode: .importTasks)
                 case .exportTasks:
                     TaskDataExchangeView(initialMode: .exportTasks)
+                case .money:
+                    MoneyOverviewView()
                 }
             }
             .onChange(of: selectedTab) { _, tab in
@@ -2280,9 +2283,9 @@ struct BetaDashboardView: View {
             })
         }
         if showBudget {
-            items.append(.init(id: "budget", title: "Budget", subtitle: "Monthly review",
+            items.append(.init(id: "budget", title: "Money", subtitle: "Budget & actuals",
                                icon: "chart.pie", iconBg: BetaPalette.qaSuccessBg, iconTint: BetaPalette.qaSuccessTint) {
-                onPresentSheet?(.template(id: "budget"))
+                onNavigate?(.money)
             })
         }
         if showCheckup {
@@ -3003,7 +3006,7 @@ private struct QuickActionsCustomizeSheet: View {
                     actionRow(title: "Medication", subtitle: "Daily routine",
                               icon: "cross.case", iconBg: BetaPalette.qaDangerBg, iconTint: BetaPalette.qaDangerTint,
                               isOn: $showMedication)
-                    actionRow(title: "Budget", subtitle: "Monthly review",
+                    actionRow(title: "Money", subtitle: "Budget & actuals",
                               icon: "chart.pie", iconBg: BetaPalette.qaSuccessBg, iconTint: BetaPalette.qaSuccessTint,
                               isOn: $showBudget)
                     actionRow(title: "Health check", subtitle: "Book visit",

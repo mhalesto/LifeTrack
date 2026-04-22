@@ -25,6 +25,18 @@ struct NewTaskDraft: Codable, Equatable {
     var locationRadius: Double?
     var locationOnArrival: Bool?
     var advancedFields: [String: String] = [:]
+    var financialEnabled: Bool?
+    var financialTypeRawValue: String?
+    var plannedAmountText: String?
+    var actualAmountText: String?
+    var currencyCode: String?
+    var budgetCategory: String?
+    var hasPaymentDate: Bool?
+    var paymentDate: Date?
+    var financialLinkRawValue: String?
+    var financialNotes: String?
+    var includeInMonthlySpending: Bool?
+    var markPlannedOnCreate: Bool?
     var savedAt: Date
 }
 

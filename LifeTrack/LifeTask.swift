@@ -169,6 +169,19 @@ final class LifeTask {
     var locationReminderLongitude: Double?
     var locationReminderRadius: Double?
     var locationReminderOnArrival: Bool = true
+    // Optional money tracking. These defaults keep normal tasks unchanged.
+    var financialEnabled: Bool = false
+    var financialTypeRawValue: String = TaskFinancialType.expense.rawValue
+    var plannedAmount: Double = 0
+    var actualAmount: Double?
+    var currencyCode: String = MoneyCurrency.defaultCode
+    var budgetCategory: String = ""
+    var paymentDate: Date?
+    var linkedBudgetId: UUID?
+    var linkedGoalId: UUID?
+    var includeInMonthlySpending: Bool = true
+    var markPlannedOnCreate: Bool = false
+    var financialNotes: String = ""
 
     init(
         id: UUID = UUID(),
@@ -190,6 +203,18 @@ final class LifeTask {
         documentSuggestedDueDate: Date? = nil,
         documentKeywords: [String] = [],
         deletedAt: Date? = nil,
+        financialEnabled: Bool = false,
+        financialType: TaskFinancialType = .expense,
+        plannedAmount: Double = 0,
+        actualAmount: Double? = nil,
+        currencyCode: String = MoneyCurrency.defaultCode,
+        budgetCategory: String = "",
+        paymentDate: Date? = nil,
+        linkedBudgetId: UUID? = nil,
+        linkedGoalId: UUID? = nil,
+        includeInMonthlySpending: Bool = true,
+        markPlannedOnCreate: Bool = false,
+        financialNotes: String = "",
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -211,6 +236,18 @@ final class LifeTask {
         self.documentSuggestedDueDate = documentSuggestedDueDate
         self.documentKeywordsRawValue = documentKeywords.joined(separator: "\n")
         self.deletedAt = deletedAt
+        self.financialEnabled = financialEnabled
+        self.financialTypeRawValue = financialType.rawValue
+        self.plannedAmount = plannedAmount
+        self.actualAmount = actualAmount
+        self.currencyCode = MoneyCurrency.normalized(currencyCode)
+        self.budgetCategory = budgetCategory
+        self.paymentDate = paymentDate
+        self.linkedBudgetId = linkedBudgetId
+        self.linkedGoalId = linkedGoalId
+        self.includeInMonthlySpending = includeInMonthlySpending
+        self.markPlannedOnCreate = markPlannedOnCreate
+        self.financialNotes = financialNotes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -233,6 +270,20 @@ final class LifeTask {
     var recurrence: TaskRecurrence {
         get { TaskRecurrence(rawValue: recurrenceRawValue) ?? .none }
         set { recurrenceRawValue = newValue.rawValue }
+    }
+
+    var financialType: TaskFinancialType {
+        get { TaskFinancialType(rawValue: financialTypeRawValue) ?? .expense }
+        set { financialTypeRawValue = newValue.rawValue }
+    }
+
+    var financialVariance: Double? {
+        guard let actualAmount else { return nil }
+        return actualAmount - plannedAmount
+    }
+
+    var hasFinancialActivity: Bool {
+        financialEnabled && (plannedAmount > 0 || actualAmount != nil)
     }
 
     var scheduledDurationMinutes: Int {
@@ -344,6 +395,18 @@ final class LifeTask {
         next.locationReminderLongitude = locationReminderLongitude
         next.locationReminderRadius = locationReminderRadius
         next.locationReminderOnArrival = locationReminderOnArrival
+        next.financialEnabled = financialEnabled
+        next.financialType = financialType
+        next.plannedAmount = plannedAmount
+        next.actualAmount = nil
+        next.currencyCode = MoneyCurrency.normalized(currencyCode)
+        next.budgetCategory = budgetCategory
+        next.paymentDate = nil
+        next.linkedBudgetId = linkedBudgetId
+        next.linkedGoalId = linkedGoalId
+        next.includeInMonthlySpending = includeInMonthlySpending
+        next.markPlannedOnCreate = markPlannedOnCreate
+        next.financialNotes = financialNotes
         return next
     }
 

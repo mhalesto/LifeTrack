@@ -154,6 +154,18 @@ enum TaskExchangeManager {
         "duration_minutes",
         "notes",
         "template_action",
+        "financial_enabled",
+        "financial_type",
+        "planned_amount",
+        "actual_amount",
+        "currency_code",
+        "budget_category",
+        "payment_date",
+        "linked_budget_id",
+        "linked_goal_id",
+        "include_in_monthly_spending",
+        "mark_planned_on_create",
+        "financial_notes",
         "created_at",
         "updated_at",
         "deleted_at",
@@ -187,6 +199,7 @@ enum TaskExchangeManager {
 
     private static func templateExchangeRecord(for template: TaskTemplate) -> TaskExchangeRecord {
         let advanced = template.sampleAdvancedFields
+        let financialSample = financialTemplateSample(for: template)
         return TaskExchangeRecord(
             title: template.title,
             dueDateDate: dateString(template.dueDate),
@@ -199,8 +212,37 @@ enum TaskExchangeManager {
             durationMinutes: template.estimatedDurationMinutes,
             notes: template.notes,
             templateAction: template.action == .none ? nil : template.action.rawValue,
+            financialEnabled: financialSample.enabled,
+            financialType: financialSample.type?.rawValue,
+            plannedAmount: financialSample.plannedAmount,
+            actualAmount: financialSample.actualAmount,
+            currencyCode: financialSample.currencyCode,
+            budgetCategory: financialSample.budgetCategory,
+            paymentDate: financialSample.paymentDate,
+            includeInMonthlySpending: financialSample.includeInMonthlySpending,
+            markPlannedOnCreate: financialSample.markPlannedOnCreate,
+            financialNotes: financialSample.notes,
             advancedFields: advanced.isEmpty ? nil : advanced
         )
+    }
+
+    private static func financialTemplateSample(for template: TaskTemplate) -> FinancialTemplateSample {
+        switch template.id {
+        case "bill":
+            return FinancialTemplateSample(
+                enabled: true,
+                type: .expense,
+                plannedAmount: 84.20,
+                currencyCode: "USD",
+                budgetCategory: "Utilities",
+                paymentDate: dateString(template.dueDate),
+                includeInMonthlySpending: true,
+                markPlannedOnCreate: true,
+                notes: "Invoice amount can be updated after payment."
+            )
+        default:
+            return FinancialTemplateSample()
+        }
     }
 
     static func exportData(
@@ -382,9 +424,22 @@ enum TaskExchangeManager {
                     recurrence: TaskRecurrence(rawValue: normalizedRawValue(record.recurrence)) ?? .none,
                     estimatedDurationMinutes: sanitizedDuration(record.durationMinutes),
                     deletedAt: deletedAt,
+                    financialEnabled: resolvedFinancialEnabled(record),
+                    financialType: resolvedFinancialType(record.financialType),
+                    plannedAmount: sanitizedMoneyAmount(record.plannedAmount),
+                    actualAmount: sanitizedOptionalMoneyAmount(record.actualAmount),
+                    currencyCode: MoneyCurrency.normalized(record.currencyCode ?? MoneyCurrency.defaultCode),
+                    budgetCategory: sanitizedText(record.budgetCategory),
+                    paymentDate: parsedDate(record.paymentDate),
+                    linkedBudgetId: parsedUUID(record.linkedBudgetId),
+                    linkedGoalId: parsedUUID(record.linkedGoalId),
+                    includeInMonthlySpending: record.includeInMonthlySpending ?? true,
+                    markPlannedOnCreate: record.markPlannedOnCreate ?? false,
+                    financialNotes: sanitizedText(record.financialNotes),
                     createdAt: createdAt,
                     updatedAt: updatedAt
                 )
+                applyFinancialRecord(record, to: task)
                 task.advancedFields = sanitizedAdvancedFields(record.advancedFields, forCategoryRawValue: categoryRawValue)
                 modelContext.insert(task)
                 existingByID[taskID] = task
@@ -432,7 +487,24 @@ enum TaskExchangeManager {
         task.recurrence = TaskRecurrence(rawValue: normalizedRawValue(record.recurrence)) ?? .none
         task.estimatedDurationMinutes = sanitizedDuration(record.durationMinutes)
         task.advancedFields = sanitizedAdvancedFields(record.advancedFields, forCategoryRawValue: categoryRawValue)
+        applyFinancialRecord(record, to: task)
         task.updatedAt = updatedAt
+    }
+
+    private static func applyFinancialRecord(_ record: TaskExchangeRecord, to task: LifeTask) {
+        let enabled = resolvedFinancialEnabled(record)
+        task.financialEnabled = enabled
+        task.financialType = resolvedFinancialType(record.financialType)
+        task.plannedAmount = enabled ? sanitizedMoneyAmount(record.plannedAmount) : 0
+        task.actualAmount = enabled ? sanitizedOptionalMoneyAmount(record.actualAmount) : nil
+        task.currencyCode = MoneyCurrency.normalized(record.currencyCode ?? MoneyCurrency.defaultCode)
+        task.budgetCategory = enabled ? sanitizedText(record.budgetCategory) : ""
+        task.paymentDate = enabled ? parsedDate(record.paymentDate) : nil
+        task.linkedBudgetId = enabled ? parsedUUID(record.linkedBudgetId) : nil
+        task.linkedGoalId = enabled ? parsedUUID(record.linkedGoalId) : nil
+        task.includeInMonthlySpending = record.includeInMonthlySpending ?? true
+        task.markPlannedOnCreate = record.markPlannedOnCreate ?? false
+        task.financialNotes = enabled ? sanitizedText(record.financialNotes) : ""
     }
 
     private static func sanitizedAdvancedFields(_ fields: [String: String]?, forCategoryRawValue rawValue: String) -> [String: String] {
@@ -469,6 +541,18 @@ enum TaskExchangeManager {
             durationMinutes: task.scheduledDurationMinutes,
             notes: task.notes,
             templateAction: task.templateAction.rawValue,
+            financialEnabled: task.financialEnabled,
+            financialType: task.financialEnabled ? task.financialType.rawValue : nil,
+            plannedAmount: task.financialEnabled ? task.plannedAmount : nil,
+            actualAmount: task.financialEnabled ? task.actualAmount : nil,
+            currencyCode: task.financialEnabled ? task.currencyCode : nil,
+            budgetCategory: task.financialEnabled ? task.budgetCategory : nil,
+            paymentDate: task.financialEnabled ? task.paymentDate.map(isoDateString) : nil,
+            linkedBudgetId: task.financialEnabled ? task.linkedBudgetId?.uuidString : nil,
+            linkedGoalId: task.financialEnabled ? task.linkedGoalId?.uuidString : nil,
+            includeInMonthlySpending: task.financialEnabled ? task.includeInMonthlySpending : nil,
+            markPlannedOnCreate: task.financialEnabled ? task.markPlannedOnCreate : nil,
+            financialNotes: task.financialEnabled ? task.financialNotes : nil,
             createdAt: isoDateString(task.createdAt),
             updatedAt: isoDateString(task.updatedAt),
             deletedAt: task.deletedAt.map(isoDateString),
@@ -536,6 +620,18 @@ enum TaskExchangeManager {
                 durationMinutes: Int(firstValue(in: values, keys: ["duration_minutes", "duration", "minutes"]) ?? ""),
                 notes: firstValue(in: values, keys: ["notes", "note", "description"]),
                 templateAction: firstValue(in: values, keys: ["template_action", "template"]),
+                financialEnabled: parsedBoolean(firstValue(in: values, keys: ["financial_enabled", "money_enabled", "has_money", "finance_enabled"])),
+                financialType: firstValue(in: values, keys: ["financial_type", "money_type", "transaction_type"]),
+                plannedAmount: parsedMoneyAmount(firstValue(in: values, keys: ["planned_amount", "forecast_amount", "expected_amount"])),
+                actualAmount: parsedMoneyAmount(firstValue(in: values, keys: ["actual_amount", "paid_amount", "logged_amount"])),
+                currencyCode: firstValue(in: values, keys: ["currency_code", "currency", "iso_currency"]),
+                budgetCategory: firstValue(in: values, keys: ["budget_category", "money_category", "spending_category"]),
+                paymentDate: firstValue(in: values, keys: ["payment_date", "paid_date", "money_date"]),
+                linkedBudgetId: firstValue(in: values, keys: ["linked_budget_id", "budget_id"]),
+                linkedGoalId: firstValue(in: values, keys: ["linked_goal_id", "goal_id"]),
+                includeInMonthlySpending: parsedBoolean(firstValue(in: values, keys: ["include_in_monthly_spending", "include_in_spending", "monthly_spending"])),
+                markPlannedOnCreate: parsedBoolean(firstValue(in: values, keys: ["mark_planned_on_create", "mark_planned", "planned_on_create"])),
+                financialNotes: firstValue(in: values, keys: ["financial_notes", "money_notes"]),
                 createdAt: firstValue(in: values, keys: ["created_at", "created"]),
                 updatedAt: firstValue(in: values, keys: ["updated_at", "updated"]),
                 deletedAt: firstValue(in: values, keys: ["deleted_at", "deleted"]),
@@ -575,6 +671,9 @@ enum TaskExchangeManager {
         let duration = record.durationMinutes.map(String.init) ?? ""
         let keywords = record.documentKeywords?.joined(separator: "; ") ?? ""
         let advanced = encodeAdvancedFieldsForCSV(record.advancedFields)
+        let financialEnabled = record.financialEnabled.map { $0 ? "true" : "false" } ?? ""
+        let includeInMonthlySpending = record.includeInMonthlySpending.map { $0 ? "true" : "false" } ?? ""
+        let markPlannedOnCreate = record.markPlannedOnCreate.map { $0 ? "true" : "false" } ?? ""
 
         return [
             record.id ?? "",
@@ -589,6 +688,18 @@ enum TaskExchangeManager {
             duration,
             record.notes ?? "",
             record.templateAction ?? "",
+            financialEnabled,
+            record.financialType ?? "",
+            moneyAmountString(record.plannedAmount),
+            moneyAmountString(record.actualAmount),
+            record.currencyCode ?? "",
+            record.budgetCategory ?? "",
+            record.paymentDate ?? "",
+            record.linkedBudgetId ?? "",
+            record.linkedGoalId ?? "",
+            includeInMonthlySpending,
+            markPlannedOnCreate,
+            record.financialNotes ?? "",
             record.createdAt ?? "",
             record.updatedAt ?? "",
             record.deletedAt ?? "",
@@ -691,6 +802,38 @@ enum TaskExchangeManager {
         min(max(minutes ?? 30, 5), 24 * 60)
     }
 
+    private static func resolvedFinancialEnabled(_ record: TaskExchangeRecord) -> Bool {
+        if let explicit = record.financialEnabled {
+            return explicit
+        }
+
+        return record.financialType?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+            record.plannedAmount != nil ||
+            record.actualAmount != nil ||
+            record.budgetCategory?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+            record.paymentDate?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+            record.linkedBudgetId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+            record.linkedGoalId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+            record.financialNotes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    private static func resolvedFinancialType(_ value: String?) -> TaskFinancialType {
+        TaskFinancialType(rawValue: normalizedRawValue(value)) ?? .expense
+    }
+
+    private static func sanitizedText(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private static func sanitizedMoneyAmount(_ value: Double?) -> Double {
+        max(0, value ?? 0)
+    }
+
+    private static func sanitizedOptionalMoneyAmount(_ value: Double?) -> Double? {
+        guard let value else { return nil }
+        return max(0, value)
+    }
+
     private static func normalizedHeader(_ value: String) -> String {
         value
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -711,6 +854,40 @@ enum TaskExchangeManager {
         keys
             .compactMap { values[$0]?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
+    }
+
+    private static func parsedBoolean(_ text: String?) -> Bool? {
+        let normalized = normalizedRawValue(text)
+        switch normalized {
+        case "true", "yes", "y", "1", "enabled", "on":
+            return true
+        case "false", "no", "n", "0", "disabled", "off":
+            return false
+        default:
+            return nil
+        }
+    }
+
+    private static func parsedMoneyAmount(_ text: String?) -> Double? {
+        guard var text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            return nil
+        }
+
+        text = text
+            .replacingOccurrences(of: #"[^0-9,.\-]"#, with: "", options: .regularExpression)
+
+        if text.filter({ $0 == "," }).count == 1, !text.contains(".") {
+            text = text.replacingOccurrences(of: ",", with: ".")
+        } else {
+            text = text.replacingOccurrences(of: ",", with: "")
+        }
+
+        return Double(text)
+    }
+
+    private static func moneyAmountString(_ amount: Double?) -> String {
+        guard let amount else { return "" }
+        return String(format: "%.2f", amount)
     }
 
     private static func parsedDueDate(record: TaskExchangeRecord) -> Date? {
@@ -852,9 +1029,22 @@ enum TaskExchangeManager {
 
 private struct TaskExchangePackage: Codable {
     var appName = "LifeTrack"
-    var schemaVersion = 2
+    var schemaVersion = 3
     let exportedAt: String
     let tasks: [TaskExchangeRecord]
+}
+
+private struct FinancialTemplateSample {
+    var enabled: Bool?
+    var type: TaskFinancialType?
+    var plannedAmount: Double?
+    var actualAmount: Double?
+    var currencyCode: String?
+    var budgetCategory: String?
+    var paymentDate: String?
+    var includeInMonthlySpending: Bool?
+    var markPlannedOnCreate: Bool?
+    var notes: String?
 }
 
 private struct TaskExchangeRecord: Codable {
@@ -872,6 +1062,18 @@ private struct TaskExchangeRecord: Codable {
     var durationMinutes: Int?
     var notes: String?
     var templateAction: String?
+    var financialEnabled: Bool?
+    var financialType: String?
+    var plannedAmount: Double?
+    var actualAmount: Double?
+    var currencyCode: String?
+    var budgetCategory: String?
+    var paymentDate: String?
+    var linkedBudgetId: String?
+    var linkedGoalId: String?
+    var includeInMonthlySpending: Bool?
+    var markPlannedOnCreate: Bool?
+    var financialNotes: String?
     var createdAt: String?
     var updatedAt: String?
     var deletedAt: String?
@@ -894,6 +1096,18 @@ private struct TaskExchangeRecord: Codable {
         durationMinutes: Int? = nil,
         notes: String? = nil,
         templateAction: String? = nil,
+        financialEnabled: Bool? = nil,
+        financialType: String? = nil,
+        plannedAmount: Double? = nil,
+        actualAmount: Double? = nil,
+        currencyCode: String? = nil,
+        budgetCategory: String? = nil,
+        paymentDate: String? = nil,
+        linkedBudgetId: String? = nil,
+        linkedGoalId: String? = nil,
+        includeInMonthlySpending: Bool? = nil,
+        markPlannedOnCreate: Bool? = nil,
+        financialNotes: String? = nil,
         createdAt: String? = nil,
         updatedAt: String? = nil,
         deletedAt: String? = nil,
@@ -915,6 +1129,18 @@ private struct TaskExchangeRecord: Codable {
         self.durationMinutes = durationMinutes
         self.notes = notes
         self.templateAction = templateAction
+        self.financialEnabled = financialEnabled
+        self.financialType = financialType
+        self.plannedAmount = plannedAmount
+        self.actualAmount = actualAmount
+        self.currencyCode = currencyCode
+        self.budgetCategory = budgetCategory
+        self.paymentDate = paymentDate
+        self.linkedBudgetId = linkedBudgetId
+        self.linkedGoalId = linkedGoalId
+        self.includeInMonthlySpending = includeInMonthlySpending
+        self.markPlannedOnCreate = markPlannedOnCreate
+        self.financialNotes = financialNotes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

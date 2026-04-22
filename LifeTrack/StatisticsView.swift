@@ -317,8 +317,9 @@ struct StatisticsView: View {
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                 }
             }
-            .chartYScale(domain: 0...max(1, points.map(\.completedCount).max() ?? 1))
+            .chartYScale(domain: 0...paddedCountAxisUpperBound(points.map(\.completedCount).max() ?? 0))
             .frame(height: 230)
+            .padding(.top, 6)
             .animation(animationsEnabled ? .smooth(duration: 0.85) : nil, value: chartProgress)
 
             chartFootnote(
@@ -607,6 +608,12 @@ struct StatisticsView: View {
             }
         }
     }
+}
+
+private func paddedCountAxisUpperBound(_ maxValue: Int) -> Int {
+    let resolvedMax = max(1, maxValue)
+    let headroom = max(1, Int(Double(resolvedMax) * 0.2))
+    return resolvedMax + headroom
 }
 
 private enum StatisticsTimeRange: String, CaseIterable, Identifiable, Sendable {
@@ -2007,8 +2014,9 @@ private struct BestWeekdayCard: View {
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
             }
         }
-        .chartYScale(domain: 0...max(1, weekdayBreakdown.map(\.completedCount).max() ?? 1))
+        .chartYScale(domain: 0...paddedCountAxisUpperBound(weekdayBreakdown.map(\.completedCount).max() ?? 0))
         .frame(height: 170)
+        .padding(.top, 6)
         .animation(animationsEnabled ? .smooth(duration: 0.85) : nil, value: chartProgress)
     }
 

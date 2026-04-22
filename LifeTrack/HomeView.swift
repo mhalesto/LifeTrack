@@ -183,6 +183,8 @@ struct HomeView: View {
                     DocumentSearchView()
                 case .taskData(let mode):
                     TaskDataExchangeView(initialMode: mode)
+                case .money:
+                    MoneyOverviewView()
                 }
             }
             .sheet(isPresented: $isShowingTemplatePicker) {
@@ -567,14 +569,14 @@ struct HomeView: View {
                     )
 
                     QuickActionButton(
-                        title: "Budget",
-                        subtitle: "Monthly review",
+                        title: "Money",
+                        subtitle: "Budget & actuals",
                         symbolName: "chart.pie",
                         tint: TaskCategory.finance.style.tint,
                         width: metrics.quickActionWidth,
                         height: metrics.quickActionHeight,
                         iconSize: metrics.quickActionIconSize,
-                        action: { openTemplateShortcut(id: "budget") }
+                        action: { navigationPath.append(.money) }
                     )
 
                     QuickActionButton(
@@ -1493,6 +1495,7 @@ private enum HomeRoute: Hashable {
     case availabilityCalendar
     case documents
     case taskData(TaskDataExchangeEntryMode)
+    case money
 }
 
 private struct StreakCelebrationBanner: View {

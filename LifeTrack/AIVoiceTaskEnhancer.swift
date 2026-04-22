@@ -28,7 +28,7 @@ final class AIVoiceTaskEnhancer: ObservableObject {
             let text = try await ClaudeAPIClient.shared.send(
                 system: Self.singleSystemPrompt,
                 userContent: Self.userContent(forTranscript: transcript),
-                maxTokens: 400,
+                maxTokens: 650,
                 cacheTTL: 60 * 60
             )
             return try parse(text)
@@ -107,7 +107,7 @@ final class AIVoiceTaskEnhancer: ObservableObject {
             let text = try await ClaudeAPIClient.shared.send(
                 system: Self.batchSystemPrompt,
                 userContent: userContent,
-                maxTokens: 400 * filledIndexes.count,
+                maxTokens: 650 * filledIndexes.count,
                 cacheTTL: 60 * 60
             )
             let drafts = parseBatch(text, expected: filledIndexes.count)
@@ -216,6 +216,23 @@ final class AIVoiceTaskEnhancer: ObservableObject {
     - Other   (category="other"): no advanced fields; return {}.
     - Return advancedFields as a JSON object. Empty object {} if nothing applies.
     - Never put keys from other categories. Never invent keys not listed above.
+
+    Financial details (OPTIONAL):
+    - Return financialDetails only when the transcript is clearly about money:
+      bills, invoices, purchases, subscriptions, payments, income, savings, refunds, or reimbursements.
+    - Use type "expense" for spending/bills, "income" for received money,
+      "savings" for money moved into savings, and "reimbursement" for refunds owed or received.
+    - plannedAmount is for money the user expects/plans to pay or receive later.
+    - actualAmount is for money already paid, spent, saved, received, or logged.
+    - Use an ISO 4217 currencyCode only if the transcript states a clear currency code,
+      currency word, or unambiguous symbol. Use null when uncertain.
+    - budgetCategory should be short and report-friendly ("Rent", "Transport", "Groceries").
+    - paymentDate follows the same ISO 8601 local date-time rule as dueDate. Use null when unknown.
+    - includeInMonthlySpending is true for expense bills/purchases that should count as spending;
+      false for income, savings, and reimbursements unless the user explicitly wants them counted.
+    - markPlannedOnCreate is true for planned bills or forecast items, false for already-paid actuals.
+    - Do not invent linkedBudgetId or linkedGoalId. Return null unless the user explicitly gives a known ID.
+    - Return financialDetails as null when no money metadata belongs on the task.
     """
 
     private static let singleSystemPrompt = """
@@ -228,7 +245,21 @@ final class AIVoiceTaskEnhancer: ObservableObject {
       "dueDate": null or "ISO 8601 local date-time with timezone offset, e.g. 2026-04-23T10:00:00+02:00",
       "priority": "low|normal|high",
       "category": "health|finance|work|home|personal|other",
-      "advancedFields": {} or { "key": "value", ... }  // keys scoped to category; see rules
+      "advancedFields": {} or { "key": "value", ... },
+      "financialDetails": null or {
+        "enabled": true,
+        "type": "expense|income|savings|reimbursement",
+        "plannedAmount": null or number,
+        "actualAmount": null or number,
+        "currencyCode": null or "ISO 4217 code",
+        "budgetCategory": null or "short category",
+        "paymentDate": null or "ISO 8601 local date-time with timezone offset",
+        "linkedBudgetId": null,
+        "linkedGoalId": null,
+        "includeInMonthlySpending": true or false,
+        "markPlannedOnCreate": true or false,
+        "financialNotes": null or "short note"
+      }
     }
 
     \(sharedRules)
@@ -244,7 +275,8 @@ final class AIVoiceTaskEnhancer: ObservableObject {
       "dueDate": "2026-04-23T14:00:00+02:00",
       "priority": "normal",
       "category": "health",
-      "advancedFields": { "provider": "Dr. Okafor" }
+      "advancedFields": { "provider": "Dr. Okafor" },
+      "financialDetails": null
     }
 
     Notice: hedging ("I think", "maybe", "yeah") is gone, the side errand is rewritten \
@@ -265,7 +297,21 @@ final class AIVoiceTaskEnhancer: ObservableObject {
         "dueDate": null or "ISO 8601 local date-time with timezone offset, e.g. 2026-04-23T10:00:00+02:00",
         "priority": "low|normal|high",
         "category": "health|finance|work|home|personal|other",
-        "advancedFields": {} or { "key": "value", ... }
+        "advancedFields": {} or { "key": "value", ... },
+        "financialDetails": null or {
+          "enabled": true,
+          "type": "expense|income|savings|reimbursement",
+          "plannedAmount": null or number,
+          "actualAmount": null or number,
+          "currencyCode": null or "ISO 4217 code",
+          "budgetCategory": null or "short category",
+          "paymentDate": null or "ISO 8601 local date-time with timezone offset",
+          "linkedBudgetId": null,
+          "linkedGoalId": null,
+          "includeInMonthlySpending": true or false,
+          "markPlannedOnCreate": true or false,
+          "financialNotes": null or "short note"
+        }
       }
     ]
 
@@ -332,6 +378,7 @@ final class AIVoiceTaskEnhancer: ObservableObject {
             json["advancedFields"],
             for: category
         )
+        let financialDetails = Self.sanitizedFinancialDetails(json["financialDetails"])
 
         return VoiceTaskDraft(
             title: title,
@@ -339,8 +386,128 @@ final class AIVoiceTaskEnhancer: ObservableObject {
             category: category,
             dueDate: dueDate,
             priority: priority,
-            advancedFields: advancedFields
+            advancedFields: advancedFields,
+            financialEnabled: financialDetails.enabled,
+            financialType: financialDetails.type,
+            plannedAmount: financialDetails.plannedAmount,
+            actualAmount: financialDetails.actualAmount,
+            currencyCode: financialDetails.currencyCode,
+            budgetCategory: financialDetails.budgetCategory,
+            paymentDate: financialDetails.paymentDate,
+            linkedBudgetId: financialDetails.linkedBudgetId,
+            linkedGoalId: financialDetails.linkedGoalId,
+            includeInMonthlySpending: financialDetails.includeInMonthlySpending,
+            markPlannedOnCreate: financialDetails.markPlannedOnCreate,
+            financialNotes: financialDetails.notes
         )
+    }
+
+    private struct FinancialDetailsDraft {
+        var enabled: Bool?
+        var type: TaskFinancialType?
+        var plannedAmount: Double?
+        var actualAmount: Double?
+        var currencyCode: String?
+        var budgetCategory: String?
+        var paymentDate: Date?
+        var linkedBudgetId: UUID?
+        var linkedGoalId: UUID?
+        var includeInMonthlySpending: Bool?
+        var markPlannedOnCreate: Bool?
+        var notes: String?
+    }
+
+    private static func sanitizedFinancialDetails(_ raw: Any?) -> FinancialDetailsDraft {
+        guard let dict = raw as? [String: Any], !dict.isEmpty else {
+            return FinancialDetailsDraft()
+        }
+
+        let type = normalizedFinancialType(dict["type"])
+        return FinancialDetailsDraft(
+            enabled: boolValue(dict["enabled"]),
+            type: type,
+            plannedAmount: doubleValue(dict["plannedAmount"]),
+            actualAmount: doubleValue(dict["actualAmount"]),
+            currencyCode: normalizedCurrencyCode(dict["currencyCode"]),
+            budgetCategory: stringValue(dict["budgetCategory"]),
+            paymentDate: stringValue(dict["paymentDate"]).flatMap(parseDueDate),
+            linkedBudgetId: stringValue(dict["linkedBudgetId"]).flatMap(UUID.init(uuidString:)),
+            linkedGoalId: stringValue(dict["linkedGoalId"]).flatMap(UUID.init(uuidString:)),
+            includeInMonthlySpending: boolValue(dict["includeInMonthlySpending"]),
+            markPlannedOnCreate: boolValue(dict["markPlannedOnCreate"]),
+            notes: stringValue(dict["financialNotes"])
+        )
+    }
+
+    private static func normalizedFinancialType(_ raw: Any?) -> TaskFinancialType? {
+        guard let value = stringValue(raw)?
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "-", with: "_") else {
+            return nil
+        }
+        return TaskFinancialType(rawValue: value)
+    }
+
+    private static func normalizedCurrencyCode(_ raw: Any?) -> String? {
+        guard let value = stringValue(raw)?.uppercased(),
+              MoneyCurrency.supportedCodes.contains(value) else {
+            return nil
+        }
+        return value
+    }
+
+    private static func stringValue(_ raw: Any?) -> String? {
+        let value: String?
+        switch raw {
+        case let string as String:
+            value = string
+        case let number as NSNumber:
+            value = number.stringValue
+        default:
+            value = nil
+        }
+
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    private static func doubleValue(_ raw: Any?) -> Double? {
+        switch raw {
+        case let number as NSNumber:
+            return number.doubleValue
+        case let string as String:
+            var cleaned = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            cleaned = cleaned.replacingOccurrences(of: #"[^0-9,.\-]"#, with: "", options: .regularExpression)
+            if cleaned.filter({ $0 == "," }).count == 1, !cleaned.contains(".") {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: ".")
+            } else {
+                cleaned = cleaned.replacingOccurrences(of: ",", with: "")
+            }
+            return Double(cleaned)
+        default:
+            return nil
+        }
+    }
+
+    private static func boolValue(_ raw: Any?) -> Bool? {
+        switch raw {
+        case let bool as Bool:
+            return bool
+        case let number as NSNumber:
+            return number.intValue != 0
+        case let string as String:
+            switch string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "yes", "1", "enabled", "on":
+                return true
+            case "false", "no", "0", "disabled", "off":
+                return false
+            default:
+                return nil
+            }
+        default:
+            return nil
+        }
     }
 
     private static func sanitizedAdvancedFields(_ raw: Any?, for category: TaskCategory?) -> [String: String] {

@@ -14,6 +14,18 @@ struct VoiceTaskDraft: Equatable {
     var dueDate: Date?
     var priority: TaskPriority?
     var advancedFields: [String: String] = [:]
+    var financialEnabled: Bool?
+    var financialType: TaskFinancialType?
+    var plannedAmount: Double?
+    var actualAmount: Double?
+    var currencyCode: String?
+    var budgetCategory: String?
+    var paymentDate: Date?
+    var linkedBudgetId: UUID?
+    var linkedGoalId: UUID?
+    var includeInMonthlySpending: Bool?
+    var markPlannedOnCreate: Bool?
+    var financialNotes: String?
 }
 
 enum VoiceTaskParser {
