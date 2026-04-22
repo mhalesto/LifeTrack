@@ -1653,6 +1653,14 @@ struct BetaDashboardView: View {
 
     private var upgradeHeroCard: some View {
         let isUltimate = subscriptionManager.tier >= .ultimate
+        let features: [(String, String)] = [
+            ("brain.head.profile", "AI Suggestions"),
+            ("calendar.badge.clock", "Smart Schedule"),
+            ("icloud.fill", "Auto Backups"),
+            ("timer", "Focus Timer"),
+            ("flame.fill", "Habit Streaks"),
+            ("doc.badge.plus", "Templates"),
+        ]
         return ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(BetaPalette.heroBackground)
@@ -1662,36 +1670,80 @@ struct BetaDashboardView: View {
                 }
                 .shadow(color: BetaPalette.accentDeep.opacity(0.08), radius: 18, y: 8)
 
-            HStack {
-                Spacer()
-                Image(systemName: isUltimate ? "crown.fill" : "sparkles")
-                    .font(.system(size: 78, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [BetaPalette.accent.opacity(0.78), BetaPalette.accentDeep.opacity(0.55)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .padding(.trailing, 30)
-            }
-            .padding(.top, 34)
+            VStack(alignment: .leading, spacing: 0) {
+                // — top row: title + crown
+                HStack(alignment: .top, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(isUltimate ? "You're Ultimate" : "Unlock Ultimate")
+                            .font(.betaHeroTitle)
+                            .foregroundStyle(BetaPalette.primaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(isUltimate ? "You're Ultimate" : "Unlock Ultimate")
-                    .font(.betaHeroTitle)
-                    .foregroundStyle(BetaPalette.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                        Text(isUltimate
+                             ? "Every premium feature unlocked."
+                             : "AI, scheduling, backups & more.")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(BetaPalette.secondaryText)
+                            .lineLimit(1)
+                    }
 
-                Text(isUltimate
-                     ? "All premium features are\nunlocked on your device."
-                     : "AI Suggestions, Smart Scheduling,\nbackups, and more.")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(BetaPalette.secondaryText)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
 
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [BetaPalette.accent.opacity(0.18), BetaPalette.accentDeep.opacity(0.10)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 52, height: 52)
+                        Image(systemName: isUltimate ? "crown.fill" : "sparkles")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [BetaPalette.accent, BetaPalette.accentDeep],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+                }
+
+                Spacer(minLength: 12)
+
+                // — feature chips grid
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
+                    spacing: 8
+                ) {
+                    ForEach(features, id: \.0) { icon, label in
+                        HStack(spacing: 5) {
+                            Image(systemName: icon)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(BetaPalette.accent)
+                            Text(label)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(BetaPalette.primaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(isUltimate ? 0.55 : 0.38), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(BetaPalette.accent.opacity(0.18), lineWidth: 0.7)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 14)
+
+                // — CTA button
                 Button {
                     if !isUltimate { onPresentSheet?(.paywall) }
                 } label: {
@@ -1706,15 +1758,15 @@ struct BetaDashboardView: View {
                         }
                     }
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 11)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
                     .background(
                         LinearGradient(
                             colors: [Color(hex: 0x1F1B2E), Color(hex: 0x2A2540)],
                             startPoint: .top,
                             endPoint: .bottom
                         ),
-                        in: Capsule()
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
                     .shadow(color: Color.black.opacity(0.18), radius: 8, y: 4)
                 }
@@ -1722,8 +1774,8 @@ struct BetaDashboardView: View {
                 .disabled(isUltimate || onPresentSheet == nil)
                 .opacity(isUltimate ? 0.8 : 1)
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 20)
         }
         .frame(minHeight: 240)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
