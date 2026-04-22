@@ -25,6 +25,8 @@ struct SettingsView: View {
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
     @State private var isShowingPaywall = false
     @AppStorage(LifeTrackSettings.Keys.claudeAPIKey) private var claudeAPIKey = ""
+    @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.hideStatusBar) private var hideStatusBar = false
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarImage: UIImage?
@@ -49,6 +51,8 @@ struct SettingsView: View {
                         }
                         themeCard
                         motionCard
+                        dashboardExperienceCard
+                        displayCard
                         taskDataCard
                         archiveCard
                         binCard
@@ -303,6 +307,161 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
             }
+        }
+    }
+
+    private var dashboardExperienceCard: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Dashboard Experience",
+                subtitle: "Choose which home screen appears after launch. Restart the app to switch."
+            )
+
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                spacing: 10
+            ) {
+                ForEach(DashboardExperience.allCases) { experience in
+                    Button {
+                        withAnimation(.snappy) {
+                            dashboardExperienceRaw = experience.rawValue
+                        }
+                    } label: {
+                        DashboardExperienceChip(
+                            experience: experience,
+                            isSelected: dashboardExperienceRaw == experience.rawValue
+                        )
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.92))
+                }
+            }
+
+            NavigationLink {
+                BetaDashboardView()
+                    .navigationTitle("Beta Dashboard")
+                    .navigationBarTitleDisplayMode(.inline)
+            } label: {
+                HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(LifeTrackTheme.ColorPalette.accent.opacity(0.18))
+                            .frame(width: 42, height: 42)
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text("Preview Beta Dashboard")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                            Text("BETA")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
+                        }
+                        Text("Streak, metrics, quick actions, and today's focus.")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                        .frame(width: 32, height: 32)
+                        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: Circle())
+                }
+                .padding(12)
+                .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                        .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+                }
+            }
+            .buttonStyle(.plain)
+
+            betaShapesControl
+        }
+    }
+
+    @AppStorage(LifeTrackSettings.Keys.betaShapesOpacity) private var betaShapesOpacity: Double = 0.35
+
+    private var displayCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "Display", subtitle: "Fine-tune what's visible on screen.")
+
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: hideStatusBar ? "eye.slash.fill" : "wifi")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(selectedTheme.accent)
+                    .frame(width: 42, height: 42)
+                    .background(selectedTheme.accentSoft, in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Hide Status Bar")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text("Hides the top bar with time, Wi-Fi, and battery for a cleaner view.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                Toggle("", isOn: $hideStatusBar)
+                    .labelsHidden()
+                    .tint(selectedTheme.accent)
+            }
+            .padding(12)
+            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+            }
+        }
+    }
+
+    private var betaShapesControl: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: LifeTrackTheme.Spacing.small) {
+                Image(systemName: "circle.hexagongrid.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+
+                Text("Background Shapes")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                Text("\(Int(betaShapesOpacity * 100))%")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .monospacedDigit()
+            }
+
+            Slider(value: $betaShapesOpacity, in: 0...1, step: 0.05)
+                .tint(LifeTrackTheme.ColorPalette.accent)
+
+            Text("Adjusts how visible the drifting circles are behind the beta dashboard.")
+                .font(.caption)
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
     }
 
@@ -1057,6 +1216,43 @@ private struct ProFeatureRow: View {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+        }
+    }
+}
+
+private struct DashboardExperienceChip: View {
+    let experience: DashboardExperience
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: experience == .beta ? "sparkles" : "house.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isSelected ? .white : LifeTrackTheme.ColorPalette.accent)
+                Text(experience.title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(isSelected ? .white : LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            Text(experience.subtitle)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(isSelected ? Color.white.opacity(0.82) : LifeTrackTheme.ColorPalette.secondaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.88)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82)),
+            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(isSelected ? Color.white.opacity(0.24) : LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
     }
 }

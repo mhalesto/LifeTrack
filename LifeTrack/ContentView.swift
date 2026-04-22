@@ -13,6 +13,12 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isShowingLaunchSplash = true
+    @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.hideStatusBar) private var hideStatusBar = false
+
+    private var dashboardExperience: DashboardExperience {
+        DashboardExperience(rawValue: dashboardExperienceRaw) ?? .default
+    }
 
     var body: some View {
         ZStack {
@@ -20,8 +26,14 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             if !isShowingLaunchSplash {
-                HomeView()
-                    .transition(.opacity)
+                Group {
+                    if dashboardExperience == .beta {
+                        BetaDashboardHomeView()
+                    } else {
+                        HomeView()
+                    }
+                }
+                .transition(.opacity)
             }
 
             if isShowingLaunchSplash {
@@ -30,6 +42,7 @@ struct ContentView: View {
                     .zIndex(2)
             }
         }
+        .statusBarHidden(hideStatusBar)
         .task {
             await completeInitialSplash()
         }

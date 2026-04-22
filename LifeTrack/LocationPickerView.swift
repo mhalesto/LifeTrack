@@ -45,9 +45,13 @@ struct LocationPickerView: View {
                     }
                 }
             }
-            .navigationTitle("Location Reminder")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Location Reminder")
+                        .font(.headline)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
@@ -71,7 +75,14 @@ struct LocationPickerView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-            TextField("Search for a place...", text: $searchText)
+            TextField(
+                "",
+                text: $searchText,
+                prompt: Text("Search for a place...")
+                    .foregroundColor(LifeTrackTheme.ColorPalette.secondaryText)
+            )
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                .tint(LifeTrackTheme.ColorPalette.accent)
                 .submitLabel(.search)
                 .onSubmit { performSearch() }
                 .onChange(of: searchText) { _, _ in
