@@ -1246,6 +1246,7 @@ struct BetaDashboardView: View {
     @State private var isShowingCustomize = false
     @State private var selectedSummaryKind: BetaSummaryKind?
     @State private var editingTask: LifeTask?
+    @State private var heroPagerIndex: Int = 0
 
     private var isEmbeddedAsHome: Bool {
         onOpenStatistics != nil || onOpenSettings != nil || onPresentSheet != nil
@@ -1624,13 +1625,29 @@ struct BetaDashboardView: View {
     }
 
     private var streakHeroPager: some View {
-        TabView {
-            streakHeroCard
-            upgradeHeroCard
-            weeklyRhythmCard
+        VStack(spacing: 10) {
+            TabView(selection: $heroPagerIndex) {
+                streakHeroCard.tag(0)
+                upgradeHeroCard.tag(1)
+                weeklyRhythmCard.tag(2)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 240)
+            .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    heroPagerIndex = (heroPagerIndex + 1) % 3
+                }
+            }
+
+            HStack(spacing: 7) {
+                ForEach(0..<3, id: \.self) { i in
+                    Capsule()
+                        .fill(i == heroPagerIndex ? BetaPalette.accent : BetaPalette.accent.opacity(0.25))
+                        .frame(width: i == heroPagerIndex ? 20 : 7, height: 7)
+                        .animation(.easeInOut(duration: 0.3), value: heroPagerIndex)
+                }
+            }
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .frame(height: 240)
     }
 
     private var upgradeHeroCard: some View {
