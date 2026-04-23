@@ -11,10 +11,13 @@ import UniformTypeIdentifiers
 
 struct MoneyOverviewView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var subscriptionManager: SubscriptionManager
     @Query(sort: \MoneyEntry.startDate, order: .reverse) private var entries: [MoneyEntry]
     @Query(sort: \LifeTask.dueDate, order: .forward) private var tasks: [LifeTask]
     @AppStorage(LifeTrackSettings.Keys.moneyCurrencyCode) private var appMoneyCurrencyCode = MoneyCurrency.defaultCode
     @AppStorage(LifeTrackSettings.Keys.moneyCurrencyLocked) private var isMoneyCurrencyLocked = false
+
+    @StateObject private var moneyAdvisor = MoneyAIAdvisor()
 
     @State private var selectedTab: MoneyOverviewTab = .overview
     @State private var selectedReportTab: MoneyReportTab = .overview
@@ -23,6 +26,7 @@ struct MoneyOverviewView: View {
     @State private var isShowingIncomeEditor = false
     @State private var isShowingCurrencySetup = false
     @State private var isShowingBudgetPlanReview = false
+    @State private var isShowingAIInsights = false
     @State private var editingTask: LifeTask?
 
     private var currencyCode: String {
@@ -100,6 +104,23 @@ struct MoneyOverviewView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $isShowingAIInsights) {
+            MoneyAIInsightsDetailView(
+                summary: summary,
+                categoryTotals: categoryTotals,
+                spendingCategoryTotals: spendingCategoryTotals,
+                plannedBills: plannedBills,
+                projectionPoints: projectionPoints,
+                projectedBalance: projectedMonthEndBalance,
+                daysLeft: daysLeftInMonth,
+                currencyCode: currencyCode,
+                lowBalanceThreshold: lowBalanceThreshold,
+                month: selectedMonth,
+                isPremium: subscriptionManager.tier >= .standard
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $isShowingCurrencySetup) {
             MoneyCurrencySetupView(
                 selectedCurrencyCode: $appMoneyCurrencyCode,
@@ -130,7 +151,11 @@ struct MoneyOverviewView: View {
                     tasks: tasks,
                     currencyCode: currencyCode
                 )
+                triggerAIInsightIfEligible()
             }
+        }
+        .onChange(of: selectedMonth) { _, _ in
+            triggerAIInsightIfEligible()
         }
     }
 
@@ -487,66 +512,134 @@ struct MoneyOverviewView: View {
     }
 
     private var moneyInsightBanner: some View {
-        HStack(spacing: LifeTrackTheme.Spacing.medium) {
-            Image(systemName: "brain.head.profile")
-                .font(.system(size: 24, weight: .semibold))
+        let isPremium = subscriptionManager.tier >= .standard
+        let insightText: String = {
+            if isPremium, let ai = moneyAdvisor.result { return ai.insight }
+            if isPremium, moneyAdvisor.isLoading { return "Analysing your finances…" }
+            if isPremium, let err = moneyAdvisor.error { return err }
+            return primaryMoneyInsight
+        }()
+        let actionLabel: String = {
+            if isPremium, let ai = moneyAdvisor.result { return ai.actionLabel }
+            return "Build Plan"
+        }()
+        let urgency: MoneyAIInsight.Urgency = isPremium ? (moneyAdvisor.result?.urgency ?? .info) : .info
+        let bannerColors: [Color] = {
+            switch urgency {
+            case .critical:
+                return [Color(red: 0.72, green: 0.12, blue: 0.12).opacity(0.96), Color(red: 0.55, green: 0.08, blue: 0.08).opacity(0.90)]
+            case .warning:
+                return [Color(red: 0.75, green: 0.45, blue: 0.05).opacity(0.96), Color(red: 0.6, green: 0.32, blue: 0.02).opacity(0.90)]
+            case .info:
+                return [LifeTrackTheme.ColorPalette.primaryText.opacity(0.96), LifeTrackTheme.ColorPalette.secondaryText.opacity(0.90)]
+            }
+        }()
+
+        return VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                ZStack {
+                    if isPremium && moneyAdvisor.isLoading {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.white.opacity(0.16), in: Circle())
+                    } else {
+                        Image(systemName: "brain.head.profile")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.white.opacity(0.16), in: Circle())
+                            .overlay { Circle().stroke(Color.white.opacity(0.18), lineWidth: 1) }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(isPremium ? "LifeTrack AI" : "Smart Insight")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.white.opacity(0.80))
+                            .tracking(0.4)
+                        if isPremium {
+                            Text("AI")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.white.opacity(0.18), in: Capsule())
+                        }
+                    }
+                    Text(isPremium ? "Personal finance advisor" : "Based on your numbers")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                }
+
+                Spacer(minLength: 0)
+
+                if isPremium && !moneyAdvisor.isLoading {
+                    Button {
+                        triggerAIInsightIfEligible(force: true)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.white.opacity(0.8))
+                            .frame(width: 32, height: 32)
+                            .background(Color.white.opacity(0.14), in: Circle())
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.9))
+                    .accessibilityLabel("Refresh AI insight")
+                }
+            }
+
+            Text(insightText)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
-                .frame(width: 54, height: 54)
-                .background(Color.white.opacity(0.16), in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
-                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 7) {
-                    Text("LifeTrack AI")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.white.opacity(0.72))
-                    Text("BETA")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.18), in: Capsule())
-                }
-
-                Text(primaryMoneyInsight)
-                    .font(.subheadline.weight(.bold))
+            HStack(spacing: LifeTrackTheme.Spacing.small) {
+                Button {
+                    handleInsightAction(isPremium: isPremium)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(actionLabel)
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: LifeTrackTheme.Spacing.small)
-
-            Button {
-                isShowingBudgetPlanReview = true
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Build Plan")
-                    Image(systemName: "chevron.right")
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(LifeTrackTheme.ColorPalette.accent, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
                 }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(LifeTrackTheme.ColorPalette.accent, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.9))
+
+                Spacer(minLength: 0)
+
+                if isPremium {
+                    Button {
+                        isShowingAIInsights = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text("View more insights")
+                            Image(systemName: "arrow.up.right")
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.white.opacity(0.9))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.14), in: Capsule())
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.94))
+                }
             }
-            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.9))
         }
         .padding(LifeTrackTheme.Spacing.large)
         .background(
-            LinearGradient(
-                colors: [
-                    LifeTrackTheme.ColorPalette.primaryText.opacity(0.96),
-                    LifeTrackTheme.ColorPalette.secondaryText.opacity(0.90)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
+            LinearGradient(colors: bannerColors, startPoint: .topLeading, endPoint: .bottomTrailing),
             in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
         )
         .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(0.75), radius: 12, x: 0, y: 8)
+        .animation(.easeInOut(duration: 0.4), value: urgency)
     }
 
     private func recentEntriesCard(limit: Int? = nil) -> some View {
@@ -796,6 +889,47 @@ struct MoneyOverviewView: View {
         )
     }
 
+    private var daysLeftInMonth: Int {
+        let calendar = Calendar.current
+        let interval = MoneyAnalytics.monthInterval(containing: selectedMonth, calendar: calendar)
+        let today = calendar.startOfDay(for: Date())
+        let end = calendar.startOfDay(for: interval.end)
+        return max(0, calendar.dateComponents([.day], from: today, to: end).day ?? 0)
+    }
+
+    private func triggerAIInsightIfEligible(force: Bool = false) {
+        guard subscriptionManager.tier >= .standard else { return }
+        guard moneyAdvisor.isConfigured else { return }
+        guard force || moneyAdvisor.result == nil else { return }
+        Task {
+            await moneyAdvisor.analyze(
+                summary: summary,
+                categoryTotals: categoryTotals,
+                plannedBills: plannedBills,
+                projectedBalance: projectedMonthEndBalance,
+                daysLeft: daysLeftInMonth,
+                currencyCode: currencyCode
+            )
+        }
+    }
+
+    private func handleInsightAction(isPremium: Bool) {
+        guard isPremium, let ai = moneyAdvisor.result else {
+            isShowingBudgetPlanReview = true
+            return
+        }
+        switch ai.actionType {
+        case .buildPlan:
+            isShowingBudgetPlanReview = true
+        case .viewCategory:
+            selectedTab = .reports
+        case .addIncome:
+            isShowingIncomeEditor = true
+        case .logEntry:
+            isShowingLogMoney = true
+        }
+    }
+
     private func shiftMonth(_ offset: Int) {
         selectedMonth = Calendar.current.date(byAdding: .month, value: offset, to: selectedMonth) ?? selectedMonth
     }
@@ -966,7 +1100,7 @@ private struct MoneyProjectionMetric: View {
     }
 }
 
-private struct MoneyProjectionChart: View {
+struct MoneyProjectionChart: View {
     let points: [MoneyProjectionPoint]
     let currencyCode: String
     let lowThreshold: Double
@@ -3380,7 +3514,7 @@ private struct MoneySummaryCard: View {
     }
 }
 
-private struct MoneyComparisonBar: View {
+struct MoneyComparisonBar: View {
     let title: String
     let planned: Double
     let actual: Double

@@ -1225,11 +1225,13 @@ struct BetaDashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
     @Query private var tasks: [LifeTask]
+    @Query(sort: \MoneyEntry.startDate, order: .reverse) private var moneyEntries: [MoneyEntry]
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
     @AppStorage(LifeTrackSettings.Keys.themeID) private var themeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength: Double = 1.0
+    @AppStorage(LifeTrackSettings.Keys.moneyCurrencyCode) private var appMoneyCurrencyCode = MoneyCurrency.defaultCode
     @AppStorage("qa.planMyDay") private var showPlanMyDay = true
     @AppStorage("qa.habits") private var showHabits = true
     @AppStorage("qa.review") private var showReview = true
@@ -1253,6 +1255,8 @@ struct BetaDashboardView: View {
     @State private var focusSortOrder: DashboardSortOrder = .dueDate
     @State private var isShowingFocusTimer = false
     @State private var isShowingCustomize = false
+    @State private var isShowingMoneyAIInsights = false
+    @State private var isAlertBannerVisible = true
     @State private var selectedSummaryKind: BetaSummaryKind?
     @State private var editingTask: LifeTask?
 
@@ -1377,6 +1381,69 @@ struct BetaDashboardView: View {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    private var moneyCurrencyCode: String {
+        MoneyCurrency.normalized(appMoneyCurrencyCode)
+    }
+
+    private var moneySummary: MoneyMonthlySummary {
+        MoneyAnalytics.monthlySummary(for: Date(), entries: moneyEntries, tasks: tasks, currencyCode: moneyCurrencyCode)
+    }
+
+    private var moneyPreviousSummary: MoneyMonthlySummary {
+        let previous = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+        return MoneyAnalytics.monthlySummary(for: previous, entries: moneyEntries, tasks: tasks, currencyCode: moneyCurrencyCode)
+    }
+
+    private var moneyCategoryTotals: [MoneyCategoryTotal] {
+        MoneyAnalytics.categoryTotals(for: Date(), entries: moneyEntries, tasks: tasks, currencyCode: moneyCurrencyCode)
+    }
+
+    private var moneySpendingCategoryTotals: [MoneyCategoryTotal] {
+        moneyCategoryTotals
+            .filter { $0.kind == .expense || $0.kind == .debtPayment }
+            .filter { $0.actual > 0 || $0.planned > 0 }
+    }
+
+    private var moneyPlannedBills: [MoneyBillSnapshot] {
+        MoneyAnalytics.plannedBills(for: Date(), tasks: tasks, currencyCode: moneyCurrencyCode)
+    }
+
+    private var moneyProjectionPoints: [MoneyProjectionPoint] {
+        MoneyAnalytics.projectionPoints(
+            from: Date(),
+            days: 30,
+            entries: moneyEntries,
+            tasks: tasks,
+            currencyCode: moneyCurrencyCode
+        )
+    }
+
+    private var moneyProjectedMonthEndBalance: Double {
+        moneyProjectionPoints.last?.balance ?? moneySummary.actualRemaining
+    }
+
+    private var moneyOpeningBalance: Double {
+        moneyProjectionPoints.first?.balance ?? moneyPreviousSummary.actualRemaining
+    }
+
+    private var moneyLowBalanceThreshold: Double {
+        if moneySummary.plannedIncome > 0 {
+            return moneySummary.plannedIncome * 0.38
+        }
+        if moneyProjectedMonthEndBalance < 0 || moneyOpeningBalance < 0 {
+            return 0
+        }
+        return max(moneyProjectedMonthEndBalance * 0.65, moneyOpeningBalance * 0.45, 1)
+    }
+
+    private var moneyDaysLeftInMonth: Int {
+        let calendar = Calendar.current
+        let interval = MoneyAnalytics.monthInterval(containing: Date(), calendar: calendar)
+        let today = calendar.startOfDay(for: Date())
+        let end = calendar.startOfDay(for: interval.end)
+        return max(0, calendar.dateComponents([.day], from: today, to: end).day ?? 0)
+    }
+
     private func taskList(for kind: BetaSummaryKind) -> [LifeTask] {
         switch kind {
         case .dueToday: dueTodayTaskList
@@ -1454,7 +1521,7 @@ struct BetaDashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 greetingHeader
                 brandBlock
-                if overdue > 0 {
+                if overdue > 0 && isAlertBannerVisible {
                     alertBanner
                 }
                 streakHeroPager
@@ -1500,6 +1567,23 @@ struct BetaDashboardView: View {
                 showAISuggestions: $showAISuggestions,
                 showSmartSchedule: $showSmartSchedule
             )
+        }
+        .sheet(isPresented: $isShowingMoneyAIInsights) {
+            MoneyAIInsightsDetailView(
+                summary: moneySummary,
+                categoryTotals: moneyCategoryTotals,
+                spendingCategoryTotals: moneySpendingCategoryTotals,
+                plannedBills: moneyPlannedBills,
+                projectionPoints: moneyProjectionPoints,
+                projectedBalance: moneyProjectedMonthEndBalance,
+                daysLeft: moneyDaysLeftInMonth,
+                currencyCode: moneyCurrencyCode,
+                lowBalanceThreshold: moneyLowBalanceThreshold,
+                month: Date(),
+                isPremium: subscriptionManager.tier >= .standard
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -1599,9 +1683,33 @@ struct BetaDashboardView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
 
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(BetaPalette.alertText.opacity(0.7))
+            Button {
+                openMoneyAIInsights()
+            } label: {
+                Label("AI", systemImage: "brain.head.profile")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(BetaPalette.alertText)
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.45), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open AI money insights")
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isAlertBannerVisible = false
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(BetaPalette.alertText.opacity(0.75))
+                    .frame(width: 24, height: 24)
+                    .background(Color.white.opacity(0.35), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss dashboard alert")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -1635,9 +1743,9 @@ struct BetaDashboardView: View {
     private var streakHeroPager: some View {
         HeroPager(
             pages: [
-                AnyView(weeklyRhythmCard),
-                AnyView(todayPlanHeroCard),
                 AnyView(nextMoveHeroCard),
+                AnyView(todayPlanHeroCard),
+                AnyView(weeklyRhythmCard),
                 AnyView(streakHeroCard),
                 AnyView(upgradeHeroCard)
             ]
@@ -1976,11 +2084,17 @@ struct BetaDashboardView: View {
 
                         Spacer(minLength: 6)
 
-                        heroInlineActionButton(title: "Review", systemImage: "chart.bar.fill") {
-                            onPresentSheet?(.review)
+                        HStack(spacing: 6) {
+                            heroInlineActionButton(title: "AI", systemImage: "brain.head.profile") {
+                                openMoneyAIInsights()
+                            }
+
+                            heroInlineActionButton(title: "Review", systemImage: "chart.bar.fill") {
+                                onPresentSheet?(.review)
+                            }
+                            .disabled(onPresentSheet == nil)
+                            .opacity(onPresentSheet == nil ? 0.65 : 1)
                         }
-                        .disabled(onPresentSheet == nil)
-                        .opacity(onPresentSheet == nil ? 0.65 : 1)
                     }
 
                     Text(subtitle)
@@ -1991,6 +2105,14 @@ struct BetaDashboardView: View {
                 }
             }
         }
+    }
+
+    private func openMoneyAIInsights() {
+        guard subscriptionManager.tier >= .standard else {
+            onPresentSheet?(.paywall)
+            return
+        }
+        isShowingMoneyAIInsights = true
     }
 
     private func productivityHeroShell<Content: View>(@ViewBuilder content: () -> Content) -> some View {
