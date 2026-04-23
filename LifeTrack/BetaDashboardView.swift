@@ -1349,6 +1349,38 @@ struct BetaDashboardView: View {
 
     private var focusTasks: [LifeTask] {
         let base = activeTasks.filter { !$0.isCompleted }
+        return sortedFocusTasks(base)
+    }
+
+    private var dailyFocusTasks: [LifeTask] {
+        let completedToday = sortedCompletedTodayTasks
+        var seenIDs = Set<UUID>()
+        var combined: [LifeTask] = []
+
+        for task in focusTasks.prefix(5) where seenIDs.insert(task.id).inserted {
+            combined.append(task)
+        }
+
+        for task in completedToday.prefix(3) where seenIDs.insert(task.id).inserted {
+            combined.append(task)
+        }
+
+        return combined
+    }
+
+    private var sortedCompletedTodayTasks: [LifeTask] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return activeTasks
+            .filter { task in
+                guard task.isCompleted else { return false }
+                let completedAt = task.completedAt ?? task.updatedAt
+                return calendar.startOfDay(for: completedAt) == today
+            }
+            .sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
+    }
+
+    private func sortedFocusTasks(_ base: [LifeTask]) -> [LifeTask] {
         switch focusSortOrder {
         case .dueDate:
             return base.sorted { $0.dueDate < $1.dueDate }
@@ -2836,7 +2868,7 @@ struct BetaDashboardView: View {
 
     private var focusList: some View {
         Group {
-            if focusTasks.isEmpty {
+            if dailyFocusTasks.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 22, weight: .regular))
@@ -2850,7 +2882,7 @@ struct BetaDashboardView: View {
                 .background(Color.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             } else {
                 VStack(spacing: 8) {
-                    ForEach(Array(focusTasks.prefix(5))) { task in
+                    ForEach(dailyFocusTasks) { task in
                         TaskRowView(
                             task: task,
                             onToggleCompletion: { toggleFocusCompletion(task) },
@@ -2970,7 +3002,9 @@ struct BetaDashboardView: View {
     }
 
     private func toggleFocusCompletion(_ task: LifeTask) {
-        let pending = TaskLifecycleManager.beginToggleCompletion(for: task)
+        let pending = withAnimation(.snappy(duration: 0.24)) {
+            TaskLifecycleManager.beginToggleCompletion(for: task)
+        }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 16_000_000)
             TaskLifecycleManager.finishToggleCompletion(pending, in: modelContext, customCategories: customCategories)

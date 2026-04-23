@@ -67,7 +67,10 @@ struct TaskRowView: View {
     }
 
     private var rowContent: some View {
-        HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.small) {
+        let resolvedCategory = categoryOption ?? task.categoryOption(customCategories: [])
+        let accentTint = task.isCompleted ? LifeTrackTheme.ColorPalette.success : resolvedCategory.tint
+
+        return HStack(alignment: .center, spacing: 12) {
             Button {
                 playActionFeedback()
                 onToggleCompletion()
@@ -79,6 +82,13 @@ struct TaskRowView: View {
             }
             .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.9, pressedOpacity: 0.9))
             .accessibilityLabel(task.isCompleted ? "Mark incomplete" : "Mark complete")
+
+            Capsule()
+                .fill(accentTint)
+                .frame(width: 3, height: 58)
+                .opacity(task.isCompleted ? 0.85 : 0.9)
+                .padding(.trailing, 2)
+                .animation(animationsEnabled ? .snappy(duration: 0.22) : nil, value: task.isCompleted)
 
             NavigationLink {
                 TaskDetailView(task: task)
@@ -96,7 +106,7 @@ struct TaskRowView: View {
                     }
 
                     WrappingChipLayout(spacing: 7, rowSpacing: 6) {
-                        CategoryChipView(option: categoryOption ?? task.categoryOption(customCategories: []))
+                        CategoryChipView(option: resolvedCategory)
 
                         StatusPillView(
                             title: task.dueDate.dayMonthString,
