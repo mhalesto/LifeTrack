@@ -371,10 +371,79 @@ struct MoneyOverviewView: View {
     }
 
     private var overviewTwoColumn: some View {
-        VStack(spacing: LifeTrackTheme.Spacing.medium) {
-            plannedBillsCard(limit: 4)
-            spendingByCategoryCard(limit: 5)
+        HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+            compactUpcomingBillsCard
+            compactSpendingBucketsCard
         }
+    }
+
+    private var compactUpcomingBillsCard: some View {
+        SectionCardView {
+            HStack {
+                Text("Upcoming bills")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Spacer(minLength: 4)
+
+                Button("View all") {
+                    selectedTab = .bills
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+            }
+
+            let rows = Array(plannedBills.prefix(3))
+            if rows.isEmpty {
+                MoneyCompactEmptyState(title: "No bills")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(rows) { bill in
+                        MoneyCompactBillRow(bill: bill) {
+                            editingTask = tasks.first { $0.id == bill.id }
+                        }
+                        if bill.id != rows.last?.id {
+                            Divider()
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var compactSpendingBucketsCard: some View {
+        SectionCardView {
+            HStack {
+                Text("Spending buckets")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Spacer(minLength: 4)
+
+                Text("This month")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            let rows = Array(spendingCategoryTotals.prefix(4))
+            if rows.isEmpty {
+                MoneyCompactEmptyState(title: "No spend")
+            } else {
+                VStack(spacing: 11) {
+                    ForEach(rows) { total in
+                        MoneyCompactCategoryRow(total: total, maxAmount: maxSpendingCategoryAmount)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func spendingByCategoryCard(limit: Int? = nil) -> some View {
@@ -2410,6 +2479,123 @@ private struct MoneyCategoryRow: View {
                 .frame(height: 6)
             }
         }
+    }
+}
+
+private struct MoneyCompactEmptyState: View {
+    let title: String
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(systemName: "tray")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+        }
+        .frame(maxWidth: .infinity, minHeight: 118)
+    }
+}
+
+private struct MoneyCompactBillRow: View {
+    let bill: MoneyBillSnapshot
+    let onEdit: () -> Void
+
+    var body: some View {
+        Button(action: onEdit) {
+            HStack(spacing: 8) {
+                Image(systemName: bill.status == .paid ? "checkmark.circle.fill" : "calendar")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(statusTint)
+                    .frame(width: 32, height: 32)
+                    .background(statusTint.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(bill.title)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.74)
+                    Text(bill.dueDate.dayMonthString)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                Text(MoneyFormatting.currency(bill.actualAmount ?? bill.plannedAmount, code: bill.currencyCode))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+            }
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var statusTint: Color {
+        switch bill.status {
+        case .paid: LifeTrackTheme.ColorPalette.success
+        case .upcoming: LifeTrackTheme.ColorPalette.accent
+        case .atRisk: LifeTrackTheme.ColorPalette.danger
+        }
+    }
+}
+
+private struct MoneyCompactCategoryRow: View {
+    let total: MoneyCategoryTotal
+    let maxAmount: Double
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: total.kind.symbolName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(total.kind.tint)
+                .frame(width: 32, height: 32)
+                .background(total.kind.tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 5) {
+                    Text(total.category)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.74)
+
+                    Spacer(minLength: 0)
+
+                    Text(percentText)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .lineLimit(1)
+                }
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(LifeTrackTheme.ColorPalette.hairline.opacity(0.5))
+                        Capsule()
+                            .fill(total.kind.tint)
+                            .frame(width: proxy.size.width * min(max(total.actual / maxAmount, 0), 1))
+                    }
+                }
+                .frame(height: 6)
+
+                Text(MoneyFormatting.currency(total.actual, code: total.currencyCode))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+    }
+
+    private var percentText: String {
+        let percent = Int((total.actual / max(maxAmount, 1) * 100).rounded())
+        return "\(percent)%"
     }
 }
 

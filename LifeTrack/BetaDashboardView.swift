@@ -3500,26 +3500,30 @@ private struct BetaSummaryTaskCard: View {
 private struct HeroPager: View {
     let pages: [AnyView]
 
+    private let cardHeight: CGFloat = 268
     @State private var currentIndex: Int? = 0
     @State private var isDragging: Bool = false
     @State private var lastInteraction: Date = .distantPast
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
                     ForEach(pages.indices, id: \.self) { index in
                         pages[index]
+                            .frame(height: cardHeight)
                             .containerRelativeFrame(.horizontal)
                             .id(index)
                     }
                 }
                 .scrollTargetLayout()
+                .padding(.vertical, 6)
             }
             .scrollIndicators(.hidden)
+            .scrollClipDisabled()
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $currentIndex)
-            .frame(height: 240)
+            .frame(height: cardHeight + 12)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in
