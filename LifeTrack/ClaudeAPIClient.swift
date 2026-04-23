@@ -11,7 +11,7 @@ import Foundation
 
 // Defined outside ClaudeAPIClient so these string constants are nonisolated
 // and can be used as default parameter values without a @MainActor context.
-enum ClaudeModel {
+nonisolated enum ClaudeModel {
     static let haiku  = "claude-haiku-4-5-20251001"
     static let sonnet = "claude-sonnet-4-6"
 }

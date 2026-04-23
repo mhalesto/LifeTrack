@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct TaskTemplate: Identifiable {
+nonisolated struct TaskTemplate: Identifiable, Sendable {
     let id: String
     let title: String
     let category: TaskCategory

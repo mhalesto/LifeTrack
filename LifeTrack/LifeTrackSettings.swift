@@ -9,14 +9,14 @@ import Foundation
 import UIKit
 import WidgetKit
 
-enum LifeTrackSharedGroup {
+nonisolated enum LifeTrackSharedGroup {
     static let suiteName = "group.com.currenttech.LifeTrack"
     static var defaults: UserDefaults? {
         UserDefaults(suiteName: suiteName)
     }
 }
 
-struct FocusWidgetSnapshot: Codable {
+nonisolated struct FocusWidgetSnapshot: Codable {
     struct Item: Codable, Identifiable {
         let id: String
         let title: String
@@ -89,8 +89,8 @@ extension JSONDecoder {
     }()
 }
 
-enum LifeTrackSettings {
-    enum Keys {
+nonisolated enum LifeTrackSettings {
+    nonisolated enum Keys {
         static let nickname = "LifeTrack.settings.nickname"
         static let themeID = "LifeTrack.settings.themeID"
         static let avatarVersion = "LifeTrack.settings.avatarVersion"

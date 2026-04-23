@@ -2172,7 +2172,7 @@ private enum BudgetDataMethod {
     case importStatement
 }
 
-private enum BudgetStatementImportError: LocalizedError {
+nonisolated private enum BudgetStatementImportError: LocalizedError {
     case emptyFile
     case noImportableRows
 
@@ -2186,7 +2186,7 @@ private enum BudgetStatementImportError: LocalizedError {
     }
 }
 
-private enum BudgetStatementImporter {
+nonisolated private enum BudgetStatementImporter {
     static func entries(from url: URL, currencyCode: String, fallbackDate: Date) throws -> [MoneyEntry] {
         let didAccess = url.startAccessingSecurityScopedResource()
         defer {

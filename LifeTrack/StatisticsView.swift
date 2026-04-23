@@ -616,7 +616,7 @@ private func paddedCountAxisUpperBound(_ maxValue: Int) -> Int {
     return resolvedMax + headroom
 }
 
-private enum StatisticsTimeRange: String, CaseIterable, Identifiable, Sendable {
+nonisolated private enum StatisticsTimeRange: String, CaseIterable, Identifiable, Sendable {
     case days
     case weeks
     case months
@@ -687,7 +687,7 @@ private enum StatisticsTimeRange: String, CaseIterable, Identifiable, Sendable {
 }
 
 private extension Array where Element == Date {
-    func atReadableAxisIndexes(_ indexes: [Int]) -> [Date] {
+    nonisolated func atReadableAxisIndexes(_ indexes: [Int]) -> [Date] {
         indexes.compactMap { index in
             guard indices.contains(index) else {
                 return nil
@@ -698,7 +698,7 @@ private extension Array where Element == Date {
     }
 }
 
-private struct ProductivityStatPoint: Identifiable, Sendable {
+nonisolated private struct ProductivityStatPoint: Identifiable, Sendable {
     var id: Date { date }
 
     let date: Date
@@ -708,7 +708,7 @@ private struct ProductivityStatPoint: Identifiable, Sendable {
     let overdueCount: Int
 }
 
-private struct ProductivityStatsSnapshot: Sendable {
+nonisolated private struct ProductivityStatsSnapshot: Sendable {
     let points: [ProductivityStatPoint]
     let totalCompleted: Int
     let totalOverdue: Int
@@ -738,7 +738,7 @@ private struct ProductivityStatsSnapshot: Sendable {
     )
 }
 
-private struct WeekdayPoint: Sendable, Identifiable {
+nonisolated private struct WeekdayPoint: Sendable, Identifiable {
     var id: Int { weekday }
     let weekday: Int
     let shortTitle: String
@@ -746,7 +746,7 @@ private struct WeekdayPoint: Sendable, Identifiable {
     let completedCount: Int
 }
 
-private struct CategoryShareEntry: Sendable, Identifiable {
+nonisolated private struct CategoryShareEntry: Sendable, Identifiable {
     var id: String { rawValue }
     let rawValue: String
     let completedCount: Int
@@ -754,7 +754,7 @@ private struct CategoryShareEntry: Sendable, Identifiable {
     let percent: Double
 }
 
-private struct StatisticsTaskSnapshot: Sendable {
+nonisolated private struct StatisticsTaskSnapshot: Sendable {
     let id: UUID
     let dueDate: Date
     let updatedAt: Date

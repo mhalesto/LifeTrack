@@ -262,7 +262,7 @@ final class MoneyEntry {
     }
 }
 
-enum MoneyCurrency {
+nonisolated enum MoneyCurrency {
     static var defaultCode: String {
         if let code = Locale.current.currency?.identifier, !code.isEmpty {
             return code.uppercased()
@@ -293,7 +293,7 @@ enum MoneyCurrency {
     }
 }
 
-enum MoneyFormatting {
+nonisolated enum MoneyFormatting {
     static func currency(_ amount: Double, code: String = MoneyCurrency.defaultCode) -> String {
         let normalizedCode = MoneyCurrency.normalized(code)
         let formatter = NumberFormatter()
