@@ -19,6 +19,7 @@ struct TaskRowView: View {
     var showsBorder: Bool = true
 
     @State private var restingOffset: CGFloat = 0
+    @State private var isShowingActions = false
     @GestureState private var dragOffset: CGFloat = 0
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
 
@@ -48,16 +49,33 @@ struct TaskRowView: View {
                 .animation(animationsEnabled ? .interactiveSpring(response: 0.18, dampingFraction: 0.86) : nil, value: dragOffset)
         }
         .clipShape(RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .sheet(isPresented: $isShowingActions) {
+            TaskRowActionSheet(
+                taskTitle: task.title,
+                onEdit: {
+                    isShowingActions = false
+                    onEdit()
+                },
+                onDelete: {
+                    isShowingActions = false
+                    onDelete()
+                }
+            )
+            .presentationDetents([.height(250)])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var rowContent: some View {
-        HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.small) {
-            Button(action: onToggleCompletion) {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: leadingIconSize * 0.78, weight: .semibold))
-                    .foregroundStyle(task.isCompleted ? LifeTrackTheme.ColorPalette.success : LifeTrackTheme.ColorPalette.tertiaryText)
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: leadingIconSize, height: leadingIconSize)
+        HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.small) {
+            Button {
+                playActionFeedback()
+                onToggleCompletion()
+            } label: {
+                TaskCompletionCheckmark(
+                    isCompleted: task.isCompleted,
+                    size: leadingIconSize
+                )
             }
             .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.9, pressedOpacity: 0.9))
             .accessibilityLabel(task.isCompleted ? "Mark incomplete" : "Mark complete")
@@ -121,14 +139,9 @@ struct TaskRowView: View {
             }
             .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.99, pressedOpacity: 0.96))
 
-            Menu {
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                }
-
-                Button(role: .destructive, action: onDelete) {
-                    Label("Move to Bin", systemImage: "trash")
-                }
+            Button {
+                playActionFeedback()
+                isShowingActions = true
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 14, weight: .bold))
@@ -137,6 +150,7 @@ struct TaskRowView: View {
                     .background(LifeTrackTheme.ColorPalette.backgroundBottom.opacity(0.8), in: Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Task actions")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, verticalPadding)
@@ -282,6 +296,135 @@ struct TaskRowView: View {
         }
 
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+}
+
+private struct TaskCompletionCheckmark: View {
+    let isCompleted: Bool
+    let size: CGFloat
+
+    @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(isCompleted ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.accent.opacity(0.08))
+                .overlay {
+                    Circle()
+                        .stroke(
+                            isCompleted ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.accent.opacity(0.65),
+                            lineWidth: isCompleted ? 0 : 2.4
+                        )
+                }
+                .shadow(
+                    color: isCompleted ? LifeTrackTheme.ColorPalette.accent.opacity(0.24) : .clear,
+                    radius: 8,
+                    y: 4
+                )
+
+            Image(systemName: isCompleted ? "checkmark" : "circle")
+                .font(.system(size: isCompleted ? size * 0.40 : size * 0.08, weight: .bold))
+                .foregroundStyle(isCompleted ? .white : Color.clear)
+                .scaleEffect(isCompleted ? 1 : 0.3)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .frame(width: size, height: size)
+        .scaleEffect(isCompleted ? 1.03 : 1)
+        .animation(animationsEnabled ? .snappy(duration: 0.22) : nil, value: isCompleted)
+    }
+}
+
+private struct TaskRowActionSheet: View {
+    let taskTitle: String
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            LifeTrackTheme.appBackground
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Task actions")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    Text(taskTitle)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .lineLimit(1)
+                }
+
+                VStack(spacing: LifeTrackTheme.Spacing.small) {
+                    sheetActionRow(
+                        title: "Edit task",
+                        subtitle: "Change details, dates, notes, or money fields",
+                        systemImage: "pencil",
+                        tint: LifeTrackTheme.ColorPalette.accent,
+                        action: onEdit
+                    )
+
+                    sheetActionRow(
+                        title: "Move to Bin",
+                        subtitle: "Remove it from active focus",
+                        systemImage: "trash",
+                        tint: LifeTrackTheme.ColorPalette.danger,
+                        action: onDelete
+                    )
+                }
+            }
+            .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+            .padding(.top, LifeTrackTheme.Spacing.large)
+            .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
+        }
+    }
+
+    private func sheetActionRow(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                action()
+            }
+        } label: {
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 42, height: 42)
+                    .background(tint.opacity(0.13), in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(title == "Move to Bin" ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.primaryText)
+                    Text(subtitle)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+            }
+            .padding(LifeTrackTheme.Spacing.medium)
+            .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(tint.opacity(0.18), lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98, pressedOpacity: 0.94))
     }
 }
 

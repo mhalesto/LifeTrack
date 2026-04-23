@@ -1253,6 +1253,7 @@ struct BetaDashboardView: View {
     @AppStorage("qa.smartSchedule") private var showSmartSchedule = true
 
     @State private var focusSortOrder: DashboardSortOrder = .dueDate
+    @State private var isShowingFocusSortSheet = false
     @State private var isShowingFocusTimer = false
     @State private var isShowingCustomize = false
     @State private var isShowingMoneyAIInsights = false
@@ -1544,6 +1545,11 @@ struct BetaDashboardView: View {
         }
         .sheet(isPresented: $isShowingFocusTimer) {
             FocusTimerSheet()
+        }
+        .sheet(isPresented: $isShowingFocusSortSheet) {
+            DailyFocusSortSheet(selectedOrder: $focusSortOrder)
+                .presentationDetents([.height(300)])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingCustomize) {
             QuickActionsCustomizeSheet(
@@ -2798,18 +2804,8 @@ struct BetaDashboardView: View {
 
                     Spacer(minLength: 0)
 
-                    Menu {
-                        ForEach(DashboardSortOrder.allCases, id: \.self) { order in
-                            Button {
-                                focusSortOrder = order
-                            } label: {
-                                if focusSortOrder == order {
-                                    Label(order.rawValue, systemImage: "checkmark")
-                                } else {
-                                    Text(order.rawValue)
-                                }
-                            }
-                        }
+                    Button {
+                        isShowingFocusSortSheet = true
                     } label: {
                         HStack(spacing: 6) {
                             Text(focusSortOrder.rawValue)
@@ -2826,6 +2822,7 @@ struct BetaDashboardView: View {
                                 .shadow(color: Color.black.opacity(0.05), radius: 4, y: 2)
                         )
                     }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.92))
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
@@ -2995,6 +2992,106 @@ struct BetaDashboardView: View {
         let openTasks = activeTasks.filter { !$0.isCompleted }
         let plan = DailyFocusPlanner.overdueReschedulePlan(for: openTasks)
         TaskLifecycleManager.applySchedule(plan, in: modelContext, customCategories: customCategories)
+    }
+}
+
+private struct DailyFocusSortSheet: View {
+    @Binding var selectedOrder: DashboardSortOrder
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            LifeTrackTheme.appBackground
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+                HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(BetaPalette.accent)
+                        .frame(width: 42, height: 42)
+                        .background(BetaPalette.accent.opacity(0.13), in: Circle())
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Sort Daily Focus")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(BetaPalette.primaryText)
+                        Text("Choose how focus tasks are ordered.")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(BetaPalette.secondaryText)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                VStack(spacing: LifeTrackTheme.Spacing.small) {
+                    ForEach(DashboardSortOrder.allCases, id: \.self) { order in
+                        sortOption(order)
+                    }
+                }
+            }
+            .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+            .padding(.top, LifeTrackTheme.Spacing.large)
+            .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
+        }
+    }
+
+    private func sortOption(_ order: DashboardSortOrder) -> some View {
+        let isSelected = selectedOrder == order
+        return Button {
+            selectedOrder = order
+            dismiss()
+        } label: {
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? BetaPalette.accent : BetaPalette.accent.opacity(0.08))
+                    Image(systemName: isSelected ? "checkmark" : iconName(for: order))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(isSelected ? .white : BetaPalette.accent)
+                }
+                .frame(width: 34, height: 34)
+                .animation(.snappy(duration: 0.2), value: isSelected)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(order.rawValue)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(BetaPalette.primaryText)
+                    Text(subtitle(for: order))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(BetaPalette.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(LifeTrackTheme.Spacing.medium)
+            .background(
+                isSelected ? BetaPalette.accent.opacity(0.09) : Color.white.opacity(0.82),
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isSelected ? BetaPalette.accent.opacity(0.35) : BetaPalette.faintBorder, lineWidth: 1)
+            }
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98, pressedOpacity: 0.94))
+    }
+
+    private func iconName(for order: DashboardSortOrder) -> String {
+        switch order {
+        case .dueDate: "calendar"
+        case .priority: "flag.fill"
+        case .title: "textformat"
+        }
+    }
+
+    private func subtitle(for order: DashboardSortOrder) -> String {
+        switch order {
+        case .dueDate: "Earliest dates first"
+        case .priority: "High priority first"
+        case .title: "Alphabetical order"
+        }
     }
 }
 
