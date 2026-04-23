@@ -2236,33 +2236,33 @@ struct BetaDashboardView: View {
             let trends = metricTrends
             statCard(
                 icon: "sun.max.fill", iconTint: BetaPalette.statDueToday, iconBg: BetaPalette.statDueTodayBg,
-                title: "Due Today", value: dueToday, unit: "Tasks", subtitle: "Last 7 days due",
+                title: "Due Today", value: dueToday, subtitle: "7-day due",
                 waveColor: BetaPalette.waveDueToday, series: trends.dueToday,
                 action: { selectedSummaryKind = .dueToday }
             )
             statCard(
                 icon: "calendar", iconTint: BetaPalette.statUpcoming, iconBg: BetaPalette.statUpcomingBg,
-                title: "Upcoming", value: upcoming, unit: "Tasks", subtitle: "Next 7 days",
+                title: "Upcoming", value: upcoming, subtitle: "Next week",
                 waveColor: BetaPalette.waveUpcoming, series: trends.upcoming,
                 action: { selectedSummaryKind = .upcoming }
             )
             statCard(
                 icon: "checkmark.seal.fill", iconTint: BetaPalette.statCompleted, iconBg: BetaPalette.statCompletedBg,
-                title: "Completed", value: completed, unit: "Tasks", subtitle: "Last 7 days",
+                title: "Completed", value: completed, subtitle: "7-day done",
                 waveColor: BetaPalette.waveCompleted, series: trends.completed,
                 action: { selectedSummaryKind = .completed }
             )
             statCard(
                 icon: "exclamationmark.triangle.fill", iconTint: BetaPalette.statOverdue, iconBg: BetaPalette.statOverdueBg,
-                title: "Overdue", value: overdue, unit: "Tasks", subtitle: "7-day backlog",
+                title: "Overdue", value: overdue, subtitle: "Backlog",
                 waveColor: BetaPalette.waveOverdue, series: trends.overdue,
                 action: { selectedSummaryKind = .overdue }
             )
         }
     }
 
-    private func statCard(icon: String, iconTint: Color, iconBg: Color, title: String, value: Int, unit: String, subtitle: String, waveColor: Color, series: [Double], action: (() -> Void)? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func statCard(icon: String, iconTint: Color, iconBg: Color, title: String, value: Int, subtitle: String, waveColor: Color, series: [Double], action: (() -> Void)? = nil) -> some View {
+        VStack(alignment: .center, spacing: 8) {
             ZStack {
                 Circle()
                     .fill(iconBg)
@@ -2275,21 +2275,23 @@ struct BetaDashboardView: View {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(BetaPalette.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
 
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(formattedValue(value))
-                    .font(.betaMetric)
-                    .foregroundStyle(BetaPalette.primaryText)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                Text(unit)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(BetaPalette.tertiaryText)
-            }
+            Text(formattedValue(value))
+                .font(.betaMetric)
+                .foregroundStyle(BetaPalette.primaryText)
+                .minimumScaleFactor(0.45)
+                .lineLimit(1)
+                .monospacedDigit()
+                .frame(maxWidth: .infinity, alignment: .center)
 
             Text(subtitle)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(BetaPalette.tertiaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(maxWidth: .infinity, alignment: .center)
 
             Spacer(minLength: 0)
 
@@ -2312,7 +2314,7 @@ struct BetaDashboardView: View {
             .frame(height: 32)
         }
         .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 140, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.white)
