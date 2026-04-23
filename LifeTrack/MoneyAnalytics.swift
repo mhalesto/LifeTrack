@@ -452,18 +452,23 @@ enum MoneyAnalytics {
 enum MoneySeedData {
     private static let seedKey = "MoneySeedData.seeded.v1"
 
-    static func seedIfNeeded(modelContext: ModelContext, entries: [MoneyEntry], tasks: [LifeTask]) {
+    static func seedIfNeeded(
+        modelContext: ModelContext,
+        entries: [MoneyEntry],
+        tasks: [LifeTask],
+        currencyCode: String = UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.moneyCurrencyCode) ?? MoneyCurrency.defaultCode
+    ) {
         guard !UserDefaults.standard.bool(forKey: seedKey),
               entries.isEmpty,
               !tasks.contains(where: \.financialEnabled) else {
             return
         }
 
-        let currencyCode = MoneyCurrency.defaultCode
-        for entry in sampleEntries(currencyCode: currencyCode) {
+        let normalizedCurrency = MoneyCurrency.normalized(currencyCode)
+        for entry in sampleEntries(currencyCode: normalizedCurrency) {
             modelContext.insert(entry)
         }
-        for task in sampleFinanceTasks(currencyCode: currencyCode) {
+        for task in sampleFinanceTasks(currencyCode: normalizedCurrency) {
             modelContext.insert(task)
         }
 

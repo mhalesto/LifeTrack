@@ -90,14 +90,16 @@ struct TaskFinancialDetailsSection: View {
             MoneyAmountField(
                 title: "Planned Amount",
                 amountText: $plannedAmountText,
-                currencyCode: $currencyCode
+                currencyCode: $currencyCode,
+                allowsCurrencySelection: false
             )
 
             MoneyAmountField(
                 title: "Actual Amount",
                 amountText: $actualAmountText,
                 currencyCode: $currencyCode,
-                placeholder: "Optional"
+                placeholder: "Optional",
+                allowsCurrencySelection: false
             )
         }
     }

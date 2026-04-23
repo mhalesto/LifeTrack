@@ -107,6 +107,8 @@ enum LifeTrackSettings {
         static let dashboardExperience = "LifeTrack.settings.dashboardExperience"
         static let betaShapesOpacity = "LifeTrack.settings.betaShapesOpacity"
         static let hideStatusBar = "LifeTrack.settings.hideStatusBar"
+        static let moneyCurrencyCode = "LifeTrack.settings.moneyCurrencyCode"
+        static let moneyCurrencyLocked = "LifeTrack.settings.moneyCurrencyLocked"
     }
 }
 

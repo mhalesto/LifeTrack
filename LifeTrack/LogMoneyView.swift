@@ -12,6 +12,7 @@ struct LogMoneyView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \LifeTask.dueDate, order: .reverse) private var tasks: [LifeTask]
+    @AppStorage(LifeTrackSettings.Keys.moneyCurrencyCode) private var appMoneyCurrencyCode = MoneyCurrency.defaultCode
 
     @State private var entryType: MoneyTransactionType = .expense
     @State private var dateScope: MoneyDateScope = .day
@@ -61,6 +62,9 @@ struct LogMoneyView: View {
             }
         }
         .tint(LifeTrackTheme.ColorPalette.accent)
+        .onAppear {
+            currencyCode = MoneyCurrency.normalized(appMoneyCurrencyCode)
+        }
         .onChange(of: entryType) { _, newType in
             if let first = categoryShortcuts(for: newType).first {
                 category = first
@@ -139,7 +143,12 @@ struct LogMoneyView: View {
         SectionCardView {
             SectionHeaderView(title: "Details")
 
-            MoneyAmountField(title: "Amount", amountText: $amountText, currencyCode: $currencyCode)
+            MoneyAmountField(
+                title: "Amount",
+                amountText: $amountText,
+                currencyCode: $currencyCode,
+                allowsCurrencySelection: false
+            )
 
             VStack(alignment: .leading, spacing: 7) {
                 Text("Category")
@@ -383,11 +392,13 @@ struct LogMoneyView: View {
     private func save() {
         guard canSave else { return }
         let cleanedCategory = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCurrency = MoneyCurrency.normalized(appMoneyCurrencyCode)
+        currencyCode = normalizedCurrency
         let now = Date()
         let entry = MoneyEntry(
             type: entryType,
             amount: amount,
-            currencyCode: currencyCode,
+            currencyCode: normalizedCurrency,
             category: cleanedCategory,
             dateScope: dateScope,
             startDate: startDate,
@@ -406,7 +417,7 @@ struct LogMoneyView: View {
             selectedTask.financialEnabled = true
             selectedTask.financialType = taskFinancialType(for: entryType)
             selectedTask.actualAmount = amount
-            selectedTask.currencyCode = MoneyCurrency.normalized(currencyCode)
+            selectedTask.currencyCode = normalizedCurrency
             selectedTask.budgetCategory = cleanedCategory
             selectedTask.paymentDate = startDate
             selectedTask.includeInMonthlySpending = includeInMonthlySpending

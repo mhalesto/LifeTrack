@@ -76,11 +76,34 @@ struct MoneyCurrencyPicker: View {
     }
 }
 
+struct MoneyCurrencyBadge: View {
+    let currencyCode: String
+    var showsLock: Bool = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "coloncurrencysign.circle")
+                .font(.system(size: 13, weight: .semibold))
+            Text(MoneyCurrency.normalized(currencyCode))
+                .font(.footnote.weight(.bold))
+            if showsLock {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9, weight: .bold))
+            }
+        }
+        .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(LifeTrackTheme.ColorPalette.accentSoft, in: Capsule())
+    }
+}
+
 struct MoneyAmountField: View {
     let title: String
     @Binding var amountText: String
     @Binding var currencyCode: String
     var placeholder: String = "0"
+    var allowsCurrencySelection = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -89,7 +112,14 @@ struct MoneyAmountField: View {
                 .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
 
             HStack(spacing: 10) {
-                MoneyCurrencyPicker(currencyCode: $currencyCode)
+                if allowsCurrencySelection {
+                    MoneyCurrencyPicker(currencyCode: $currencyCode)
+                } else {
+                    MoneyCurrencyBadge(currencyCode: currencyCode, showsLock: true)
+                        .onAppear {
+                            currencyCode = MoneyCurrency.normalized(currencyCode)
+                        }
+                }
 
                 TextField(placeholder, text: $amountText)
                     .font(.title3.weight(.semibold))

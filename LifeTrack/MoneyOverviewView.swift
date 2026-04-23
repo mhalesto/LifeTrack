@@ -12,14 +12,21 @@ struct MoneyOverviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MoneyEntry.startDate, order: .reverse) private var entries: [MoneyEntry]
     @Query(sort: \LifeTask.dueDate, order: .forward) private var tasks: [LifeTask]
+    @AppStorage(LifeTrackSettings.Keys.moneyCurrencyCode) private var appMoneyCurrencyCode = MoneyCurrency.defaultCode
+    @AppStorage(LifeTrackSettings.Keys.moneyCurrencyLocked) private var isMoneyCurrencyLocked = false
 
     @State private var selectedTab: MoneyOverviewTab = .overview
     @State private var selectedReportTab: MoneyReportTab = .overview
     @State private var selectedMonth = Date()
-    @State private var currencyCode = MoneyCurrency.defaultCode
     @State private var isShowingLogMoney = false
     @State private var isShowingIncomeEditor = false
+    @State private var isShowingCurrencySetup = false
+    @State private var isShowingBudgetPlanReview = false
     @State private var editingTask: LifeTask?
+
+    private var currencyCode: String {
+        MoneyCurrency.normalized(appMoneyCurrencyCode)
+    }
 
     var body: some View {
         ZStack {
@@ -81,9 +88,48 @@ struct MoneyOverviewView: View {
         .sheet(item: $editingTask) { task in
             NewTaskView(task: task)
         }
+        .sheet(isPresented: $isShowingBudgetPlanReview) {
+            BudgetPlanReviewView(
+                month: selectedMonth,
+                summary: summary,
+                plannedBills: plannedBills,
+                categoryTotals: spendingCategoryTotals,
+                currencyCode: currencyCode
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingCurrencySetup) {
+            MoneyCurrencySetupView(
+                selectedCurrencyCode: $appMoneyCurrencyCode,
+                onLock: {
+                    appMoneyCurrencyCode = MoneyCurrency.normalized(appMoneyCurrencyCode)
+                    isMoneyCurrencyLocked = true
+                    MoneySeedData.seedIfNeeded(
+                        modelContext: modelContext,
+                        entries: entries,
+                        tasks: tasks,
+                        currencyCode: currencyCode
+                    )
+                    isShowingCurrencySetup = false
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .interactiveDismissDisabled(!isMoneyCurrencyLocked)
+        }
         .onAppear {
-            MoneySeedData.seedIfNeeded(modelContext: modelContext, entries: entries, tasks: tasks)
-            currencyCode = MoneyCurrency.primaryCurrencyCode(entries: entries, tasks: tasks)
+            appMoneyCurrencyCode = MoneyCurrency.normalized(appMoneyCurrencyCode)
+            if !isMoneyCurrencyLocked {
+                isShowingCurrencySetup = true
+            } else {
+                MoneySeedData.seedIfNeeded(
+                    modelContext: modelContext,
+                    entries: entries,
+                    tasks: tasks,
+                    currencyCode: currencyCode
+                )
+            }
         }
     }
 
@@ -116,16 +162,14 @@ struct MoneyOverviewView: View {
                     Text(MoneyAnalytics.monthTitle(for: selectedMonth))
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                    if availableCurrencies.count > 1 {
-                        Text("Showing \(MoneyCurrency.normalized(currencyCode)) only")
-                            .font(.caption)
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                    }
+                    Text("Money currency: \(MoneyCurrency.normalized(currencyCode))")
+                        .font(.caption)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                 }
 
                 Spacer(minLength: 0)
 
-                MoneyCurrencyPicker(currencyCode: $currencyCode)
+                MoneyCurrencyBadge(currencyCode: currencyCode, showsLock: isMoneyCurrencyLocked)
 
                 Button { shiftMonth(1) } label: {
                     Image(systemName: "chevron.right")
@@ -165,11 +209,10 @@ struct MoneyOverviewView: View {
 
     private var overviewContent: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
-            budgetProjectionCard
-            summaryGrid
-            plannedVsActualCard
+            projectionHeroCard
+            cashFlowCard
             overviewTwoColumn
-            recentEntriesCard(limit: 5)
+            moneyInsightBanner
         }
     }
 
@@ -218,7 +261,7 @@ struct MoneyOverviewView: View {
         }
     }
 
-    private var budgetProjectionCard: some View {
+    private var projectionHeroCard: some View {
         SectionCardView {
             VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
                 HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
@@ -236,12 +279,12 @@ struct MoneyOverviewView: View {
                             .minimumScaleFactor(0.7)
                             .lineLimit(1)
 
-                        Text(MoneyFormatting.signedCurrency(projectedMonthEndBalance - previousSummary.actualRemaining, code: currencyCode) + " vs prev month")
+                        Text(MoneyFormatting.signedCurrency(projectedMonthEndBalance - monthOpeningBalance, code: currencyCode) + " vs start month")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.success)
+                            .foregroundStyle(projectedMonthEndBalance >= monthOpeningBalance ? LifeTrackTheme.ColorPalette.success : LifeTrackTheme.ColorPalette.danger)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(LifeTrackTheme.ColorPalette.success.opacity(0.10), in: Capsule())
+                            .background((projectedMonthEndBalance >= monthOpeningBalance ? LifeTrackTheme.ColorPalette.success : LifeTrackTheme.ColorPalette.danger).opacity(0.10), in: Capsule())
                     }
 
                     Spacer(minLength: 8)
@@ -280,9 +323,17 @@ struct MoneyOverviewView: View {
                         tint: LifeTrackTheme.ColorPalette.accent
                     )
                 }
-
-                MoneyProjectionChart(points: projectionPoints, currencyCode: currencyCode)
             }
+        }
+    }
+
+    private var cashFlowCard: some View {
+        SectionCardView {
+            MoneyProjectionChart(
+                points: projectionPoints,
+                currencyCode: currencyCode,
+                lowThreshold: lowBalanceThreshold
+            )
         }
     }
 
@@ -321,14 +372,14 @@ struct MoneyOverviewView: View {
 
     private var overviewTwoColumn: some View {
         VStack(spacing: LifeTrackTheme.Spacing.medium) {
-            spendingByCategoryCard(limit: 5)
             plannedBillsCard(limit: 4)
+            spendingByCategoryCard(limit: 5)
         }
     }
 
     private func spendingByCategoryCard(limit: Int? = nil) -> some View {
         SectionCardView {
-            SectionHeaderView(title: "Spending by Category", subtitle: "Actual spending breakdown.")
+            SectionHeaderView(title: "Spending buckets", subtitle: "This month")
 
             let rows = Array(spendingCategoryTotals.prefix(limit ?? spendingCategoryTotals.count))
             if rows.isEmpty {
@@ -345,7 +396,7 @@ struct MoneyOverviewView: View {
 
     private func plannedBillsCard(limit: Int? = nil) -> some View {
         SectionCardView {
-            SectionHeaderView(title: "Planned Bills", subtitle: "Upcoming and paid finance tasks.")
+            SectionHeaderView(title: "Upcoming bills", subtitle: "Planned, paid, or at-risk finance tasks.")
 
             let rows = Array(plannedBills.prefix(limit ?? plannedBills.count))
             if rows.isEmpty {
@@ -363,6 +414,69 @@ struct MoneyOverviewView: View {
                 }
             }
         }
+    }
+
+    private var moneyInsightBanner: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Image(systemName: "brain.head.profile")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 54, height: 54)
+                .background(Color.white.opacity(0.16), in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                }
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 7) {
+                    Text("LifeTrack AI")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.white.opacity(0.72))
+                    Text("BETA")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.white.opacity(0.18), in: Capsule())
+                }
+
+                Text(primaryMoneyInsight)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            Button {
+                isShowingBudgetPlanReview = true
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Build Plan")
+                    Image(systemName: "chevron.right")
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(LifeTrackTheme.ColorPalette.accent, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.9))
+        }
+        .padding(LifeTrackTheme.Spacing.large)
+        .background(
+            LinearGradient(
+                colors: [
+                    LifeTrackTheme.ColorPalette.primaryText.opacity(0.96),
+                    LifeTrackTheme.ColorPalette.secondaryText.opacity(0.90)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+        )
+        .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(0.75), radius: 12, x: 0, y: 8)
     }
 
     private func recentEntriesCard(limit: Int? = nil) -> some View {
@@ -512,10 +626,6 @@ struct MoneyOverviewView: View {
         return MoneyAnalytics.monthlySummary(for: previous, entries: entries, tasks: tasks, currencyCode: currencyCode)
     }
 
-    private var availableCurrencies: [String] {
-        MoneyAnalytics.availableCurrencies(entries: entries, tasks: tasks)
-    }
-
     private var entriesForMonth: [MoneyEntry] {
         let interval = MoneyAnalytics.monthInterval(containing: selectedMonth)
         let normalizedCurrency = MoneyCurrency.normalized(currencyCode)
@@ -560,6 +670,19 @@ struct MoneyOverviewView: View {
         return values
     }
 
+    private var primaryMoneyInsight: String {
+        if summary.spendingVariance > 0 {
+            return "Trim \(MoneyFormatting.currency(summary.spendingVariance, code: currencyCode)) to get spending back on plan."
+        }
+        if summary.spendingVariance < 0 {
+            return "You are \(MoneyFormatting.currency(abs(summary.spendingVariance), code: currencyCode)) under planned spend this month."
+        }
+        if summary.actualSavings > 0 {
+            return "You saved \(MoneyFormatting.currency(summary.actualSavings, code: currencyCode)) so far this month."
+        }
+        return "Log income and bills to build a smarter monthly plan."
+    }
+
     private var weeklyTrendPoints: [MoneyTrendPoint] {
         let calendar = Calendar.current
         let interval = MoneyAnalytics.monthInterval(containing: selectedMonth, calendar: calendar)
@@ -577,6 +700,20 @@ struct MoneyOverviewView: View {
 
     private var projectedMonthEndBalance: Double {
         projectionPoints.last?.balance ?? summary.actualRemaining
+    }
+
+    private var monthOpeningBalance: Double {
+        projectionPoints.first?.balance ?? previousSummary.actualRemaining
+    }
+
+    private var lowBalanceThreshold: Double {
+        if summary.plannedIncome > 0 {
+            return summary.plannedIncome * 0.38
+        }
+        if projectedMonthEndBalance < 0 || monthOpeningBalance < 0 {
+            return 0
+        }
+        return max(projectedMonthEndBalance * 0.65, monthOpeningBalance * 0.45, 1)
     }
 
     private var projectionPoints: [MoneyProjectionPoint] {
@@ -598,7 +735,6 @@ struct MoneyOverviewView: View {
         let cleanedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let interval = MoneyAnalytics.monthInterval(containing: selectedMonth)
         let normalizedCurrency = MoneyCurrency.normalized(currencyCode)
-        self.currencyCode = normalizedCurrency
         let now = Date()
 
         let existingPlan = tasks.first {
@@ -763,15 +899,21 @@ private struct MoneyProjectionMetric: View {
 private struct MoneyProjectionChart: View {
     let points: [MoneyProjectionPoint]
     let currencyCode: String
+    let lowThreshold: Double
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Cash flow")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                HStack(spacing: 4) {
+                    Text("Cash flow")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    Text("(Next 30 days)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
                 Spacer()
-                Text("Next 30 days")
+                Text("30 days")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     .padding(.horizontal, 10)
@@ -779,76 +921,180 @@ private struct MoneyProjectionChart: View {
                     .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Capsule())
             }
 
-            GeometryReader { proxy in
-                let values = points.map(\.balance)
+            if points.isEmpty {
+                MoneyEmptyState(title: "No projection yet", message: "Add income, bills, or entries to build a cash-flow forecast.")
+                    .frame(height: 180)
+            } else {
+                GeometryReader { proxy in
+                let values = points.map(\.balance) + [lowThreshold]
                 let minValue = values.min() ?? 0
                 let maxValue = values.max() ?? 1
                 let padding = max((maxValue - minValue) * 0.18, max(abs(maxValue) * 0.04, 1))
                 let lowerBound = minValue - padding
                 let upperBound = maxValue + padding
                 let range = max(upperBound - lowerBound, 1)
+                let plotLeft: CGFloat = 54
+                let plotTop: CGFloat = 8
+                let plotRight: CGFloat = 8
+                let plotBottom: CGFloat = 30
+                let plotWidth = max(proxy.size.width - plotLeft - plotRight, 1)
+                let plotHeight = max(proxy.size.height - plotTop - plotBottom, 1)
+                let forecastStartIndex = max(points.count - 6, 1)
+                let thresholdRatio = (lowThreshold - lowerBound) / range
+                let thresholdY = plotTop + plotHeight - (plotHeight * CGFloat(thresholdRatio))
+                let pointPosition: (Int) -> CGPoint = { index in
+                    let point = points[index]
+                    let x = plotLeft + (points.count <= 1 ? 0 : plotWidth * CGFloat(index) / CGFloat(points.count - 1))
+                    let yRatio = (point.balance - lowerBound) / range
+                    let y = plotTop + plotHeight - (plotHeight * CGFloat(yRatio))
+                    return CGPoint(x: x, y: y)
+                }
 
-                ZStack(alignment: .leading) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(0..<5, id: \.self) { index in
-                            let ratio = Double(index) / 4
-                            HStack(spacing: 10) {
-                                Text(axisLabel(for: upperBound - (range * ratio)))
-                                    .font(.caption2.weight(.medium))
-                                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                                    .frame(width: 44, alignment: .leading)
-                                Rectangle()
-                                    .fill(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
-                                    .frame(height: 0.7)
-                            }
-                            if index < 4 {
-                                Spacer(minLength: 0)
-                            }
+                ZStack(alignment: .topLeading) {
+                    ForEach(0..<5, id: \.self) { index in
+                        let ratio = Double(index) / 4
+                        let y = plotTop + plotHeight * CGFloat(ratio)
+                        let value = upperBound - (range * ratio)
+
+                        Text(axisLabel(for: value))
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .frame(width: plotLeft - 6, alignment: .leading)
+                            .position(x: (plotLeft - 6) / 2, y: y)
+
+                        Path { path in
+                            path.move(to: CGPoint(x: plotLeft, y: y))
+                            path.addLine(to: CGPoint(x: proxy.size.width - plotRight, y: y))
                         }
+                        .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.55), lineWidth: 0.7)
                     }
-                    .padding(.vertical, 4)
 
                     Path { path in
-                        for (index, point) in points.enumerated() {
-                            let plotX = CGFloat(54)
-                            let plotWidth = max(proxy.size.width - plotX, 1)
-                            let x = plotX + (points.count <= 1 ? 0 : plotWidth * CGFloat(index) / CGFloat(points.count - 1))
-                            let yRatio = (point.balance - lowerBound) / range
-                            let y = proxy.size.height - (proxy.size.height * CGFloat(yRatio))
-                            if index == 0 {
-                                path.move(to: CGPoint(x: x, y: y))
-                            } else {
-                                path.addLine(to: CGPoint(x: x, y: y))
+                        guard !points.isEmpty else { return }
+                        let first = pointPosition(0)
+                        path.move(to: first)
+                        for index in points.indices.dropFirst() {
+                            path.addLine(to: pointPosition(index))
+                        }
+                        path.addLine(to: CGPoint(x: pointPosition(points.count - 1).x, y: plotTop + plotHeight))
+                        path.addLine(to: CGPoint(x: first.x, y: plotTop + plotHeight))
+                        path.closeSubpath()
+                    }
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                LifeTrackTheme.ColorPalette.accent.opacity(0.16),
+                                LifeTrackTheme.ColorPalette.accent.opacity(0.02)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    Path { path in
+                        path.move(to: CGPoint(x: plotLeft, y: thresholdY))
+                        path.addLine(to: CGPoint(x: proxy.size.width - plotRight, y: thresholdY))
+                    }
+                    .stroke(LifeTrackTheme.ColorPalette.secondaryAccent.opacity(0.42), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+
+                    Text(axisLabel(for: lowThreshold))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryAccent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.86), in: Capsule())
+                        .position(x: proxy.size.width - 42, y: thresholdY)
+
+                    if points.count > 1 {
+                        ForEach(1..<min(points.count, forecastStartIndex + 1), id: \.self) { index in
+                            let previous = pointPosition(index - 1)
+                            let current = pointPosition(index)
+                            let segmentValue = (points[index - 1].balance + points[index].balance) / 2
+                            let tint = segmentValue < lowThreshold ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.secondaryAccent
+
+                            Path { path in
+                                path.move(to: previous)
+                                path.addLine(to: current)
+                            }
+                            .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                        }
+
+                        Path { path in
+                            let start = max(forecastStartIndex - 1, 0)
+                            path.move(to: pointPosition(start))
+                            for index in forecastStartIndex..<points.count {
+                                path.addLine(to: pointPosition(index))
                             }
                         }
+                        .stroke(LifeTrackTheme.ColorPalette.secondaryAccent, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round, dash: [6, 6]))
                     }
-                    .stroke(LifeTrackTheme.ColorPalette.accentGradient, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
 
-                    if let last = points.last {
-                        Text(MoneyFormatting.currency(last.balance, code: currencyCode))
+                    ForEach(0..<5, id: \.self) { labelIndex in
+                        let pointIndex = min(points.count - 1, Int((Double(points.count - 1) * Double(labelIndex) / 4.0).rounded()))
+                        let position = pointPosition(pointIndex)
+                        let label = labelIndex == 0 ? "Today" : points[pointIndex].date.dayMonthString
+
+                        Text(label)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .position(x: position.x, y: proxy.size.height - 6)
+                    }
+
+                    if let lastIndex = points.indices.last {
+                        let lastPosition = pointPosition(lastIndex)
+                        Text(chartMoneyLabel(for: points[lastIndex].balance))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.86), in: Capsule())
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                            .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.9), in: Capsule())
+                            .position(
+                                x: min(max(lastPosition.x, plotLeft + 42), proxy.size.width - 48),
+                                y: min(max(lastPosition.y, plotTop + 14), plotTop + plotHeight - 14)
+                            )
                     }
                 }
+                }
+                .frame(height: 206)
             }
-            .frame(height: 150)
         }
     }
 
     private func axisLabel(for value: Double) -> String {
         let absValue = abs(value)
+        let sign = value < 0 ? "-" : ""
         if absValue >= 1_000 {
-            return "\(currencyCodePrefix)\(Int(value / 1_000))K"
+            return "\(sign)\(currencySymbol)\(Int((absValue / 1_000).rounded()))K"
         }
-        return "\(currencyCodePrefix)\(Int(value))"
+        return "\(sign)\(currencySymbol)\(Int(absValue.rounded()))"
     }
 
-    private var currencyCodePrefix: String {
-        currencyCode == "ZAR" ? "R" : "\(currencyCode) "
+    private func chartMoneyLabel(for value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = value.rounded(.towardZero) == value ? 0 : 2
+        formatter.minimumFractionDigits = 0
+        let formatted = formatter.string(from: NSNumber(value: abs(value))) ?? "\(Int(abs(value)))"
+        let sign = value < 0 ? "-" : ""
+        return "\(sign)\(currencySymbol)\(formatted)"
+    }
+
+    private var currencySymbol: String {
+        switch MoneyCurrency.normalized(currencyCode) {
+        case "ZAR": return "R"
+        case "USD": return "$"
+        case "EUR": return "€"
+        case "GBP": return "£"
+        case "JPY": return "¥"
+        case "AUD": return "A$"
+        case "CAD": return "C$"
+        case "CHF": return "CHF "
+        case "CNY": return "¥"
+        case "INR": return "₹"
+        case "NGN": return "₦"
+        case "KES": return "KSh "
+        default: return "\(MoneyCurrency.normalized(currencyCode)) "
+        }
     }
 }
 
@@ -856,6 +1102,927 @@ private struct MoneyDeductionDraft: Identifiable, Equatable {
     var id = UUID()
     var title: String
     var amountText: String
+}
+
+private struct MoneyCurrencySetupView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedCurrencyCode: String
+    let onLock: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LifeTrackTheme.appBackground
+                    .ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Choose Money Currency")
+                            .font(.lifeTrackHeadline)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        Text("This currency will be used across entries, task financial details, bills, forecasts, and reports.")
+                            .font(.subheadline)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    SectionCardView {
+                        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                            Image(systemName: "lock.shield.fill")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                                .frame(width: 44, height: 44)
+                                .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Global currency")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                                Text("Pick carefully. It locks after setup so reports stay consistent.")
+                                    .font(.caption)
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer(minLength: LifeTrackTheme.Spacing.small)
+                            MoneyCurrencyPicker(currencyCode: $selectedCurrencyCode)
+                        }
+                    }
+
+                    Button {
+                        selectedCurrencyCode = MoneyCurrency.normalized(selectedCurrencyCode)
+                        onLock()
+                        dismiss()
+                        LifeTrackHaptics.lightImpact()
+                    } label: {
+                        Label("Use \(MoneyCurrency.normalized(selectedCurrencyCode))", systemImage: "checkmark.circle.fill")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(LifeTrackTheme.ColorPalette.accentGradient, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+                .padding(.top, LifeTrackTheme.Spacing.xLarge)
+                .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
+            }
+        }
+        .tint(LifeTrackTheme.ColorPalette.accent)
+    }
+}
+
+private struct BudgetPlanReviewView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let month: Date
+    let summary: MoneyMonthlySummary
+    let plannedBills: [MoneyBillSnapshot]
+    let categoryTotals: [MoneyCategoryTotal]
+    let currencyCode: String
+
+    @State private var step = 1
+    @State private var buildsProjection = true
+    @State private var showsVariableCases = true
+    @State private var suggestsSavings = true
+    @State private var automationMode: BudgetAutomationMode = .reviewMonthly
+    @State private var paySchedule = "Monthly"
+    @State private var incomeStability = "Stable"
+    @State private var billRemindersEnabled = true
+    @State private var reminderLeadTime = "3 days"
+    @State private var debtStrategy = "Minimums"
+    @State private var planPriority = "Save more"
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LifeTrackTheme.appBackground
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+                        progressHeader
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(stepTitle)
+                                .font(.lifeTrackHero)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                            Text(stepSubtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        stepContent
+
+                        Button {
+                            if step < 5 {
+                                withAnimation(.snappy) {
+                                    step += 1
+                                }
+                            } else {
+                                dismiss()
+                            }
+                            LifeTrackHaptics.lightImpact()
+                        } label: {
+                            HStack(spacing: 9) {
+                                Text(step == 5 ? "Generate My Plan" : "Continue")
+                                Image(systemName: "chevron.right")
+                            }
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(LifeTrackTheme.ColorPalette.accentGradient, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                        }
+                        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
+                    }
+                    .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
+                    .padding(.top, LifeTrackTheme.Spacing.large)
+                    .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
+        .tint(LifeTrackTheme.ColorPalette.accent)
+    }
+
+    private var progressHeader: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Button {
+                if step > 1 {
+                    withAnimation(.snappy) {
+                        step -= 1
+                    }
+                } else {
+                    dismiss()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if step > 1 {
+                        Image(systemName: "chevron.left")
+                    }
+                    Text(step > 1 ? "Back" : "Later")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.78), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            HStack(spacing: 10) {
+                ForEach(1...5, id: \.self) { step in
+                    Text("\(step)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(step == self.step ? .white : LifeTrackTheme.ColorPalette.secondaryText)
+                        .frame(width: 32, height: 32)
+                        .background(step == self.step ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.cardElevated, in: Circle())
+                        .overlay {
+                            Circle()
+                                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(step == self.step ? 0 : 0.8), lineWidth: 0.8)
+                        }
+                }
+            }
+
+            Text("\(step) of 5")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+        }
+    }
+
+    @ViewBuilder
+    private var stepContent: some View {
+        switch step {
+        case 1:
+            setupPlannerContent
+        case 2:
+            incomeSetupContent
+        case 3:
+            billsEssentialsContent
+        case 4:
+            goalsDebtContent
+        default:
+            snapshotCard
+            forecastOptionsCard
+            previewCard
+            automationCard
+        }
+    }
+
+    private var stepTitle: String {
+        switch step {
+        case 1: "Set Up Budget Planner"
+        case 2: "Add Your Income"
+        case 3: "Add Bills & Essentials"
+        case 4: "Goals, Savings & Debt"
+        default: "Review & Generate Plan"
+        }
+    }
+
+    private var stepSubtitle: String {
+        switch step {
+        case 1: "Tell LifeTrack how money moves so we can build your monthly plan, bill forecast, and projections."
+        case 2: "Tell LifeTrack what comes in each month so projections stay realistic."
+        case 3: "We'll use these to forecast cash flow, due dates, and pressure points."
+        case 4: "Add the goals you care about so LifeTrack can recommend better spending room."
+        default: "Check the inputs below, then let LifeTrack build your monthly budget and projections."
+        }
+    }
+
+    private var setupPlannerContent: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+            SectionCardView {
+                SectionHeaderView(title: "Choose Your Base Month")
+
+                MoneyValueRow(
+                    title: MoneyAnalytics.monthTitle(for: month),
+                    value: "Change",
+                    symbolName: "calendar",
+                    tint: LifeTrackTheme.ColorPalette.accent
+                )
+
+                BudgetSegmentedOptions(options: ["Monthly", "Biweekly", "Weekly"], selected: .constant("Monthly"))
+            }
+
+            SectionCardView {
+                SectionHeaderView(title: "What do you want to plan?", subtitle: "We'll include these in your plan and projections.")
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], spacing: 10) {
+                    BudgetSelectableChip(title: "Budget", symbolName: "chart.pie.fill", isSelected: true)
+                    BudgetSelectableChip(title: "Bills", symbolName: "list.bullet.rectangle", isSelected: true)
+                    BudgetSelectableChip(title: "Savings Goals", symbolName: "target", isSelected: true)
+                    BudgetSelectableChip(title: "Debt Payoff", symbolName: "creditcard.fill", isSelected: debtValue > 0)
+                    BudgetSelectableChip(title: "Cash Projection", symbolName: "chart.line.uptrend.xyaxis", isSelected: true)
+                }
+            }
+
+            SectionCardView {
+                SectionHeaderView(title: "How do you want to add data?", subtitle: "You can change this anytime.")
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    BudgetMethodCard(title: "Manual Entry", subtitle: "Add transactions yourself", symbolName: "pencil", isSelected: true)
+                    BudgetMethodCard(title: "Import Statement", subtitle: "Upload bank or card statements", symbolName: "icloud.and.arrow.up", isSelected: false)
+                }
+
+                Label("You can import later too.", systemImage: "shield.checkered")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var incomeSetupContent: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+            SectionCardView {
+                SectionHeaderView(title: "Monthly Income")
+
+                BudgetSetupRow(title: "Salary", subtitle: "Work · Monthly", value: MoneyFormatting.currency(incomeValue, code: currencyCode), symbolName: "briefcase.fill", tint: LifeTrackTheme.ColorPalette.success)
+                BudgetSetupRow(title: "Freelance / Side Hustle", subtitle: "Variable", value: MoneyFormatting.currency(max(incomeValue * 0.1, 0), code: currencyCode), symbolName: "star.circle", tint: LifeTrackTheme.ColorPalette.warning)
+                BudgetSetupRow(title: "Other Income", subtitle: "Optional", value: MoneyFormatting.currency(max(incomeValue * 0.04, 0), code: currencyCode), symbolName: "ellipsis", tint: LifeTrackTheme.ColorPalette.accent)
+
+                Button {} label: {
+                    Label("Add income source", systemImage: "plus.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                                .stroke(LifeTrackTheme.ColorPalette.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+
+            SectionCardView {
+                SectionHeaderView(title: "Pay Schedule")
+                BudgetSegmentedOptions(options: ["Monthly", "Twice a month", "Weekly"], selected: $paySchedule)
+                MoneyValueRow(title: "Next payday estimate", value: "25 Apr", symbolName: "calendar", tint: LifeTrackTheme.ColorPalette.accent)
+            }
+
+            SectionCardView {
+                SectionHeaderView(title: "Income Stability")
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    BudgetMethodCard(title: "Stable", subtitle: "Predictable", symbolName: "shield.fill", isSelected: incomeStability == "Stable") { incomeStability = "Stable" }
+                    BudgetMethodCard(title: "Mixed", subtitle: "Some variable", symbolName: "waveform.path.ecg", isSelected: incomeStability == "Mixed") { incomeStability = "Mixed" }
+                    BudgetMethodCard(title: "Irregular", subtitle: "Varies often", symbolName: "waveform", isSelected: incomeStability == "Irregular") { incomeStability = "Irregular" }
+                }
+            }
+        }
+    }
+
+    private var billsEssentialsContent: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+            SectionCardView {
+                SectionHeaderView(title: "Recurring Bills", subtitle: "Add your monthly fixed bills.")
+
+                let rows = plannedBills.isEmpty ? sampleBillRows : plannedBills.prefix(4).map {
+                    BudgetBillDraft(title: $0.title, date: $0.dueDate.dayMonthString, amount: $0.plannedAmount, symbolName: $0.status == .paid ? "checkmark.circle.fill" : "house.fill")
+                }
+
+                ForEach(rows) { row in
+                    BudgetSetupRow(title: row.title, subtitle: "\(row.date) · Monthly", value: MoneyFormatting.currency(row.amount, code: currencyCode), symbolName: row.symbolName, tint: LifeTrackTheme.ColorPalette.accent)
+                }
+
+                Button {} label: {
+                    Label("Add recurring bill", systemImage: "plus.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                                .stroke(LifeTrackTheme.ColorPalette.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+
+            SectionCardView {
+                SectionHeaderView(title: "Flexible Essentials", subtitle: "Set your average monthly spend.")
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    BudgetSnapshotTile(title: "Groceries", value: max(essentialsValue * 0.38, 0), currencyCode: currencyCode, symbolName: "cart.fill", tint: LifeTrackTheme.ColorPalette.success)
+                    BudgetSnapshotTile(title: "Transport", value: max(essentialsValue * 0.20, 0), currencyCode: currencyCode, symbolName: "car.fill", tint: LifeTrackTheme.ColorPalette.accent)
+                    BudgetSnapshotTile(title: "Health", value: max(essentialsValue * 0.12, 0), currencyCode: currencyCode, symbolName: "heart.fill", tint: LifeTrackTheme.ColorPalette.danger)
+                    BudgetSnapshotTile(title: "Kids / School", value: max(essentialsValue * 0.22, 0), currencyCode: currencyCode, symbolName: "backpack.fill", tint: LifeTrackTheme.ColorPalette.warning)
+                }
+            }
+
+            SectionCardView {
+                Toggle(isOn: $billRemindersEnabled) {
+                    SectionHeaderView(title: "Bill Reminders", subtitle: "Never miss a payment.")
+                }
+                .tint(LifeTrackTheme.ColorPalette.accent)
+                BudgetSegmentedOptions(options: ["1 day", "3 days", "1 week"], selected: $reminderLeadTime)
+            }
+        }
+    }
+
+    private var goalsDebtContent: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+            SectionCardView {
+                SectionHeaderView(title: "Savings Goals")
+                BudgetGoalRow(title: "Emergency Fund", target: max(incomeValue * 0.60, 15_000), current: max(summary.actualSavings, incomeValue * 0.20), contribution: max(summary.plannedSavings, incomeValue * 0.06), currencyCode: currencyCode, symbolName: "shield.fill", tint: LifeTrackTheme.ColorPalette.success)
+                BudgetGoalRow(title: "December Holiday", target: max(incomeValue * 0.35, 10_000), current: max(incomeValue * 0.10, 0), contribution: max(incomeValue * 0.035, 0), currencyCode: currencyCode, symbolName: "beach.umbrella.fill", tint: LifeTrackTheme.ColorPalette.accent)
+                BudgetGoalRow(title: "New Laptop", target: max(incomeValue * 0.40, 18_000), current: max(incomeValue * 0.12, 0), contribution: max(incomeValue * 0.04, 0), currencyCode: currencyCode, symbolName: "laptopcomputer", tint: LifeTrackTheme.ColorPalette.warning)
+            }
+
+            SectionCardView {
+                SectionHeaderView(title: "Debt Payoff")
+                BudgetSetupRow(title: "Credit Card", subtitle: "Balance", value: MoneyFormatting.currency(max(debtValue, incomeValue * 0.20), code: currencyCode), symbolName: "creditcard.fill", tint: LifeTrackTheme.ColorPalette.accent)
+                BudgetSetupRow(title: "Store Account", subtitle: "Minimum payment", value: MoneyFormatting.currency(max(debtValue * 0.08, 300), code: currencyCode), symbolName: "storefront.fill", tint: LifeTrackTheme.ColorPalette.accent)
+                BudgetSegmentedOptions(options: ["Minimums", "Snowball", "Avalanche"], selected: $debtStrategy)
+            }
+
+            SectionCardView {
+                SectionHeaderView(title: "Priority")
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    BudgetMethodCard(title: "Save more", subtitle: "", symbolName: "banknote", isSelected: planPriority == "Save more") { planPriority = "Save more" }
+                    BudgetMethodCard(title: "Pay off debt", subtitle: "", symbolName: "creditcard", isSelected: planPriority == "Pay off debt") { planPriority = "Pay off debt" }
+                    BudgetMethodCard(title: "Balanced", subtitle: "", symbolName: "scalemass", isSelected: planPriority == "Balanced") { planPriority = "Balanced" }
+                }
+            }
+        }
+    }
+
+    private var snapshotCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "Your Snapshot")
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 10)], spacing: 10) {
+                BudgetSnapshotTile(title: "Income", value: incomeValue, currencyCode: currencyCode, symbolName: "arrow.up", tint: LifeTrackTheme.ColorPalette.success)
+                BudgetSnapshotTile(title: "Fixed Bills", value: fixedBillsValue, currencyCode: currencyCode, symbolName: "list.bullet.rectangle", tint: LifeTrackTheme.ColorPalette.accent)
+                BudgetSnapshotTile(title: "Essentials", value: essentialsValue, currencyCode: currencyCode, symbolName: "cart.fill", tint: LifeTrackTheme.ColorPalette.warning)
+                BudgetSnapshotTile(title: "Goals & Debt", value: goalsDebtValue, currencyCode: currencyCode, symbolName: "target", tint: LifeTrackTheme.ColorPalette.danger)
+                BudgetSnapshotTile(title: "Free to Allocate", value: freeToAllocateValue, currencyCode: currencyCode, symbolName: "wallet.pass.fill", tint: LifeTrackTheme.ColorPalette.success)
+            }
+        }
+    }
+
+    private var forecastOptionsCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "Forecast Options")
+
+            BudgetPlanToggleRow(title: "Build 30-day cash projection", symbolName: "chart.line.uptrend.xyaxis", isOn: $buildsProjection)
+            BudgetPlanToggleRow(title: "Show best / worst case for variable income", symbolName: "sparkles", isOn: $showsVariableCases)
+            BudgetPlanToggleRow(title: "Suggest safe savings amount", symbolName: "shield.checkered", isOn: $suggestsSavings)
+        }
+    }
+
+    private var previewCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "Preview This Month")
+
+            VStack(spacing: LifeTrackTheme.Spacing.medium) {
+                VStack(spacing: 0) {
+                    MoneyValueRow(title: "Expected leftover", value: MoneyFormatting.currency(freeToAllocateValue, code: currencyCode), symbolName: "circle.fill", tint: LifeTrackTheme.ColorPalette.success)
+                    Divider().padding(.leading, 46)
+                    MoneyValueRow(title: "Bills covered", value: "\(plannedBills.count)", symbolName: "list.bullet", tint: LifeTrackTheme.ColorPalette.accent)
+                    Divider().padding(.leading, 46)
+                    MoneyValueRow(title: "Goal contributions", value: "\(goalContributionCount)", symbolName: "target", tint: LifeTrackTheme.ColorPalette.warning)
+                }
+
+                BudgetPreviewChart(
+                    currencyCode: currencyCode,
+                    values: [
+                        BudgetPreviewChart.Value(label: "Income", amount: incomeValue, tint: LifeTrackTheme.ColorPalette.success, isOutline: false),
+                        BudgetPreviewChart.Value(label: "Bills", amount: fixedBillsValue, tint: LifeTrackTheme.ColorPalette.danger, isOutline: false),
+                        BudgetPreviewChart.Value(label: "Essentials", amount: essentialsValue, tint: LifeTrackTheme.ColorPalette.warning, isOutline: false),
+                        BudgetPreviewChart.Value(label: "Goals", amount: goalsDebtValue, tint: LifeTrackTheme.ColorPalette.danger.opacity(0.72), isOutline: false),
+                        BudgetPreviewChart.Value(label: "Leftover", amount: freeToAllocateValue, tint: LifeTrackTheme.ColorPalette.success, isOutline: true)
+                    ]
+                )
+            }
+        }
+    }
+
+    private var automationCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "Automation")
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                BudgetAutomationChoice(
+                    title: "Review monthly",
+                    subtitle: "I'll review and approve my plan each month.",
+                    symbolName: "calendar",
+                    isSelected: automationMode == .reviewMonthly
+                ) {
+                    automationMode = .reviewMonthly
+                }
+
+                BudgetAutomationChoice(
+                    title: "Auto-roll forward",
+                    subtitle: "LifeTrack will roll my plan forward automatically.",
+                    symbolName: "calendar.badge.clock",
+                    isSelected: automationMode == .autoRoll
+                ) {
+                    automationMode = .autoRoll
+                }
+            }
+
+            Label("You can edit any of this after setup.", systemImage: "shield.checkered")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var incomeValue: Double {
+        summary.plannedIncome > 0 ? summary.plannedIncome : summary.actualIncome
+    }
+
+    private var fixedBillsValue: Double {
+        plannedBills.reduce(0) { $0 + $1.plannedAmount }
+    }
+
+    private var debtValue: Double {
+        categoryTotals
+            .filter { $0.kind == .debtPayment }
+            .reduce(0) { $0 + max($1.planned, $1.actual) }
+    }
+
+    private var essentialsValue: Double {
+        max(summary.plannedSpending - fixedBillsValue - debtValue, 0)
+    }
+
+    private var goalsDebtValue: Double {
+        max(summary.plannedSavings, summary.actualSavings) + debtValue
+    }
+
+    private var freeToAllocateValue: Double {
+        max(incomeValue - fixedBillsValue - essentialsValue - goalsDebtValue, 0)
+    }
+
+    private var goalContributionCount: Int {
+        var count = categoryTotals.filter { $0.kind == .debtPayment && max($0.planned, $0.actual) > 0 }.count
+        if max(summary.plannedSavings, summary.actualSavings) > 0 {
+            count += 1
+        }
+        return count
+    }
+
+    private var sampleBillRows: [BudgetBillDraft] {
+        [
+            BudgetBillDraft(title: "Rent / Bond", date: "01 Apr", amount: max(incomeValue * 0.28, 0), symbolName: "house.fill"),
+            BudgetBillDraft(title: "Electricity", date: "05 Apr", amount: max(incomeValue * 0.04, 0), symbolName: "bolt.fill"),
+            BudgetBillDraft(title: "Internet", date: "07 Apr", amount: max(incomeValue * 0.02, 0), symbolName: "wifi"),
+            BudgetBillDraft(title: "Car Payment", date: "15 Apr", amount: max(incomeValue * 0.10, 0), symbolName: "car.fill")
+        ]
+    }
+}
+
+private enum BudgetAutomationMode {
+    case reviewMonthly
+    case autoRoll
+}
+
+private struct BudgetBillDraft: Identifiable {
+    let id = UUID()
+    let title: String
+    let date: String
+    let amount: Double
+    let symbolName: String
+}
+
+private struct BudgetSegmentedOptions: View {
+    let options: [String]
+    @Binding var selected: String
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                Button {
+                    selected = option
+                } label: {
+                    Text(option)
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(selected == option ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.secondaryText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(selected == option ? LifeTrackTheme.ColorPalette.accentSoft : Color.clear)
+                }
+                .buttonStyle(.plain)
+
+                if index < options.count - 1 {
+                    Divider()
+                }
+            }
+        }
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct BudgetSelectableChip: View {
+    let title: String
+    let symbolName: String
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: symbolName)
+                .font(.system(size: 15, weight: .semibold))
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Spacer(minLength: 0)
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+        }
+        .foregroundStyle(isSelected ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.secondaryText)
+        .padding(12)
+        .background(isSelected ? LifeTrackTheme.ColorPalette.accentSoft.opacity(0.55) : LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(isSelected ? LifeTrackTheme.ColorPalette.accent.opacity(0.55) : LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct BudgetMethodCard: View {
+    let title: String
+    let subtitle: String
+    let symbolName: String
+    let isSelected: Bool
+    var action: () -> Void = {}
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 10) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isSelected ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.secondaryText)
+                    .frame(width: 46, height: 46)
+                    .background((isSelected ? LifeTrackTheme.ColorPalette.accentSoft : LifeTrackTheme.ColorPalette.backgroundTop), in: Circle())
+
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 116)
+            .padding(12)
+            .background(isSelected ? LifeTrackTheme.ColorPalette.accentSoft.opacity(0.48) : LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    .stroke(isSelected ? LifeTrackTheme.ColorPalette.accent.opacity(0.65) : LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.9)
+            }
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98, pressedOpacity: 0.94))
+    }
+}
+
+private struct BudgetSetupRow: View {
+    let title: String
+    let subtitle: String
+    let value: String
+    let symbolName: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Image(systemName: symbolName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: LifeTrackTheme.IconSize.mediumCircle, height: LifeTrackTheme.IconSize.mediumCircle)
+                .background(tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct BudgetGoalRow: View {
+    let title: String
+    let target: Double
+    let current: Double
+    let contribution: Double
+    let currencyCode: String
+    let symbolName: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: LifeTrackTheme.IconSize.mediumCircle, height: LifeTrackTheme.IconSize.mediumCircle)
+                    .background(tint.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    Text("Target \(MoneyFormatting.currency(target, code: currencyCode))")
+                        .font(.caption)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(MoneyFormatting.currency(contribution, code: currencyCode))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(tint)
+                    Text("Monthly")
+                        .font(.caption)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: proxy.size.width * min(max(current / max(target, 1), 0), 1))
+                }
+            }
+            .frame(height: 7)
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct BudgetSnapshotTile: View {
+    let title: String
+    let value: Double
+    let currencyCode: String
+    let symbolName: String
+    let tint: Color
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: symbolName)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 44, height: 44)
+                .background(tint.opacity(0.13), in: Circle())
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(MoneyFormatting.currency(value, code: currencyCode))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct BudgetPlanToggleRow: View {
+    let title: String
+    let symbolName: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    .frame(width: 38, height: 38)
+                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .tint(LifeTrackTheme.ColorPalette.accent)
+        .padding(10)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct BudgetPreviewChart: View {
+    struct Value: Identifiable {
+        let id = UUID()
+        let label: String
+        let amount: Double
+        let tint: Color
+        let isOutline: Bool
+    }
+
+    let currencyCode: String
+    let values: [Value]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Cash flow this month")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+            GeometryReader { proxy in
+                let maxAmount = max(values.map(\.amount).max() ?? 1, 1)
+
+                HStack(alignment: .bottom, spacing: 10) {
+                    ForEach(values) { value in
+                        VStack(spacing: 7) {
+                            Text(compactAmount(value.amount))
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(value.isOutline ? Color.clear : value.tint.opacity(0.72))
+                                .overlay {
+                                    if value.isOutline {
+                                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                            .stroke(value.tint, style: StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
+                                            .background(value.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                    }
+                                }
+                                .frame(height: max(16, (proxy.size.height - 42) * CGFloat(value.amount / maxAmount)))
+
+                            Text(value.label)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .frame(height: 142)
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+
+    private func compactAmount(_ amount: Double) -> String {
+        if amount >= 1_000 {
+            return "\(MoneyFormatting.currency(amount / 1_000, code: currencyCode))K"
+        }
+        return MoneyFormatting.currency(amount, code: currencyCode)
+    }
+}
+
+private struct BudgetAutomationChoice: View {
+    let title: String
+    let subtitle: String
+    let symbolName: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(isSelected ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.secondaryText)
+                    .frame(width: 46, height: 46)
+                    .background((isSelected ? LifeTrackTheme.ColorPalette.accentSoft : LifeTrackTheme.ColorPalette.backgroundTop), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? LifeTrackTheme.ColorPalette.accentSoft.opacity(0.5) : LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    .stroke(isSelected ? LifeTrackTheme.ColorPalette.accent.opacity(0.8) : LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.9)
+            }
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98, pressedOpacity: 0.94))
+    }
 }
 
 private struct MoneyIncomeEditorView: View {
@@ -909,8 +2076,18 @@ private struct MoneyIncomeEditorView: View {
                         }
 
                         SectionCardView {
-                            MoneyAmountField(title: "Planned income", amountText: $plannedText, currencyCode: $currencyCode)
-                            MoneyAmountField(title: "Gross income", amountText: $grossText, currencyCode: $currencyCode)
+                            MoneyAmountField(
+                                title: "Planned income",
+                                amountText: $plannedText,
+                                currencyCode: $currencyCode,
+                                allowsCurrencySelection: false
+                            )
+                            MoneyAmountField(
+                                title: "Gross income",
+                                amountText: $grossText,
+                                currencyCode: $currencyCode,
+                                allowsCurrencySelection: false
+                            )
 
                             VStack(alignment: .leading, spacing: 9) {
                                 HStack {

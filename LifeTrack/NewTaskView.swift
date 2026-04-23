@@ -81,6 +81,9 @@ struct NewTaskView: View {
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
 
     private let durationOptions = [15, 30, 45, 60, 90, 120]
+    private static var currentMoneyCurrencyCode: String {
+        MoneyCurrency.normalized(UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.moneyCurrencyCode) ?? MoneyCurrency.defaultCode)
+    }
 
     init(task: LifeTask? = nil, template: TaskTemplate? = nil, autoStartVoice: Bool = false) {
         existingTask = task
@@ -121,7 +124,7 @@ struct NewTaskView: View {
         _financialType = State(initialValue: task?.financialType ?? .expense)
         _plannedAmountText = State(initialValue: Self.amountInputString(task?.plannedAmount))
         _actualAmountText = State(initialValue: Self.amountInputString(task?.actualAmount))
-        _currencyCode = State(initialValue: task?.currencyCode ?? MoneyCurrency.defaultCode)
+        _currencyCode = State(initialValue: task?.currencyCode ?? Self.currentMoneyCurrencyCode)
         _budgetCategory = State(initialValue: task?.budgetCategory ?? (templateWantsFinance ? "Bills" : ""))
         _hasPaymentDate = State(initialValue: task?.paymentDate != nil)
         _paymentDate = State(initialValue: task?.paymentDate ?? task?.dueDate ?? template?.dueDate ?? Date())
@@ -1311,9 +1314,9 @@ struct NewTaskView: View {
             actualAmountText = Self.amountInputString(actualAmount)
         }
 
-        if let draftCurrency = draft.currencyCode,
+        if draft.currencyCode != nil,
            force || currencyCode == MoneyCurrency.defaultCode {
-            currencyCode = MoneyCurrency.normalized(draftCurrency)
+            currencyCode = Self.currentMoneyCurrencyCode
         }
 
         if let draftBudgetCategory = draft.budgetCategory,

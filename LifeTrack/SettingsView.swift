@@ -27,6 +27,8 @@ struct SettingsView: View {
     @AppStorage(LifeTrackSettings.Keys.claudeAPIKey) private var claudeAPIKey = ""
     @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.hideStatusBar) private var hideStatusBar = false
+    @AppStorage(LifeTrackSettings.Keys.moneyCurrencyCode) private var moneyCurrencyCode = MoneyCurrency.defaultCode
+    @AppStorage(LifeTrackSettings.Keys.moneyCurrencyLocked) private var isMoneyCurrencyLocked = false
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarImage: UIImage?
@@ -53,6 +55,7 @@ struct SettingsView: View {
                         motionCard
                         dashboardExperienceCard
                         displayCard
+                        moneyCard
                         taskDataCard
                         archiveCard
                         binCard
@@ -425,6 +428,61 @@ struct SettingsView: View {
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+            }
+        }
+    }
+
+    private var moneyCard: some View {
+        SectionCardView {
+            SectionHeaderView(title: "Money", subtitle: "Choose the currency used across money tracking.")
+
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: "creditcard.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                    .frame(width: 42, height: 42)
+                    .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("App Money Currency")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(isMoneyCurrencyLocked ? "Locked for reports, tasks, entries, and forecasts." : "Pick once before logging money, then lock it in.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                if isMoneyCurrencyLocked {
+                    MoneyCurrencyBadge(currencyCode: moneyCurrencyCode, showsLock: true)
+                } else {
+                    MoneyCurrencyPicker(currencyCode: $moneyCurrencyCode)
+                }
+            }
+            .padding(12)
+            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+            }
+
+            if !isMoneyCurrencyLocked {
+                Button {
+                    moneyCurrencyCode = MoneyCurrency.normalized(moneyCurrencyCode)
+                    isMoneyCurrencyLocked = true
+                    LifeTrackHaptics.lightImpact()
+                } label: {
+                    Label("Lock Currency", systemImage: "lock.fill")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(LifeTrackTheme.ColorPalette.accentGradient, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                }
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
             }
         }
     }

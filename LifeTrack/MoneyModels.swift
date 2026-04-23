@@ -299,7 +299,7 @@ enum MoneyFormatting {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = normalizedCode
-        formatter.locale = Locale.current
+        formatter.locale = Locale(identifier: localeIdentifier(for: normalizedCode))
         formatter.minimumFractionDigits = amount.rounded(.down) == amount ? 0 : 2
         formatter.maximumFractionDigits = 2
         return formatter.string(from: NSNumber(value: amount)) ?? "\(normalizedCode) \(amount)"
@@ -314,5 +314,23 @@ enum MoneyFormatting {
             return "-\(formatted)"
         }
         return formatted
+    }
+
+    private static func localeIdentifier(for currencyCode: String) -> String {
+        switch MoneyCurrency.normalized(currencyCode) {
+        case "ZAR": return "en_ZA"
+        case "USD": return "en_US"
+        case "EUR": return "en_IE"
+        case "GBP": return "en_GB"
+        case "JPY": return "ja_JP"
+        case "AUD": return "en_AU"
+        case "CAD": return "en_CA"
+        case "CHF": return "de_CH"
+        case "CNY": return "zh_CN"
+        case "INR": return "en_IN"
+        case "NGN": return "en_NG"
+        case "KES": return "en_KE"
+        default: return Locale.current.identifier
+        }
     }
 }
