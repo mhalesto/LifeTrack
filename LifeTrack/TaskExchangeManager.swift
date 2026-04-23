@@ -1183,7 +1183,7 @@ private enum TaskExchangeStatus: String {
     }
 }
 
-private enum CSVCodec {
+enum CSVCodec {
     static func encode(_ rows: [[String]], delimiter: Character) -> String {
         rows
             .map { row in

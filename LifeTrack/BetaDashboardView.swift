@@ -1869,28 +1869,12 @@ struct BetaDashboardView: View {
 
     private var todayPlanHeroCard: some View {
         let subtitle: String
-        let insightTitle: String
-        let insightSubtitle: String
-        let insightSymbol: String
-        let insightTint: Color
         if overdue > 0 {
             subtitle = "\(overdue) overdue task\(overdue == 1 ? "" : "s") need a decision before new work."
-            insightTitle = "Decision needed"
-            insightSubtitle = "Reschedule or clear the oldest overdue item."
-            insightSymbol = "calendar.badge.clock"
-            insightTint = BetaPalette.statOverdue
         } else if dueToday > 0 {
             subtitle = "\(dueToday) task\(dueToday == 1 ? "" : "s") due today. Start with the clearest next step."
-            insightTitle = "Start here"
-            insightSubtitle = focusTasks.first?.title ?? "Pick the smallest task due today."
-            insightSymbol = "scope"
-            insightTint = BetaPalette.accent
         } else {
             subtitle = "No tasks due today. Pull one upcoming item forward if you want momentum."
-            insightTitle = "Keep it light"
-            insightSubtitle = focusTasks.first?.title ?? "Review upcoming work before adding more."
-            insightSymbol = "checkmark.seal.fill"
-            insightTint = BetaPalette.statCompleted
         }
 
         return productivityHeroShell {
@@ -1933,12 +1917,7 @@ struct BetaDashboardView: View {
                     )
                 }
 
-                heroInsightRow(
-                    title: insightTitle,
-                    subtitle: insightSubtitle,
-                    symbolName: insightSymbol,
-                    tint: insightTint
-                )
+                Spacer(minLength: 0)
 
                 heroActionButton(title: "Plan My Day", systemImage: "wand.and.stars") {
                     onPresentSheet?(.planMyDay)
@@ -1962,18 +1941,20 @@ struct BetaDashboardView: View {
 
         return productivityHeroShell {
             VStack(alignment: .leading, spacing: 11) {
-                VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .top, spacing: 10) {
                     Text("Next Best Move")
                         .font(.betaHeroTitle)
                         .foregroundStyle(BetaPalette.primaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
 
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(BetaPalette.secondaryText)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 6)
+
+                    heroInlineActionButton(title: "Review", systemImage: "chart.bar.fill") {
+                        onPresentSheet?(.review)
+                    }
+                    .disabled(onPresentSheet == nil)
+                    .opacity(onPresentSheet == nil ? 0.65 : 1)
                 }
 
                 VStack(spacing: 9) {
@@ -1999,13 +1980,11 @@ struct BetaDashboardView: View {
                 .padding(10)
                 .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                Spacer(minLength: 0)
-
-                heroActionButton(title: "Open Review", systemImage: "chart.bar.fill") {
-                    onPresentSheet?(.review)
-                }
-                .disabled(onPresentSheet == nil)
-                .opacity(onPresentSheet == nil ? 0.65 : 1)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(BetaPalette.secondaryText)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -2148,6 +2127,33 @@ struct BetaDashboardView: View {
                 in: Capsule()
             )
             .shadow(color: Color.black.opacity(0.18), radius: 8, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func heroInlineActionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .bold))
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                LinearGradient(
+                    colors: [Color(hex: 0x1F1B2E), Color(hex: 0x2A2540)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                in: Capsule()
+            )
+            .shadow(color: Color.black.opacity(0.14), radius: 7, y: 3)
         }
         .buttonStyle(.plain)
     }
