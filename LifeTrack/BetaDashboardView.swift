@@ -1940,23 +1940,7 @@ struct BetaDashboardView: View {
         }
 
         return productivityHeroShell {
-            VStack(alignment: .leading, spacing: 11) {
-                HStack(alignment: .top, spacing: 10) {
-                    Text("Next Best Move")
-                        .font(.betaHeroTitle)
-                        .foregroundStyle(BetaPalette.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-
-                    Spacer(minLength: 6)
-
-                    heroInlineActionButton(title: "Review", systemImage: "chart.bar.fill") {
-                        onPresentSheet?(.review)
-                    }
-                    .disabled(onPresentSheet == nil)
-                    .opacity(onPresentSheet == nil ? 0.65 : 1)
-                }
-
+            VStack(alignment: .leading, spacing: 10) {
                 VStack(spacing: 9) {
                     heroProgressRow(
                         title: "Open queue",
@@ -1980,11 +1964,31 @@ struct BetaDashboardView: View {
                 .padding(10)
                 .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(BetaPalette.secondaryText)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .center, spacing: 10) {
+                        Text("Next Best Move")
+                            .font(.betaHeroTitle)
+                            .foregroundStyle(BetaPalette.primaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.70)
+
+                        Spacer(minLength: 6)
+
+                        heroInlineActionButton(title: "Review", systemImage: "chart.bar.fill") {
+                            onPresentSheet?(.review)
+                        }
+                        .disabled(onPresentSheet == nil)
+                        .opacity(onPresentSheet == nil ? 0.65 : 1)
+                    }
+
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(BetaPalette.secondaryText)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
