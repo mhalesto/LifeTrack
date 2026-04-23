@@ -1377,7 +1377,20 @@ struct BetaDashboardView: View {
         focusSortOrder == .today ? todayFocusTasks.count : focusTasks.count
     }
 
+    private var todayFocusCompletedCount: Int {
+        todayFocusTasks.filter(\.isCompleted).count
+    }
+
+    private var todayFocusProgress: Double {
+        guard !todayFocusTasks.isEmpty else { return 0 }
+        return min(max(Double(todayFocusCompletedCount) / Double(todayFocusTasks.count), 0), 1)
+    }
+
     private var dailyFocusCountLabel: String {
+        if focusSortOrder == .today, !todayFocusTasks.isEmpty {
+            return "\(todayFocusCompletedCount)/\(todayFocusTasks.count) tasks"
+        }
+
         "\(dailyFocusTaskCount) task\(dailyFocusTaskCount == 1 ? "" : "s")"
     }
 
@@ -2864,25 +2877,7 @@ struct BetaDashboardView: View {
 
                     Spacer(minLength: 0)
 
-                    Button {
-                        isShowingFocusSortSheet = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(focusSortOrder.rawValue)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(BetaPalette.primaryText)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(BetaPalette.secondaryText)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule().fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, y: 2)
-                        )
-                    }
-                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.92))
+                    dailyFocusSortButton
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
@@ -2892,6 +2887,47 @@ struct BetaDashboardView: View {
                     .padding(.bottom, 18)
             }
         }
+    }
+
+    private var dailyFocusSortButton: some View {
+        Button {
+            isShowingFocusSortSheet = true
+        } label: {
+            HStack(spacing: 6) {
+                Text(focusSortOrder.rawValue)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(BetaPalette.primaryText)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(BetaPalette.secondaryText)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white)
+                    if focusSortOrder == .today {
+                        GeometryReader { proxy in
+                            Capsule()
+                                .fill(BetaPalette.accent.opacity(0.24))
+                                .frame(width: proxy.size.width * CGFloat(todayFocusProgress))
+                        }
+                    }
+                }
+            }
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(
+                        focusSortOrder == .today ? BetaPalette.accent.opacity(0.24) : Color.clear,
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: Color.black.opacity(0.05), radius: 4, y: 2)
+            .animation(.easeInOut(duration: 0.22), value: todayFocusProgress)
+            .animation(.easeInOut(duration: 0.18), value: focusSortOrder)
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.92))
     }
 
     private var focusList: some View {
