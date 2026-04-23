@@ -134,11 +134,13 @@ enum LifeTrackNotificationActionHandler {
         }
 
         let customCategories = (try? modelContext.fetch(FetchDescriptor<CustomTaskCategory>())) ?? []
+        let categoryTitle = task.categoryOption(customCategories: customCategories).title
         ReminderScheduler.snoozeReminder(
             taskID: task.id,
             title: task.title,
-            categoryTitle: task.categoryOption(customCategories: customCategories).title,
-            dueDate: task.dueDate
+            categoryTitle: categoryTitle,
+            dueDate: task.dueDate,
+            detailLine: task.reminderDetailLine(categoryTitle: categoryTitle)
         )
     }
 

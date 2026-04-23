@@ -53,7 +53,8 @@ enum ReminderScheduler {
         title: String,
         categoryTitle: String,
         dueDate: Date,
-        isCompleted: Bool
+        isCompleted: Bool,
+        detailLine: String? = nil
     ) {
         let identifier = notificationIdentifier(for: taskID)
 
@@ -72,7 +73,8 @@ enum ReminderScheduler {
                 identifier: identifier,
                 title: title,
                 categoryTitle: categoryTitle,
-                dueDate: dueDate
+                dueDate: dueDate,
+                detailLine: detailLine
             )
         }
     }
@@ -82,7 +84,8 @@ enum ReminderScheduler {
         title: String,
         categoryTitle: String,
         dueDate: Date,
-        minutes: Int = 10
+        minutes: Int = 10,
+        detailLine: String? = nil
     ) {
         let identifier = notificationIdentifier(for: taskID)
         let snoozeDate = Date().addingTimeInterval(TimeInterval(max(1, minutes) * 60))
@@ -99,7 +102,8 @@ enum ReminderScheduler {
                 categoryTitle: categoryTitle,
                 dueDate: dueDate,
                 preferredTriggerDate: snoozeDate,
-                titleOverride: "Snoozed for \(minutes) minutes"
+                titleOverride: "Snoozed for \(minutes) minutes",
+                detailLine: detailLine
             )
         }
     }
@@ -141,7 +145,8 @@ enum ReminderScheduler {
         categoryTitle: String,
         dueDate: Date,
         preferredTriggerDate: Date? = nil,
-        titleOverride: String? = nil
+        titleOverride: String? = nil,
+        detailLine: String? = nil
     ) {
         let now = Date()
         let reminderDate = dueDate.addingTimeInterval(-reminderLeadTime)
@@ -160,7 +165,11 @@ enum ReminderScheduler {
         let content = UNMutableNotificationContent()
         content.title = titleOverride ?? notificationTitle(for: dueDate, referenceDate: triggerDate)
         content.subtitle = title
-        content.body = "Hold: Complete, Snooze, Open • \(categoryTitle) • \(dueDate.timeString)"
+        content.body = notificationBody(
+            categoryTitle: categoryTitle,
+            dueDate: dueDate,
+            detailLine: detailLine
+        )
         content.sound = .default
         content.badge = 1
         content.categoryIdentifier = categoryIdentifier
@@ -210,6 +219,23 @@ enum ReminderScheduler {
         }
 
         return "Due in \(remainingMinutes) minutes"
+    }
+
+    private static func notificationBody(
+        categoryTitle: String,
+        dueDate: Date,
+        detailLine: String?
+    ) -> String {
+        let detail = detailLine?
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        if let detail, !detail.isEmpty {
+            return detail
+        }
+
+        return "\(categoryTitle) • \(dueDate.timeString)"
     }
 
     private static func queueActionTipIfNeeded() {

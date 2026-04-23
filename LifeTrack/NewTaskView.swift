@@ -1484,7 +1484,8 @@ struct NewTaskView: View {
             title: task.title,
             categoryTitle: selectedCategoryOption.title,
             dueDate: task.dueDate,
-            isCompleted: task.isCompleted
+            isCompleted: task.isCompleted,
+            detailLine: task.reminderDetailLine(categoryTitle: selectedCategoryOption.title)
         )
         if let nextRecurringTask {
             TaskLifecycleManager.synchronizeReminder(

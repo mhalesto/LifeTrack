@@ -185,14 +185,16 @@ enum TaskLifecycleManager {
         for (task, date) in plan {
             task.dueDate = date
             task.updatedAt = now
+            let categoryTitle = task.categoryOption(customCategories: customCategories).title
             reminderSnapshots.append(
                 ReminderSyncSnapshot(
                     id: task.id,
                     title: task.title,
-                    categoryTitle: task.categoryOption(customCategories: customCategories).title,
+                    categoryTitle: categoryTitle,
                     dueDate: task.dueDate,
                     isCompleted: task.isCompleted,
-                    isDeleted: task.isDeleted
+                    isDeleted: task.isDeleted,
+                    detailLine: task.reminderDetailLine(categoryTitle: categoryTitle)
                 )
             )
         }
@@ -210,7 +212,8 @@ enum TaskLifecycleManager {
                         title: snapshot.title,
                         categoryTitle: snapshot.categoryTitle,
                         dueDate: snapshot.dueDate,
-                        isCompleted: snapshot.isCompleted
+                        isCompleted: snapshot.isCompleted,
+                        detailLine: snapshot.detailLine
                     )
                 }
             }
@@ -224,6 +227,7 @@ enum TaskLifecycleManager {
         let dueDate: Date
         let isCompleted: Bool
         let isDeleted: Bool
+        let detailLine: String
     }
 
     static func synchronizeReminder(
@@ -235,12 +239,14 @@ enum TaskLifecycleManager {
             return
         }
 
+        let categoryTitle = task.categoryOption(customCategories: customCategories).title
         ReminderScheduler.synchronizeReminder(
             taskID: task.id,
             title: task.title,
-            categoryTitle: task.categoryOption(customCategories: customCategories).title,
+            categoryTitle: categoryTitle,
             dueDate: task.dueDate,
-            isCompleted: task.isCompleted
+            isCompleted: task.isCompleted,
+            detailLine: task.reminderDetailLine(categoryTitle: categoryTitle)
         )
     }
 }

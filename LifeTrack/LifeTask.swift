@@ -414,5 +414,63 @@ final class LifeTask {
         locationReminderLatitude != nil && locationReminderLongitude != nil
     }
 
+    func reminderDetailLine(categoryTitle: String) -> String {
+        if financialEnabled {
+            if let detail = notificationLine(from: financialNotes) {
+                return detail
+            }
+
+            let trackedAmount = actualAmount ?? (plannedAmount > 0 ? plannedAmount : nil)
+            if let trackedAmount {
+                let amountKind = actualAmount == nil ? "Planned" : "Actual"
+                var parts = [
+                    "\(amountKind) \(financialType.title.lowercased())",
+                    MoneyFormatting.currency(trackedAmount, code: currencyCode)
+                ]
+                if let budget = notificationLine(from: budgetCategory) {
+                    parts.append(budget)
+                }
+                return conciseNotificationLine(parts.joined(separator: " • "))
+            }
+        }
+
+        if let detail = notificationLine(from: notes) {
+            return detail
+        }
+
+        if let detail = notificationLine(from: documentAnalysisSummary) {
+            return "Document: \(detail)"
+        }
+
+        if let location = notificationLine(from: locationReminderName) {
+            return "Location reminder • \(location)"
+        }
+
+        if priority == .high {
+            return "High priority • \(categoryTitle) • \(durationTitle)"
+        }
+
+        if recurrence != .none {
+            return "\(recurrence.shortTitle) • \(categoryTitle) • \(durationTitle)"
+        }
+
+        return "\(categoryTitle) • \(durationTitle) • \(dueDate.timeString)"
+    }
+
+    private func notificationLine(from value: String?) -> String? {
+        guard let value else { return nil }
+        let collapsed = value
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !collapsed.isEmpty else { return nil }
+        return conciseNotificationLine(collapsed)
+    }
+
+    private func conciseNotificationLine(_ value: String) -> String {
+        guard value.count > 96 else { return value }
+        return "\(value.prefix(93))..."
+    }
+
     var isHabit: Bool { recurrence != .none }
 }

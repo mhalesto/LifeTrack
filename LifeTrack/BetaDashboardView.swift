@@ -1391,7 +1391,7 @@ struct BetaDashboardView: View {
             return "\(todayFocusCompletedCount)/\(todayFocusTasks.count) tasks"
         }
 
-        "\(dailyFocusTaskCount) task\(dailyFocusTaskCount == 1 ? "" : "s")"
+        return "\(dailyFocusTaskCount) task\(dailyFocusTaskCount == 1 ? "" : "s")"
     }
 
     private var todayFocusTasks: [LifeTask] {
