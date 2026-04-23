@@ -1791,7 +1791,7 @@ struct BetaDashboardView: View {
                 }
                 .shadow(color: BetaPalette.accentDeep.opacity(0.08), radius: 18, y: 8)
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 9) {
                 Text("This Week's Rhythm")
                     .font(.betaHeroTitle)
                     .foregroundStyle(BetaPalette.primaryText)
@@ -1860,8 +1860,8 @@ struct BetaDashboardView: View {
                 .opacity(onPresentSheet == nil ? 0.65 : 1)
             }
             .padding(.horizontal, 22)
-            .padding(.top, 18)
-            .padding(.bottom, 14)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
         }
         .frame(minHeight: 240)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -1869,17 +1869,33 @@ struct BetaDashboardView: View {
 
     private var todayPlanHeroCard: some View {
         let subtitle: String
+        let insightTitle: String
+        let insightSubtitle: String
+        let insightSymbol: String
+        let insightTint: Color
         if overdue > 0 {
             subtitle = "\(overdue) overdue task\(overdue == 1 ? "" : "s") need a decision before new work."
+            insightTitle = "Decision needed"
+            insightSubtitle = "Reschedule or clear the oldest overdue item."
+            insightSymbol = "calendar.badge.clock"
+            insightTint = BetaPalette.statOverdue
         } else if dueToday > 0 {
             subtitle = "\(dueToday) task\(dueToday == 1 ? "" : "s") due today. Start with the clearest next step."
+            insightTitle = "Start here"
+            insightSubtitle = focusTasks.first?.title ?? "Pick the smallest task due today."
+            insightSymbol = "scope"
+            insightTint = BetaPalette.accent
         } else {
             subtitle = "No tasks due today. Pull one upcoming item forward if you want momentum."
+            insightTitle = "Keep it light"
+            insightSubtitle = focusTasks.first?.title ?? "Review upcoming work before adding more."
+            insightSymbol = "checkmark.seal.fill"
+            insightTint = BetaPalette.statCompleted
         }
 
         return productivityHeroShell {
-            VStack(alignment: .leading, spacing: 11) {
-                VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 9) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Today's Plan")
                         .font(.betaHeroTitle)
                         .foregroundStyle(BetaPalette.primaryText)
@@ -1917,7 +1933,12 @@ struct BetaDashboardView: View {
                     )
                 }
 
-                Spacer(minLength: 0)
+                heroInsightRow(
+                    title: insightTitle,
+                    subtitle: insightSubtitle,
+                    symbolName: insightSymbol,
+                    tint: insightTint
+                )
 
                 heroActionButton(title: "Plan My Day", systemImage: "wand.and.stars") {
                     onPresentSheet?(.planMyDay)
@@ -2070,6 +2091,38 @@ struct BetaDashboardView: View {
                 }
             }
             .frame(height: 7)
+        }
+    }
+
+    private func heroInsightRow(title: String, subtitle: String, symbolName: String, tint: Color) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: symbolName)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(BetaPalette.primaryText)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(BetaPalette.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(Color.white.opacity(0.55), lineWidth: 1)
         }
     }
 
@@ -3500,7 +3553,7 @@ private struct BetaSummaryTaskCard: View {
 private struct HeroPager: View {
     let pages: [AnyView]
 
-    private let cardHeight: CGFloat = 268
+    private let cardHeight: CGFloat = 240
     @State private var currentIndex: Int? = 0
     @State private var isDragging: Bool = false
     @State private var lastInteraction: Date = .distantPast
@@ -3517,13 +3570,11 @@ private struct HeroPager: View {
                     }
                 }
                 .scrollTargetLayout()
-                .padding(.vertical, 6)
             }
             .scrollIndicators(.hidden)
-            .scrollClipDisabled()
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $currentIndex)
-            .frame(height: cardHeight + 12)
+            .frame(height: cardHeight)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in
