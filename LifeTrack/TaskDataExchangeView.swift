@@ -180,7 +180,7 @@ struct TaskDataExchangeView: View {
                 TaskExchangeRequirementRow(
                     symbolName: "creditcard",
                     title: "Money",
-                    message: "Optional fields like `financial_enabled`, `planned_amount`, `actual_amount`, and `currency_code` add budget metadata."
+                    message: "Optional fields like `financial_enabled`, `financial_type`, `planned_amount`, `actual_amount`, `currency_code`, `budget_category`, and `payment_date` add budget planner metadata."
                 )
             }
 
@@ -415,7 +415,11 @@ struct TaskDataExchangeView: View {
             "currency_code",
             "budget_category",
             "payment_date",
-            "include_in_monthly_spending"
+            "linked_budget_id",
+            "linked_goal_id",
+            "include_in_monthly_spending",
+            "mark_planned_on_create",
+            "financial_notes"
         ]
     }
 

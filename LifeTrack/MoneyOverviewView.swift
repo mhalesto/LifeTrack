@@ -1246,6 +1246,7 @@ private struct MoneyCurrencySetupView: View {
 
 private struct BudgetPlanReviewView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     let month: Date
     let summary: MoneyMonthlySummary
@@ -1264,6 +1265,73 @@ private struct BudgetPlanReviewView: View {
     @State private var reminderLeadTime = "3 days"
     @State private var debtStrategy = "Minimums"
     @State private var planPriority = "Save more"
+    @State private var baseMonth: Date
+    @State private var baseFrequency = "Monthly"
+    @State private var dataMethod: BudgetDataMethod = .manual
+    @State private var planFeatures: Set<BudgetPlanFeature> = [.budget, .bills, .savingsGoals, .cashProjection]
+    @State private var incomeSources: [BudgetIncomeDraft]
+    @State private var billDrafts: [BudgetBillDraft]
+    @State private var essentialDrafts: [BudgetSimpleMoneyDraft]
+    @State private var goalDrafts: [BudgetGoalDraft]
+    @State private var debtDrafts: [BudgetDebtDraft]
+
+    init(
+        month: Date,
+        summary: MoneyMonthlySummary,
+        plannedBills: [MoneyBillSnapshot],
+        categoryTotals: [MoneyCategoryTotal],
+        currencyCode: String
+    ) {
+        self.month = month
+        self.summary = summary
+        self.plannedBills = plannedBills
+        self.categoryTotals = categoryTotals
+        self.currencyCode = currencyCode
+
+        let income = summary.plannedIncome > 0 ? summary.plannedIncome : summary.actualIncome
+        let bills = plannedBills.isEmpty
+            ? BudgetBillDraft.sampleRows(incomeValue: income)
+            : plannedBills.prefix(4).map {
+                BudgetBillDraft(
+                    title: $0.title,
+                    date: $0.dueDate.dayMonthString,
+                    amount: $0.plannedAmount,
+                    symbolName: $0.status == .paid ? "checkmark.circle.fill" : "house.fill"
+                )
+            }
+        let fixedBills = bills.reduce(0) { $0 + $1.amount }
+        let debtsTotal = categoryTotals
+            .filter { $0.kind == .debtPayment }
+            .reduce(0) { $0 + max($1.planned, $1.actual) }
+        let essentials = max(summary.plannedSpending - fixedBills - debtsTotal, income * 0.30, 0)
+        let savings = max(summary.plannedSavings, summary.actualSavings, income * 0.08, 0)
+
+        _baseMonth = State(initialValue: month)
+        _incomeSources = State(initialValue: [
+            BudgetIncomeDraft(title: "Salary", subtitle: "Work · Monthly", amount: max(income, 0), symbolName: "briefcase.fill", tint: LifeTrackTheme.ColorPalette.success),
+            BudgetIncomeDraft(title: "Freelance / Side Hustle", subtitle: "Variable", amount: max(income * 0.10, 0), symbolName: "star.circle", tint: LifeTrackTheme.ColorPalette.warning),
+            BudgetIncomeDraft(title: "Other Income", subtitle: "Optional", amount: max(income * 0.04, 0), symbolName: "ellipsis", tint: LifeTrackTheme.ColorPalette.accent)
+        ])
+        _billDrafts = State(initialValue: bills)
+        _essentialDrafts = State(initialValue: [
+            BudgetSimpleMoneyDraft(title: "Groceries", amount: essentials * 0.38, symbolName: "cart.fill", tint: LifeTrackTheme.ColorPalette.success),
+            BudgetSimpleMoneyDraft(title: "Transport", amount: essentials * 0.20, symbolName: "car.fill", tint: LifeTrackTheme.ColorPalette.accent),
+            BudgetSimpleMoneyDraft(title: "Health", amount: essentials * 0.12, symbolName: "heart.fill", tint: LifeTrackTheme.ColorPalette.danger),
+            BudgetSimpleMoneyDraft(title: "Kids / School", amount: essentials * 0.22, symbolName: "backpack.fill", tint: LifeTrackTheme.ColorPalette.warning)
+        ])
+        _goalDrafts = State(initialValue: [
+            BudgetGoalDraft(title: "Emergency Fund", target: max(income * 0.60, 15_000), current: max(summary.actualSavings, income * 0.20), contribution: max(savings * 0.50, 0), symbolName: "shield.fill", tint: LifeTrackTheme.ColorPalette.success),
+            BudgetGoalDraft(title: "December Holiday", target: max(income * 0.35, 10_000), current: max(income * 0.10, 0), contribution: max(savings * 0.30, 0), symbolName: "beach.umbrella.fill", tint: LifeTrackTheme.ColorPalette.accent),
+            BudgetGoalDraft(title: "New Laptop", target: max(income * 0.40, 18_000), current: max(income * 0.12, 0), contribution: max(savings * 0.20, 0), symbolName: "laptopcomputer", tint: LifeTrackTheme.ColorPalette.warning)
+        ])
+        _debtDrafts = State(initialValue: [
+            BudgetDebtDraft(title: "Credit Card", balance: max(debtsTotal, income * 0.20), minimumPayment: max(debtsTotal * 0.08, 300), symbolName: "creditcard.fill"),
+            BudgetDebtDraft(title: "Store Account", balance: max(debtsTotal * 0.32, income * 0.08), minimumPayment: max(debtsTotal * 0.04, 180), symbolName: "storefront.fill")
+        ])
+        if debtsTotal > 0 {
+            _planFeatures = State(initialValue: [.budget, .bills, .savingsGoals, .debtPayoff, .cashProjection])
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -1293,7 +1361,7 @@ private struct BudgetPlanReviewView: View {
                                     step += 1
                                 }
                             } else {
-                                dismiss()
+                                generatePlan()
                             }
                             LifeTrackHaptics.lightImpact()
                         } label: {
@@ -1414,25 +1482,24 @@ private struct BudgetPlanReviewView: View {
             SectionCardView {
                 SectionHeaderView(title: "Choose Your Base Month")
 
-                MoneyValueRow(
-                    title: MoneyAnalytics.monthTitle(for: month),
-                    value: "Change",
-                    symbolName: "calendar",
-                    tint: LifeTrackTheme.ColorPalette.accent
-                )
+                BudgetMonthSelectorRow(month: $baseMonth)
 
-                BudgetSegmentedOptions(options: ["Monthly", "Biweekly", "Weekly"], selected: .constant("Monthly"))
+                BudgetSegmentedOptions(options: ["Monthly", "Biweekly", "Weekly"], selected: $baseFrequency)
             }
 
             SectionCardView {
                 SectionHeaderView(title: "What do you want to plan?", subtitle: "We'll include these in your plan and projections.")
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], spacing: 10) {
-                    BudgetSelectableChip(title: "Budget", symbolName: "chart.pie.fill", isSelected: true)
-                    BudgetSelectableChip(title: "Bills", symbolName: "list.bullet.rectangle", isSelected: true)
-                    BudgetSelectableChip(title: "Savings Goals", symbolName: "target", isSelected: true)
-                    BudgetSelectableChip(title: "Debt Payoff", symbolName: "creditcard.fill", isSelected: debtValue > 0)
-                    BudgetSelectableChip(title: "Cash Projection", symbolName: "chart.line.uptrend.xyaxis", isSelected: true)
+                    ForEach(BudgetPlanFeature.allCases) { feature in
+                        BudgetSelectableChip(
+                            title: feature.title,
+                            symbolName: feature.symbolName,
+                            isSelected: planFeatures.contains(feature)
+                        ) {
+                            toggleFeature(feature)
+                        }
+                    }
                 }
             }
 
@@ -1440,8 +1507,12 @@ private struct BudgetPlanReviewView: View {
                 SectionHeaderView(title: "How do you want to add data?", subtitle: "You can change this anytime.")
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    BudgetMethodCard(title: "Manual Entry", subtitle: "Add transactions yourself", symbolName: "pencil", isSelected: true)
-                    BudgetMethodCard(title: "Import Statement", subtitle: "Upload bank or card statements", symbolName: "icloud.and.arrow.up", isSelected: false)
+                    BudgetMethodCard(title: "Manual Entry", subtitle: "Add transactions yourself", symbolName: "pencil", isSelected: dataMethod == .manual) {
+                        dataMethod = .manual
+                    }
+                    BudgetMethodCard(title: "Import Statement", subtitle: "Upload bank or card statements", symbolName: "icloud.and.arrow.up", isSelected: dataMethod == .importStatement) {
+                        dataMethod = .importStatement
+                    }
                 }
 
                 Label("You can import later too.", systemImage: "shield.checkered")
@@ -1457,11 +1528,21 @@ private struct BudgetPlanReviewView: View {
             SectionCardView {
                 SectionHeaderView(title: "Monthly Income")
 
-                BudgetSetupRow(title: "Salary", subtitle: "Work · Monthly", value: MoneyFormatting.currency(incomeValue, code: currencyCode), symbolName: "briefcase.fill", tint: LifeTrackTheme.ColorPalette.success)
-                BudgetSetupRow(title: "Freelance / Side Hustle", subtitle: "Variable", value: MoneyFormatting.currency(max(incomeValue * 0.1, 0), code: currencyCode), symbolName: "star.circle", tint: LifeTrackTheme.ColorPalette.warning)
-                BudgetSetupRow(title: "Other Income", subtitle: "Optional", value: MoneyFormatting.currency(max(incomeValue * 0.04, 0), code: currencyCode), symbolName: "ellipsis", tint: LifeTrackTheme.ColorPalette.accent)
+                ForEach($incomeSources) { $source in
+                    BudgetAdjustableMoneyRow(
+                        title: source.title,
+                        subtitle: source.subtitle,
+                        amount: $source.amount,
+                        currencyCode: currencyCode,
+                        symbolName: source.symbolName,
+                        tint: source.tint,
+                        step: suggestedAdjustmentStep(for: source.amount)
+                    )
+                }
 
-                Button {} label: {
+                Button {
+                    addIncomeSource()
+                } label: {
                     Label("Add income source", systemImage: "plus.circle")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
@@ -1478,7 +1559,7 @@ private struct BudgetPlanReviewView: View {
             SectionCardView {
                 SectionHeaderView(title: "Pay Schedule")
                 BudgetSegmentedOptions(options: ["Monthly", "Twice a month", "Weekly"], selected: $paySchedule)
-                MoneyValueRow(title: "Next payday estimate", value: "25 Apr", symbolName: "calendar", tint: LifeTrackTheme.ColorPalette.accent)
+                MoneyValueRow(title: "Next payday estimate", value: nextPaydayEstimate, symbolName: "calendar", tint: LifeTrackTheme.ColorPalette.accent)
             }
 
             SectionCardView {
@@ -1497,15 +1578,21 @@ private struct BudgetPlanReviewView: View {
             SectionCardView {
                 SectionHeaderView(title: "Recurring Bills", subtitle: "Add your monthly fixed bills.")
 
-                let rows = plannedBills.isEmpty ? sampleBillRows : plannedBills.prefix(4).map {
-                    BudgetBillDraft(title: $0.title, date: $0.dueDate.dayMonthString, amount: $0.plannedAmount, symbolName: $0.status == .paid ? "checkmark.circle.fill" : "house.fill")
+                ForEach($billDrafts) { $bill in
+                    BudgetAdjustableMoneyRow(
+                        title: bill.title,
+                        subtitle: "\(bill.date) · Monthly",
+                        amount: $bill.amount,
+                        currencyCode: currencyCode,
+                        symbolName: bill.symbolName,
+                        tint: LifeTrackTheme.ColorPalette.accent,
+                        step: suggestedAdjustmentStep(for: bill.amount)
+                    )
                 }
 
-                ForEach(rows) { row in
-                    BudgetSetupRow(title: row.title, subtitle: "\(row.date) · Monthly", value: MoneyFormatting.currency(row.amount, code: currencyCode), symbolName: row.symbolName, tint: LifeTrackTheme.ColorPalette.accent)
-                }
-
-                Button {} label: {
+                Button {
+                    addBill()
+                } label: {
                     Label("Add recurring bill", systemImage: "plus.circle")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
@@ -1522,10 +1609,16 @@ private struct BudgetPlanReviewView: View {
             SectionCardView {
                 SectionHeaderView(title: "Flexible Essentials", subtitle: "Set your average monthly spend.")
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    BudgetSnapshotTile(title: "Groceries", value: max(essentialsValue * 0.38, 0), currencyCode: currencyCode, symbolName: "cart.fill", tint: LifeTrackTheme.ColorPalette.success)
-                    BudgetSnapshotTile(title: "Transport", value: max(essentialsValue * 0.20, 0), currencyCode: currencyCode, symbolName: "car.fill", tint: LifeTrackTheme.ColorPalette.accent)
-                    BudgetSnapshotTile(title: "Health", value: max(essentialsValue * 0.12, 0), currencyCode: currencyCode, symbolName: "heart.fill", tint: LifeTrackTheme.ColorPalette.danger)
-                    BudgetSnapshotTile(title: "Kids / School", value: max(essentialsValue * 0.22, 0), currencyCode: currencyCode, symbolName: "backpack.fill", tint: LifeTrackTheme.ColorPalette.warning)
+                    ForEach($essentialDrafts) { $essential in
+                        BudgetAdjustableMoneyTile(
+                            title: essential.title,
+                            amount: $essential.amount,
+                            currencyCode: currencyCode,
+                            symbolName: essential.symbolName,
+                            tint: essential.tint,
+                            step: suggestedAdjustmentStep(for: essential.amount)
+                        )
+                    }
                 }
             }
 
@@ -1543,15 +1636,33 @@ private struct BudgetPlanReviewView: View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
             SectionCardView {
                 SectionHeaderView(title: "Savings Goals")
-                BudgetGoalRow(title: "Emergency Fund", target: max(incomeValue * 0.60, 15_000), current: max(summary.actualSavings, incomeValue * 0.20), contribution: max(summary.plannedSavings, incomeValue * 0.06), currencyCode: currencyCode, symbolName: "shield.fill", tint: LifeTrackTheme.ColorPalette.success)
-                BudgetGoalRow(title: "December Holiday", target: max(incomeValue * 0.35, 10_000), current: max(incomeValue * 0.10, 0), contribution: max(incomeValue * 0.035, 0), currencyCode: currencyCode, symbolName: "beach.umbrella.fill", tint: LifeTrackTheme.ColorPalette.accent)
-                BudgetGoalRow(title: "New Laptop", target: max(incomeValue * 0.40, 18_000), current: max(incomeValue * 0.12, 0), contribution: max(incomeValue * 0.04, 0), currencyCode: currencyCode, symbolName: "laptopcomputer", tint: LifeTrackTheme.ColorPalette.warning)
+                ForEach($goalDrafts) { $goal in
+                    BudgetGoalRow(
+                        title: goal.title,
+                        target: goal.target,
+                        current: goal.current,
+                        contribution: $goal.contribution,
+                        currencyCode: currencyCode,
+                        symbolName: goal.symbolName,
+                        tint: goal.tint,
+                        step: suggestedAdjustmentStep(for: goal.contribution)
+                    )
+                }
             }
 
             SectionCardView {
                 SectionHeaderView(title: "Debt Payoff")
-                BudgetSetupRow(title: "Credit Card", subtitle: "Balance", value: MoneyFormatting.currency(max(debtValue, incomeValue * 0.20), code: currencyCode), symbolName: "creditcard.fill", tint: LifeTrackTheme.ColorPalette.accent)
-                BudgetSetupRow(title: "Store Account", subtitle: "Minimum payment", value: MoneyFormatting.currency(max(debtValue * 0.08, 300), code: currencyCode), symbolName: "storefront.fill", tint: LifeTrackTheme.ColorPalette.accent)
+                ForEach($debtDrafts) { $debt in
+                    BudgetAdjustableMoneyRow(
+                        title: debt.title,
+                        subtitle: "Balance \(MoneyFormatting.currency(debt.balance, code: currencyCode))",
+                        amount: $debt.minimumPayment,
+                        currencyCode: currencyCode,
+                        symbolName: debt.symbolName,
+                        tint: LifeTrackTheme.ColorPalette.accent,
+                        step: suggestedAdjustmentStep(for: debt.minimumPayment)
+                    )
+                }
                 BudgetSegmentedOptions(options: ["Minimums", "Snowball", "Avalanche"], selected: $debtStrategy)
             }
 
@@ -1598,7 +1709,7 @@ private struct BudgetPlanReviewView: View {
                 VStack(spacing: 0) {
                     MoneyValueRow(title: "Expected leftover", value: MoneyFormatting.currency(freeToAllocateValue, code: currencyCode), symbolName: "circle.fill", tint: LifeTrackTheme.ColorPalette.success)
                     Divider().padding(.leading, 46)
-                    MoneyValueRow(title: "Bills covered", value: "\(plannedBills.count)", symbolName: "list.bullet", tint: LifeTrackTheme.ColorPalette.accent)
+                    MoneyValueRow(title: "Bills covered", value: "\(billDrafts.filter { $0.amount > 0 }.count)", symbolName: "list.bullet", tint: LifeTrackTheme.ColorPalette.accent)
                     Divider().padding(.leading, 46)
                     MoneyValueRow(title: "Goal contributions", value: "\(goalContributionCount)", symbolName: "target", tint: LifeTrackTheme.ColorPalette.warning)
                 }
@@ -1649,25 +1760,28 @@ private struct BudgetPlanReviewView: View {
     }
 
     private var incomeValue: Double {
-        summary.plannedIncome > 0 ? summary.plannedIncome : summary.actualIncome
+        incomeSources.reduce(0) { $0 + $1.amount }
     }
 
     private var fixedBillsValue: Double {
-        plannedBills.reduce(0) { $0 + $1.plannedAmount }
+        guard planFeatures.contains(.bills) else { return 0 }
+        return billDrafts.reduce(0) { $0 + $1.amount }
     }
 
     private var debtValue: Double {
-        categoryTotals
-            .filter { $0.kind == .debtPayment }
-            .reduce(0) { $0 + max($1.planned, $1.actual) }
+        guard planFeatures.contains(.debtPayoff) else { return 0 }
+        return debtDrafts.reduce(0) { $0 + $1.balance }
     }
 
     private var essentialsValue: Double {
-        max(summary.plannedSpending - fixedBillsValue - debtValue, 0)
+        guard planFeatures.contains(.budget) else { return 0 }
+        return essentialDrafts.reduce(0) { $0 + $1.amount }
     }
 
     private var goalsDebtValue: Double {
-        max(summary.plannedSavings, summary.actualSavings) + debtValue
+        let goals = planFeatures.contains(.savingsGoals) ? goalDrafts.reduce(0) { $0 + $1.contribution } : 0
+        let debtPayments = planFeatures.contains(.debtPayoff) ? debtDrafts.reduce(0) { $0 + $1.minimumPayment } : 0
+        return goals + debtPayments
     }
 
     private var freeToAllocateValue: Double {
@@ -1675,20 +1789,201 @@ private struct BudgetPlanReviewView: View {
     }
 
     private var goalContributionCount: Int {
-        var count = categoryTotals.filter { $0.kind == .debtPayment && max($0.planned, $0.actual) > 0 }.count
-        if max(summary.plannedSavings, summary.actualSavings) > 0 {
-            count += 1
-        }
-        return count
+        let goals = planFeatures.contains(.savingsGoals) ? goalDrafts.filter { $0.contribution > 0 }.count : 0
+        let debts = planFeatures.contains(.debtPayoff) ? debtDrafts.filter { $0.minimumPayment > 0 }.count : 0
+        return goals + debts
     }
 
-    private var sampleBillRows: [BudgetBillDraft] {
-        [
-            BudgetBillDraft(title: "Rent / Bond", date: "01 Apr", amount: max(incomeValue * 0.28, 0), symbolName: "house.fill"),
-            BudgetBillDraft(title: "Electricity", date: "05 Apr", amount: max(incomeValue * 0.04, 0), symbolName: "bolt.fill"),
-            BudgetBillDraft(title: "Internet", date: "07 Apr", amount: max(incomeValue * 0.02, 0), symbolName: "wifi"),
-            BudgetBillDraft(title: "Car Payment", date: "15 Apr", amount: max(incomeValue * 0.10, 0), symbolName: "car.fill")
-        ]
+    private var nextPaydayEstimate: String {
+        switch paySchedule {
+        case "Weekly":
+            return "Every Friday"
+        case "Twice a month":
+            return "15th and 30th"
+        default:
+            return dayMonthLabel(day: paydayDay)
+        }
+    }
+
+    private func suggestedAdjustmentStep(for amount: Double) -> Double {
+        max((amount / 10).rounded(.toNearestOrAwayFromZero), 50)
+    }
+
+    private func toggleFeature(_ feature: BudgetPlanFeature) {
+        if planFeatures.contains(feature) {
+            planFeatures.remove(feature)
+        } else {
+            planFeatures.insert(feature)
+        }
+    }
+
+    private func addIncomeSource() {
+        incomeSources.append(
+            BudgetIncomeDraft(
+                title: "Income source \(incomeSources.count + 1)",
+                subtitle: "Optional",
+                amount: 0,
+                symbolName: "plus.circle",
+                tint: LifeTrackTheme.ColorPalette.accent
+            )
+        )
+    }
+
+    private func addBill() {
+        billDrafts.append(
+            BudgetBillDraft(
+                title: "New bill \(billDrafts.count + 1)",
+                date: "15 Apr",
+                amount: 0,
+                symbolName: "calendar"
+            )
+        )
+    }
+
+    private func generatePlan() {
+        let now = Date()
+        if planFeatures.contains(.budget) || planFeatures.contains(.cashProjection) {
+            for source in incomeSources where source.amount > 0 {
+                modelContext.insert(financeTask(
+                    title: source.title,
+                    type: .income,
+                    amount: source.amount,
+                    category: "Income",
+                    dueDay: paydayDay,
+                    recurrence: recurrenceForSchedule,
+                    notes: "Generated by Budget Planner. Stability: \(incomeStability). Schedule: \(paySchedule).",
+                    includeInMonthlySpending: false,
+                    now: now
+                ))
+            }
+        }
+
+        if planFeatures.contains(.bills) {
+            for bill in billDrafts where bill.amount > 0 {
+                modelContext.insert(financeTask(
+                    title: bill.title,
+                    type: .expense,
+                    amount: bill.amount,
+                    category: "Bills",
+                    dueDay: dayNumber(from: bill.date) ?? 5,
+                    recurrence: .monthly,
+                    notes: "Generated by Budget Planner. Reminder: \(billRemindersEnabled ? reminderLeadTime : "off").",
+                    includeInMonthlySpending: true,
+                    now: now
+                ))
+            }
+        }
+
+        if planFeatures.contains(.budget) {
+            for essential in essentialDrafts where essential.amount > 0 {
+                modelContext.insert(financeTask(
+                    title: "\(essential.title) budget",
+                    type: .expense,
+                    amount: essential.amount,
+                    category: essential.title,
+                    dueDay: 1,
+                    recurrence: .monthly,
+                    notes: "Generated by Budget Planner flexible essentials.",
+                    includeInMonthlySpending: true,
+                    now: now
+                ))
+            }
+        }
+
+        if planFeatures.contains(.savingsGoals) {
+            for goal in goalDrafts where goal.contribution > 0 {
+                modelContext.insert(financeTask(
+                    title: "\(goal.title) contribution",
+                    type: .savings,
+                    amount: goal.contribution,
+                    category: goal.title,
+                    dueDay: paydayDay,
+                    recurrence: .monthly,
+                    notes: "Generated by Budget Planner. Target: \(MoneyFormatting.currency(goal.target, code: currencyCode)). Priority: \(planPriority).",
+                    includeInMonthlySpending: false,
+                    now: now
+                ))
+            }
+        }
+
+        if planFeatures.contains(.debtPayoff) {
+            for debt in debtDrafts where debt.minimumPayment > 0 {
+                modelContext.insert(financeTask(
+                    title: "\(debt.title) payment",
+                    type: .expense,
+                    amount: debt.minimumPayment,
+                    category: "Debt",
+                    dueDay: 20,
+                    recurrence: .monthly,
+                    notes: "Generated by Budget Planner. Strategy: \(debtStrategy). Balance: \(MoneyFormatting.currency(debt.balance, code: currencyCode)).",
+                    includeInMonthlySpending: true,
+                    now: now
+                ))
+            }
+        }
+
+        try? modelContext.save()
+        dismiss()
+    }
+
+    private var paydayDay: Int {
+        paySchedule == "Weekly" ? 7 : 25
+    }
+
+    private var recurrenceForSchedule: TaskRecurrence {
+        paySchedule == "Weekly" ? .weekly : .monthly
+    }
+
+    private func financeTask(
+        title: String,
+        type: TaskFinancialType,
+        amount: Double,
+        category: String,
+        dueDay: Int,
+        recurrence: TaskRecurrence,
+        notes: String,
+        includeInMonthlySpending: Bool,
+        now: Date
+    ) -> LifeTask {
+        let dueDate = dateInBaseMonth(day: dueDay)
+        return LifeTask(
+            title: title,
+            category: .finance,
+            dueDate: dueDate,
+            notes: notes,
+            recurrence: recurrence,
+            estimatedDurationMinutes: 15,
+            financialEnabled: true,
+            financialType: type,
+            plannedAmount: amount,
+            currencyCode: currencyCode,
+            budgetCategory: category,
+            paymentDate: dueDate,
+            includeInMonthlySpending: includeInMonthlySpending,
+            markPlannedOnCreate: true,
+            financialNotes: notes,
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+
+    private func dateInBaseMonth(day: Int) -> Date {
+        let calendar = Calendar.current
+        let interval = MoneyAnalytics.monthInterval(containing: baseMonth, calendar: calendar)
+        let maxDay = calendar.range(of: .day, in: .month, for: interval.start)?.count ?? 28
+        var components = calendar.dateComponents([.year, .month], from: interval.start)
+        components.day = min(max(day, 1), maxDay)
+        components.hour = 9
+        return calendar.date(from: components) ?? interval.start
+    }
+
+    private func dayNumber(from label: String) -> Int? {
+        let digits = label.prefix { $0.isNumber }
+        return Int(digits)
+    }
+
+    private func dayMonthLabel(day: Int) -> String {
+        dateInBaseMonth(day: day).dayMonthString
     }
 }
 
@@ -1697,12 +1992,142 @@ private enum BudgetAutomationMode {
     case autoRoll
 }
 
+private enum BudgetDataMethod {
+    case manual
+    case importStatement
+}
+
+private enum BudgetPlanFeature: String, CaseIterable, Identifiable {
+    case budget
+    case bills
+    case savingsGoals
+    case debtPayoff
+    case cashProjection
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .budget: "Budget"
+        case .bills: "Bills"
+        case .savingsGoals: "Savings Goals"
+        case .debtPayoff: "Debt Payoff"
+        case .cashProjection: "Cash Flow"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .budget: "chart.pie.fill"
+        case .bills: "list.bullet.rectangle.fill"
+        case .savingsGoals: "target"
+        case .debtPayoff: "creditcard.fill"
+        case .cashProjection: "chart.line.uptrend.xyaxis"
+        }
+    }
+}
+
+private struct BudgetIncomeDraft: Identifiable {
+    let id = UUID()
+    var title: String
+    var subtitle: String
+    var amount: Double
+    var symbolName: String
+    var tint: Color
+}
+
 private struct BudgetBillDraft: Identifiable {
     let id = UUID()
-    let title: String
-    let date: String
-    let amount: Double
-    let symbolName: String
+    var title: String
+    var date: String
+    var amount: Double
+    var symbolName: String
+
+    static func sampleRows(incomeValue: Double) -> [BudgetBillDraft] {
+        let baseIncome = max(incomeValue, 10_000)
+        return [
+            BudgetBillDraft(title: "Rent", date: "05 May", amount: max(baseIncome * 0.25, 2_500), symbolName: "house.fill"),
+            BudgetBillDraft(title: "Internet", date: "07 May", amount: 739, symbolName: "wifi"),
+            BudgetBillDraft(title: "Medical Aid", date: "12 May", amount: 2_315, symbolName: "cross.case.fill")
+        ]
+    }
+}
+
+private struct BudgetSimpleMoneyDraft: Identifiable {
+    let id = UUID()
+    var title: String
+    var amount: Double
+    var symbolName: String
+    var tint: Color
+}
+
+private struct BudgetGoalDraft: Identifiable {
+    let id = UUID()
+    var title: String
+    var target: Double
+    var current: Double
+    var contribution: Double
+    var symbolName: String
+    var tint: Color
+}
+
+private struct BudgetDebtDraft: Identifiable {
+    let id = UUID()
+    var title: String
+    var balance: Double
+    var minimumPayment: Double
+    var symbolName: String
+}
+
+private struct BudgetMonthSelectorRow: View {
+    @Binding var month: Date
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            Button {
+                shiftMonth(by: -1)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .frame(width: 44, height: 44)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.76), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Previous month")
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(MoneyAnalytics.monthTitle(for: month))
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                Text("Base month")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            Button {
+                shiftMonth(by: 1)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .frame(width: 44, height: 44)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.76), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Next month")
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+    }
+
+    private func shiftMonth(by value: Int) {
+        month = Calendar.current.date(byAdding: .month, value: value, to: month) ?? month
+    }
 }
 
 private struct BudgetSegmentedOptions: View {
@@ -1741,28 +2166,32 @@ private struct BudgetSelectableChip: View {
     let title: String
     let symbolName: String
     let isSelected: Bool
+    var action: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: symbolName)
-                .font(.system(size: 15, weight: .semibold))
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Spacer(minLength: 0)
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 16, weight: .semibold))
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 0)
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+            }
+            .foregroundStyle(isSelected ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.secondaryText)
+            .padding(12)
+            .background(isSelected ? LifeTrackTheme.ColorPalette.accentSoft.opacity(0.55) : LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                    .stroke(isSelected ? LifeTrackTheme.ColorPalette.accent.opacity(0.55) : LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
             }
         }
-        .foregroundStyle(isSelected ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.secondaryText)
-        .padding(12)
-        .background(isSelected ? LifeTrackTheme.ColorPalette.accentSoft.opacity(0.55) : LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
-                .stroke(isSelected ? LifeTrackTheme.ColorPalette.accent.opacity(0.55) : LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
-        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98, pressedOpacity: 0.94))
     }
 }
 
@@ -1854,14 +2283,145 @@ private struct BudgetSetupRow: View {
     }
 }
 
+private struct BudgetAdjustableMoneyRow: View {
+    let title: String
+    let subtitle: String
+    @Binding var amount: Double
+    let currencyCode: String
+    let symbolName: String
+    let tint: Color
+    let step: Double
+
+    var body: some View {
+        HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.medium) {
+            Image(systemName: symbolName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: LifeTrackTheme.IconSize.mediumCircle, height: LifeTrackTheme.IconSize.mediumCircle)
+                .background(tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text(subtitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            VStack(alignment: .trailing, spacing: 8) {
+                Text(MoneyFormatting.currency(amount, code: currencyCode))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+
+                HStack(spacing: 7) {
+                    amountButton(systemName: "minus") {
+                        amount = max(0, amount - step)
+                    }
+                    amountButton(systemName: "plus") {
+                        amount += step
+                    }
+                }
+            }
+            .frame(minWidth: 96, alignment: .trailing)
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+
+    private func amountButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 29, height: 29)
+                .background(tint.opacity(0.12), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(systemName == "plus" ? "Increase amount" : "Decrease amount")
+    }
+}
+
+private struct BudgetAdjustableMoneyTile: View {
+    let title: String
+    @Binding var amount: Double
+    let currencyCode: String
+    let symbolName: String
+    let tint: Color
+    let step: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Image(systemName: symbolName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 42, height: 42)
+                .background(tint.opacity(0.12), in: Circle())
+
+            Text(title)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(MoneyFormatting.currency(amount, code: currencyCode))
+                .font(.headline.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+
+            HStack(spacing: 8) {
+                amountButton(systemName: "minus") {
+                    amount = max(0, amount - step)
+                }
+                amountButton(systemName: "plus") {
+                    amount += step
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 156, alignment: .leading)
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.8)
+        }
+    }
+
+    private func amountButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 31, height: 31)
+                .background(tint.opacity(0.12), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(systemName == "plus" ? "Increase amount" : "Decrease amount")
+    }
+}
+
 private struct BudgetGoalRow: View {
     let title: String
     let target: Double
     let current: Double
-    let contribution: Double
+    @Binding var contribution: Double
     let currencyCode: String
     let symbolName: String
     let tint: Color
+    let step: Double
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1887,10 +2447,40 @@ private struct BudgetGoalRow: View {
                     Text(MoneyFormatting.currency(contribution, code: currencyCode))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(tint)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
                     Text("Monthly")
                         .font(.caption)
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                 }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    contribution = max(0, contribution - step)
+                } label: {
+                    Label("Decrease", systemImage: "minus")
+                        .labelStyle(.iconOnly)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                        .frame(width: 31, height: 31)
+                        .background(tint.opacity(0.12), in: Circle())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    contribution += step
+                } label: {
+                    Label("Increase", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                        .frame(width: 31, height: 31)
+                        .background(tint.opacity(0.12), in: Circle())
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
             }
 
             GeometryReader { proxy in
@@ -1899,7 +2489,7 @@ private struct BudgetGoalRow: View {
                         .fill(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
                     Capsule()
                         .fill(tint)
-                        .frame(width: proxy.size.width * min(max(current / max(target, 1), 0), 1))
+                        .frame(width: proxy.size.width * min(max((current + contribution) / max(target, 1), 0), 1))
                 }
             }
             .frame(height: 7)
@@ -2057,24 +2647,27 @@ private struct BudgetAutomationChoice: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
-                Image(systemName: symbolName)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(isSelected ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.secondaryText)
-                    .frame(width: 46, height: 46)
-                    .background((isSelected ? LifeTrackTheme.ColorPalette.accentSoft : LifeTrackTheme.ColorPalette.backgroundTop), in: Circle())
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .leading, spacing: 11) {
+                    Image(systemName: symbolName)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(isSelected ? LifeTrackTheme.ColorPalette.accent : LifeTrackTheme.ColorPalette.secondaryText)
+                        .frame(width: 46, height: 46)
+                        .background((isSelected ? LifeTrackTheme.ColorPalette.accentSoft : LifeTrackTheme.ColorPalette.backgroundTop), in: Circle())
 
-                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.78)
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(4)
+                        .minimumScaleFactor(0.76)
+                    Spacer(minLength: 0)
                 }
-
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
@@ -2083,7 +2676,7 @@ private struct BudgetAutomationChoice: View {
                 }
             }
             .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 164, alignment: .leading)
             .background(isSelected ? LifeTrackTheme.ColorPalette.accentSoft.opacity(0.5) : LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.72), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
