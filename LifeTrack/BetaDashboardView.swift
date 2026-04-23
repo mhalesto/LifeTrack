@@ -1743,9 +1743,9 @@ struct BetaDashboardView: View {
     private var streakHeroPager: some View {
         HeroPager(
             pages: [
-                AnyView(nextMoveHeroCard),
                 AnyView(todayPlanHeroCard),
                 AnyView(weeklyRhythmCard),
+                AnyView(nextMoveHeroCard),
                 AnyView(streakHeroCard),
                 AnyView(upgradeHeroCard)
             ]
@@ -2027,11 +2027,19 @@ struct BetaDashboardView: View {
 
                 Spacer(minLength: 0)
 
-                heroActionButton(title: "Plan My Day", systemImage: "wand.and.stars") {
-                    onPresentSheet?(.planMyDay)
+                HStack(spacing: 10) {
+                    heroActionButton(title: "Plan My Day", systemImage: "wand.and.stars") {
+                        onPresentSheet?(.planMyDay)
+                    }
+                    .disabled(onPresentSheet == nil)
+                    .opacity(onPresentSheet == nil ? 0.65 : 1)
+
+                    Spacer(minLength: 0)
+
+                    heroInlineActionButton(title: "AI", systemImage: "brain.head.profile") {
+                        openMoneyAIInsights()
+                    }
                 }
-                .disabled(onPresentSheet == nil)
-                .opacity(onPresentSheet == nil ? 0.65 : 1)
             }
         }
     }
@@ -2084,17 +2092,11 @@ struct BetaDashboardView: View {
 
                         Spacer(minLength: 6)
 
-                        HStack(spacing: 6) {
-                            heroInlineActionButton(title: "AI", systemImage: "brain.head.profile") {
-                                openMoneyAIInsights()
-                            }
-
-                            heroInlineActionButton(title: "Review", systemImage: "chart.bar.fill") {
-                                onPresentSheet?(.review)
-                            }
-                            .disabled(onPresentSheet == nil)
-                            .opacity(onPresentSheet == nil ? 0.65 : 1)
+                        heroInlineActionButton(title: "Review", systemImage: "chart.bar.fill") {
+                            onPresentSheet?(.review)
                         }
+                        .disabled(onPresentSheet == nil)
+                        .opacity(onPresentSheet == nil ? 0.65 : 1)
                     }
 
                     Text(subtitle)
