@@ -857,6 +857,7 @@ private enum BetaTab: Hashable {
 }
 
 private enum DashboardSortOrder: String, CaseIterable {
+    case today = "Today"
     case dueDate = "Due Date"
     case priority = "Priority"
     case title = "Title"
@@ -1252,7 +1253,7 @@ struct BetaDashboardView: View {
     @AppStorage("qa.aiSuggestions") private var showAISuggestions = true
     @AppStorage("qa.smartSchedule") private var showSmartSchedule = true
 
-    @State private var focusSortOrder: DashboardSortOrder = .dueDate
+    @State private var focusSortOrder: DashboardSortOrder = .today
     @State private var isShowingFocusSortSheet = false
     @State private var isShowingFocusTimer = false
     @State private var isShowingCustomize = false
@@ -1353,6 +1354,10 @@ struct BetaDashboardView: View {
     }
 
     private var dailyFocusTasks: [LifeTask] {
+        if focusSortOrder == .today {
+            return todayFocusTasks
+        }
+
         let completedToday = sortedCompletedTodayTasks
         var seenIDs = Set<UUID>()
         var combined: [LifeTask] = []
@@ -1366,6 +1371,25 @@ struct BetaDashboardView: View {
         }
 
         return combined
+    }
+
+    private var dailyFocusTaskCount: Int {
+        focusSortOrder == .today ? todayFocusTasks.count : focusTasks.count
+    }
+
+    private var dailyFocusCountLabel: String {
+        "\(dailyFocusTaskCount) task\(dailyFocusTaskCount == 1 ? "" : "s")"
+    }
+
+    private var todayFocusTasks: [LifeTask] {
+        let calendar = Calendar.current
+        let openToday = activeTasks
+            .filter { !$0.isCompleted && calendar.isDateInToday($0.dueDate) }
+            .sorted { $0.dueDate < $1.dueDate }
+        let completedToday = activeTasks
+            .filter { $0.isCompleted && calendar.isDateInToday($0.dueDate) }
+            .sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
+        return openToday + completedToday
     }
 
     private var sortedCompletedTodayTasks: [LifeTask] {
@@ -1382,6 +1406,10 @@ struct BetaDashboardView: View {
 
     private func sortedFocusTasks(_ base: [LifeTask]) -> [LifeTask] {
         switch focusSortOrder {
+        case .today:
+            return base
+                .filter { Calendar.current.isDateInToday($0.dueDate) }
+                .sorted { $0.dueDate < $1.dueDate }
         case .dueDate:
             return base.sorted { $0.dueDate < $1.dueDate }
         case .priority:
@@ -1580,7 +1608,7 @@ struct BetaDashboardView: View {
         }
         .sheet(isPresented: $isShowingFocusSortSheet) {
             DailyFocusSortSheet(selectedOrder: $focusSortOrder)
-                .presentationDetents([.height(300)])
+                .presentationDetents([.height(380)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingCustomize) {
@@ -2830,7 +2858,7 @@ struct BetaDashboardView: View {
                         .font(.betaSection)
                         .foregroundStyle(BetaPalette.primaryText)
 
-                    Text("\(focusTasks.count) tasks")
+                    Text(dailyFocusCountLabel)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(BetaPalette.secondaryText)
 
@@ -3050,7 +3078,7 @@ private struct DailyFocusSortSheet: View {
                         Text("Sort Daily Focus")
                             .font(.title3.weight(.bold))
                             .foregroundStyle(BetaPalette.primaryText)
-                        Text("Choose how focus tasks are ordered.")
+                        Text("Choose what this list should show first.")
                             .font(.footnote.weight(.medium))
                             .foregroundStyle(BetaPalette.secondaryText)
                     }
@@ -3114,6 +3142,7 @@ private struct DailyFocusSortSheet: View {
 
     private func iconName(for order: DashboardSortOrder) -> String {
         switch order {
+        case .today: "sun.max.fill"
         case .dueDate: "calendar"
         case .priority: "flag.fill"
         case .title: "textformat"
@@ -3122,6 +3151,7 @@ private struct DailyFocusSortSheet: View {
 
     private func subtitle(for order: DashboardSortOrder) -> String {
         switch order {
+        case .today: "Only tasks for today"
         case .dueDate: "Earliest dates first"
         case .priority: "High priority first"
         case .title: "Alphabetical order"
