@@ -32,7 +32,7 @@ struct StatCardView: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(value.formatted())
-                        .font(.system(size: valueFontSize, weight: .bold, design: LifeTrackAppTheme.current.fontDesign))
+                        .font(.lifeTrack(size: valueFontSize, role: .title, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 

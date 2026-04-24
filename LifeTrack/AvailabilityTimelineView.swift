@@ -5,7 +5,9 @@
 //  Created by Halalisani Mbanjwa on 2026/04/18.
 //
 
+import EventKit
 import SwiftUI
+import UIKit
 
 enum AvailabilityShareRange: String, CaseIterable, Identifiable {
     case today
@@ -32,6 +34,10 @@ enum AvailabilityShareRange: String, CaseIterable, Identifiable {
 }
 
 struct AvailabilityTimelineView: View {
+    @Environment(\.openURL) private var openURL
+    @ObservedObject private var calendarManager = CalendarIntegrationManager.shared
+    @State private var isShowingShareComposer = false
+
     let selectedDate: Date
     @Binding var selectedRange: AvailabilityShareRange
     let tasks: [LifeTask]
@@ -42,6 +48,7 @@ struct AvailabilityTimelineView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
             header
+            calendarStatusCard
             AvailabilityRangeSelector(selectedRange: $selectedRange)
 
             SectionCardView {
@@ -55,6 +62,14 @@ struct AvailabilityTimelineView: View {
                 }
             }
         }
+        .task(id: availabilityLoadKey) {
+            await calendarManager.loadBusyBlocks(in: selectedLoadInterval)
+        }
+        .sheet(isPresented: $isShowingShareComposer) {
+            AvailabilityShareComposerView(snapshot: shareSnapshot)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     private var header: some View {
@@ -64,7 +79,7 @@ struct AvailabilityTimelineView: View {
                     .font(.lifeTrackHeadline)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-                Text("Private blocked-time view with manual sharing.")
+                Text(headerSubtitle)
                     .font(.footnote)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -72,10 +87,9 @@ struct AvailabilityTimelineView: View {
 
             Spacer(minLength: LifeTrackTheme.Spacing.medium)
 
-            ShareLink(
-                item: availabilityShareText,
-                subject: Text("LifeTrack availability")
-            ) {
+            Button {
+                isShowingShareComposer = true
+            } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "square.and.arrow.up")
                     Text("Share")
@@ -88,6 +102,45 @@ struct AvailabilityTimelineView: View {
             }
             .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.94, pressedOpacity: 0.9))
             .accessibilityLabel("Share \(selectedRange.title.lowercased()) availability")
+        }
+    }
+
+    private var calendarStatusCard: some View {
+        SectionCardView {
+            HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+                Image(systemName: calendarStatusSymbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(calendarStatusTint)
+                    .frame(width: LifeTrackTheme.IconSize.largeCircle, height: LifeTrackTheme.IconSize.largeCircle)
+                    .background(calendarStatusTint.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(calendarStatusTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(calendarStatusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                if let calendarActionTitle {
+                    Button(calendarActionTitle, action: handleCalendarAction)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(calendarStatusTint)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .background(calendarStatusTint.opacity(0.1), in: Capsule())
+                        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.92))
+                        .disabled(calendarManager.isRequestingAccess || calendarManager.isLoadingBusyBlocks)
+                } else if calendarManager.isLoadingBusyBlocks {
+                    ProgressView()
+                        .tint(calendarStatusTint)
+                }
+            }
         }
     }
 
@@ -104,7 +157,7 @@ struct AvailabilityTimelineView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-                Text("\(rangeDateSubtitle) · \(totalBlockCount) blocked \(totalBlockCount == 1 ? "task" : "tasks") · manual share only")
+                Text("\(rangeDateSubtitle) · \(totalBlockCount) blocked \(totalBlockCount == 1 ? "item" : "items") · manual share only")
                     .font(.footnote)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -137,7 +190,7 @@ struct AvailabilityTimelineView: View {
             )
 
             AvailabilityMetricPill(
-                title: selectedRange == .today ? "Tasks" : "Days",
+                title: selectedRange == .today ? "Blocks" : "Days",
                 value: selectedRange == .today ? totalBlockCount.formatted() : selectedDates.count.formatted(),
                 symbolName: selectedRange == .today ? "list.bullet" : "calendar",
                 tint: LifeTrackTheme.ColorPalette.accent
@@ -201,6 +254,17 @@ struct AvailabilityTimelineView: View {
         daySchedules.reduce(0) { $0 + $1.blocks.count }
     }
 
+    private var selectedLoadInterval: DateInterval {
+        let start = selectedDates.first ?? calendar.startOfDay(for: selectedDate)
+        let lastDate = selectedDates.last ?? start
+        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: lastDate)) ?? lastDate.addingTimeInterval(86_400)
+        return DateInterval(start: calendar.startOfDay(for: start), end: end)
+    }
+
+    private var availabilityLoadKey: String {
+        "\(selectedRange.rawValue)-\(calendar.startOfDay(for: selectedDate).timeIntervalSince1970)-\(calendarManager.authorizationStatus.rawValue)"
+    }
+
     private var rangeDateSubtitle: String {
         guard let first = selectedDates.first, let last = selectedDates.last else {
             return selectedDate.weekdayDateString
@@ -213,41 +277,50 @@ struct AvailabilityTimelineView: View {
         return "\(first.dayMonthString)-\(last.dayMonthString)"
     }
 
-    private var availabilityShareText: String {
-        var lines = [
-            "LifeTrack availability: \(selectedRange.title)",
-            rangeDateSubtitle,
-            "",
-            "Summary: \(durationTitle(for: totalAvailableDuration)) available · \(durationTitle(for: totalBlockedDuration)) blocked · \(totalBlockCount) blocked \(totalBlockCount == 1 ? "task" : "tasks")",
-            ""
-        ]
+    private var shareSnapshot: AvailabilityShareSnapshot {
+        AvailabilityShareSnapshot(
+            range: selectedRange,
+            rangeTitle: selectedRange.title,
+            dateSubtitle: rangeDateSubtitle,
+            availableDurationTitle: durationTitle(for: totalAvailableDuration),
+            blockedDurationTitle: durationTitle(for: totalBlockedDuration),
+            blockCount: totalBlockCount,
+            totalDayCount: selectedDates.count,
+            includesCalendarBusyTimes: calendarBusyBlockCount > 0,
+            days: daySchedules.map(shareDaySnapshot(from:))
+        )
+    }
 
-        for schedule in daySchedules {
-            lines.append(schedule.date.formatted(Date.FormatStyle().weekday(.wide).month(.abbreviated).day()))
-
-            let availableSegments = schedule.segments.filter(\.isAvailable)
-            if availableSegments.isEmpty {
-                lines.append("Available: No clear open windows.")
-            } else {
-                lines.append("Available:")
-                lines.append(contentsOf: availableSegments.map { "- \($0.timeRangeTitle)" })
+    private func shareDaySnapshot(from schedule: AvailabilityDaySchedule) -> AvailabilityShareDaySnapshot {
+        let entries = schedule.segments.map { segment -> AvailabilityShareEntrySnapshot in
+            switch segment.kind {
+            case .available:
+                return AvailabilityShareEntrySnapshot(
+                    kind: .available,
+                    title: "Available",
+                    subtitle: "Open window between scheduled task blocks.",
+                    timeRangeTitle: segment.timeRangeTitle
+                )
+            case .blocked(let block):
+                return AvailabilityShareEntrySnapshot(
+                    kind: block.isCalendarEvent ? .calendar : .task,
+                    title: block.shareTitle,
+                    subtitle: block.shareSubtitle,
+                    timeRangeTitle: segment.timeRangeTitle
+                )
             }
-
-            if schedule.blocks.isEmpty {
-                lines.append("Blocked: No task blocks.")
-            } else {
-                lines.append("Blocked:")
-                lines.append(contentsOf: schedule.blocks.map { block in
-                    "- \(timeRangeTitle(start: block.startDate, end: block.endDate)) \(block.task.title)"
-                })
-            }
-
-            lines.append("")
         }
 
-        lines.append("Shared manually from LifeTrack. This is not a live calendar link.")
-
-        return lines.joined(separator: "\n")
+        return AvailabilityShareDaySnapshot(
+            date: schedule.date,
+            title: schedule.date.formatted(Date.FormatStyle().weekday(.wide).month(.abbreviated).day()),
+            availableDurationTitle: durationTitle(for: schedule.availableDuration),
+            blockedDurationTitle: durationTitle(for: schedule.blockedDuration),
+            blockCount: schedule.blocks.count,
+            availableRanges: schedule.segments.filter(\.isAvailable).map(\.timeRangeTitle),
+            entries: entries,
+            firstBlockedTitle: entries.first(where: { $0.kind != .available })?.title
+        )
     }
 
     private func schedule(for date: Date) -> AvailabilityDaySchedule {
@@ -263,8 +336,9 @@ struct AvailabilityTimelineView: View {
         )
     }
 
+    @MainActor
     private func blocks(on date: Date) -> [AvailabilityTimeBlock] {
-        tasks
+        let taskBlocks = tasks
             .filter { task in
                 !task.isDeleted &&
                     !task.isCompleted &&
@@ -278,6 +352,13 @@ struct AvailabilityTimelineView: View {
                     endDate: task.scheduledEndDate
                 )
             }
+        let dayInterval = DateInterval(
+            start: calendar.startOfDay(for: date),
+            end: calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date)) ?? date.addingTimeInterval(86_400)
+        )
+        let calendarBlocks = calendarManager.busyBlocks(overlapping: dayInterval).map(AvailabilityTimeBlock.init(calendarBlock:))
+
+        return (taskBlocks + calendarBlocks)
             .sorted { first, second in
                 if first.startDate == second.startDate {
                     return first.endDate < second.endDate
@@ -373,6 +454,97 @@ struct AvailabilityTimelineView: View {
     private func timeRangeTitle(start: Date, end: Date) -> String {
         "\(start.timeString)-\(end.timeString)"
     }
+
+    private var headerSubtitle: String {
+        if calendarManager.hasReadAccess {
+            return "Private blocked-time view using tasks plus live Apple Calendar busy events."
+        }
+
+        return "Private blocked-time view with optional Apple Calendar busy events."
+    }
+
+    private var calendarBusyBlockCount: Int {
+        calendarManager.busyBlocks(overlapping: selectedLoadInterval).count
+    }
+
+    private var calendarStatusTitle: String {
+        switch calendarManager.authorizationStatus {
+        case .authorized, .fullAccess:
+            return "Apple Calendar Connected"
+        case .notDetermined, .writeOnly:
+            return "Add Apple Calendar Busy Times"
+        case .denied, .restricted:
+            return "Apple Calendar Access Off"
+        @unknown default:
+            return "Apple Calendar Unavailable"
+        }
+    }
+
+    private var calendarStatusMessage: String {
+        switch calendarManager.authorizationStatus {
+        case .authorized, .fullAccess:
+            let count = calendarBusyBlockCount
+            return "\(count) busy \(count == 1 ? "event" : "events") included in this range. Shared availability hides event titles."
+        case .notDetermined:
+            return "Connect Apple Calendar so shared availability and open windows respect your real meetings and appointments."
+        case .writeOnly:
+            return "LifeTrack needs full calendar access to read busy times. Event titles stay on-device."
+        case .denied, .restricted:
+            return "Enable Calendar access in Settings to include real busy times in availability."
+        @unknown default:
+            return "Calendar access is unavailable right now."
+        }
+    }
+
+    private var calendarStatusSymbol: String {
+        switch calendarManager.authorizationStatus {
+        case .authorized, .fullAccess:
+            return "calendar.badge.checkmark"
+        case .denied, .restricted:
+            return "calendar.badge.exclamationmark"
+        default:
+            return "calendar.badge.plus"
+        }
+    }
+
+    private var calendarStatusTint: Color {
+        switch calendarManager.authorizationStatus {
+        case .authorized, .fullAccess:
+            return LifeTrackTheme.ColorPalette.success
+        case .denied, .restricted:
+            return LifeTrackTheme.ColorPalette.warning
+        default:
+            return LifeTrackTheme.ColorPalette.accent
+        }
+    }
+
+    private var calendarActionTitle: String? {
+        if calendarManager.needsPermissionPrompt {
+            return "Connect"
+        }
+
+        switch calendarManager.authorizationStatus {
+        case .denied, .restricted:
+            return "Settings"
+        default:
+            return nil
+        }
+    }
+
+    private func handleCalendarAction() {
+        if calendarManager.needsPermissionPrompt {
+            Task {
+                let granted = await calendarManager.requestAccessIfNeeded()
+                guard granted else { return }
+                await calendarManager.loadBusyBlocks(in: selectedLoadInterval, force: true)
+            }
+            return
+        }
+
+        if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+            openURL(settingsURL)
+        }
+    }
 }
 
 struct AvailabilityShareSheet: View {
@@ -447,7 +619,7 @@ struct AvailabilityShareSheet: View {
                     .font(.lifeTrackHero)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-                Text("Choose a range, review blocked task times, then share a clean availability summary.")
+                Text("Choose a range, preview blocked time, then share a branded availability card.")
                     .font(.subheadline)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -526,17 +698,80 @@ private struct AvailabilityDaySchedule: Identifiable {
     }
 
     var firstBlockTitle: String? {
-        blocks.first?.task.title
+        blocks.first?.title
     }
 }
 
 private struct AvailabilityTimeBlock: Identifiable {
-    let task: LifeTask
-    let categoryOption: TaskCategoryOption
+    enum Source {
+        case task(task: LifeTask, categoryOption: TaskCategoryOption)
+        case calendar(CalendarBusyBlock)
+    }
+
+    let source: Source
+    let title: String
+    let subtitle: String
+    let shareTitle: String
+    let shareSubtitle: String
+    let tint: Color
     let startDate: Date
     let endDate: Date
 
-    var id: UUID { task.id }
+    init(task: LifeTask, categoryOption: TaskCategoryOption, startDate: Date, endDate: Date) {
+        source = .task(task: task, categoryOption: categoryOption)
+        title = task.title
+        subtitle = "\(categoryOption.title) · \(task.durationTitle)"
+        shareTitle = task.title
+        shareSubtitle = subtitle
+        tint = categoryOption.tint
+        self.startDate = startDate
+        self.endDate = endDate
+    }
+
+    init(calendarBlock: CalendarBusyBlock) {
+        let durationText = Self.durationTitle(for: calendarBlock.endDate.timeIntervalSince(calendarBlock.startDate))
+        source = .calendar(calendarBlock)
+        title = calendarBlock.displayTitle
+        subtitle = "\(calendarBlock.detailLine) · \(durationText)"
+        shareTitle = calendarBlock.shareLabel
+        shareSubtitle = "Apple Calendar busy time · \(durationText)"
+        tint = LifeTrackTheme.ColorPalette.warning
+        startDate = calendarBlock.startDate
+        endDate = calendarBlock.endDate
+    }
+
+    var id: String {
+        switch source {
+        case .task(let task, _):
+            return task.id.uuidString
+        case .calendar(let block):
+            return block.id
+        }
+    }
+
+    var isCalendarEvent: Bool {
+        if case .calendar = source {
+            return true
+        }
+
+        return false
+    }
+
+    private static func durationTitle(for duration: TimeInterval) -> String {
+        let minutes = max(0, Int(duration / 60))
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+
+        if hours == 0 {
+            return "\(minutes)m"
+        }
+
+        if remainingMinutes == 0 {
+            return "\(hours)h"
+        }
+
+        return "\(hours)h \(remainingMinutes)m"
+    }
 }
 
 private struct AvailabilityTimelineSegment: Identifiable {
@@ -653,7 +888,7 @@ private struct AvailabilityDaySummaryRow: View {
 
     private var subtitle: String {
         if schedule.blocks.isEmpty {
-            return "No blocked task times."
+            return "No blocked task or calendar times."
         }
 
         let firstTitle = schedule.firstBlockTitle ?? "Task block"
@@ -666,7 +901,7 @@ private struct AvailabilityDaySummaryRow: View {
     }
 
     private var tint: Color {
-        schedule.blocks.isEmpty ? LifeTrackTheme.ColorPalette.success : LifeTrackTheme.ColorPalette.accent
+        schedule.blocks.isEmpty ? LifeTrackTheme.ColorPalette.success : schedule.blocks.first?.tint ?? LifeTrackTheme.ColorPalette.accent
     }
 
     private func durationTitle(for duration: TimeInterval) -> String {
@@ -739,7 +974,7 @@ private struct AvailabilityTimelineRow: View {
         case .available:
             "Available"
         case .blocked(let block):
-            block.task.title
+            block.title
         }
     }
 
@@ -748,12 +983,17 @@ private struct AvailabilityTimelineRow: View {
         case .available:
             "Open window between scheduled task blocks."
         case .blocked(let block):
-            "\(block.categoryOption.title) · \(block.task.durationTitle)"
+            block.subtitle
         }
     }
 
     private var symbolName: String {
-        segment.isAvailable ? "checkmark.circle" : "lock.fill"
+        switch segment.kind {
+        case .available:
+            return "checkmark.circle"
+        case .blocked(let block):
+            return block.isCalendarEvent ? "calendar.badge.clock" : "lock.fill"
+        }
     }
 
     private var tint: Color {
@@ -761,7 +1001,7 @@ private struct AvailabilityTimelineRow: View {
         case .available:
             LifeTrackTheme.ColorPalette.success
         case .blocked(let block):
-            block.categoryOption.tint
+            block.tint
         }
     }
 

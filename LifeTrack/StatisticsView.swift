@@ -284,7 +284,9 @@ struct StatisticsView: View {
                     LinearGradient(
                         colors: [
                             LifeTrackTheme.ColorPalette.accent,
-                            LifeTrackTheme.ColorPalette.accent.opacity(0.58)
+                            LifeTrackTheme.ColorPalette.isDarkTheme
+                                ? LifeTrackTheme.ColorPalette.secondaryAccent
+                                : LifeTrackTheme.ColorPalette.accent.opacity(0.58)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -292,10 +294,21 @@ struct StatisticsView: View {
                 )
                 .cornerRadius(5)
             }
+            .chartPlotStyle { plotArea in
+                plotArea
+                    .background(
+                        LifeTrackTheme.ColorPalette.chartPlotBackground,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(LifeTrackTheme.ColorPalette.chartPlotBorder, lineWidth: 0.8)
+                    }
+            }
             .chartXAxis {
                 AxisMarks(values: selectedRange.axisDates(for: points)) { value in
                     AxisGridLine()
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.chartGrid)
                     AxisTick()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.hairline)
                     AxisValueLabel {
@@ -312,7 +325,7 @@ struct StatisticsView: View {
             .chartYAxis {
                 AxisMarks(position: .leading) {
                     AxisGridLine()
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.7))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.chartGrid.opacity(0.9))
                     AxisValueLabel()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                 }
@@ -345,7 +358,9 @@ struct StatisticsView: View {
                 .foregroundStyle(
                     LinearGradient(
                         colors: [
-                            LifeTrackTheme.ColorPalette.danger.opacity(0.22),
+                            LifeTrackTheme.ColorPalette.isDarkTheme
+                                ? LifeTrackTheme.ColorPalette.danger.opacity(0.42)
+                                : LifeTrackTheme.ColorPalette.danger.opacity(0.22),
                             LifeTrackTheme.ColorPalette.danger.opacity(0.02)
                         ],
                         startPoint: .top,
@@ -369,10 +384,21 @@ struct StatisticsView: View {
                 .foregroundStyle(LifeTrackTheme.ColorPalette.danger)
                 .symbolSize(point.overdueCount == 0 ? 0 : 38 * chartProgress)
             }
+            .chartPlotStyle { plotArea in
+                plotArea
+                    .background(
+                        LifeTrackTheme.ColorPalette.chartPlotBackground,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(LifeTrackTheme.ColorPalette.chartPlotBorder, lineWidth: 0.8)
+                    }
+            }
             .chartXAxis {
                 AxisMarks(values: selectedRange.axisDates(for: points)) { value in
                     AxisGridLine()
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.55))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.chartGrid)
                     AxisTick()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.hairline)
                     AxisValueLabel {
@@ -389,7 +415,7 @@ struct StatisticsView: View {
             .chartYAxis {
                 AxisMarks(position: .leading) {
                     AxisGridLine()
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.7))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.chartGrid.opacity(0.9))
                     AxisValueLabel()
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                 }
@@ -406,24 +432,11 @@ struct StatisticsView: View {
     }
 
     private var completionInsight: String {
-        guard let bestPoint, bestPoint.completedCount > 0 else {
-            return "No completed tasks in this range yet."
-        }
-
-        return "\(bestPoint.label) had the strongest completion count with \(bestPoint.completedCount) finished."
+        StatisticsInsights.completionInsight(bestPoint: bestPoint)
     }
 
     private var overdueInsight: String {
-        if totalOverdue == 0 {
-            return "No overdue tasks in this range. The schedule is holding steady."
-        }
-
-        let peak = points.max { $0.overdueCount < $1.overdueCount }
-        guard let peak else {
-            return "Overdue tasks will appear here as trends develop."
-        }
-
-        return "The highest overdue count was \(peak.overdueCount) around \(peak.label)."
+        StatisticsInsights.overdueInsight(points: points, totalOverdue: totalOverdue)
     }
 
     private func chartFootnote(symbolName: String, text: String) -> some View {
@@ -698,7 +711,7 @@ private extension Array where Element == Date {
     }
 }
 
-nonisolated private struct ProductivityStatPoint: Identifiable, Sendable {
+nonisolated struct ProductivityStatPoint: Identifiable, Sendable, Equatable {
     var id: Date { date }
 
     let date: Date
@@ -708,7 +721,7 @@ nonisolated private struct ProductivityStatPoint: Identifiable, Sendable {
     let overdueCount: Int
 }
 
-nonisolated private struct ProductivityStatsSnapshot: Sendable {
+nonisolated struct ProductivityStatsSnapshot: Sendable {
     let points: [ProductivityStatPoint]
     let totalCompleted: Int
     let totalOverdue: Int
@@ -738,7 +751,7 @@ nonisolated private struct ProductivityStatsSnapshot: Sendable {
     )
 }
 
-nonisolated private struct WeekdayPoint: Sendable, Identifiable {
+nonisolated struct WeekdayPoint: Sendable, Identifiable {
     var id: Int { weekday }
     let weekday: Int
     let shortTitle: String
@@ -746,7 +759,7 @@ nonisolated private struct WeekdayPoint: Sendable, Identifiable {
     let completedCount: Int
 }
 
-nonisolated private struct CategoryShareEntry: Sendable, Identifiable {
+nonisolated struct CategoryShareEntry: Sendable, Identifiable {
     var id: String { rawValue }
     let rawValue: String
     let completedCount: Int
@@ -943,7 +956,7 @@ private struct StatisticsSummaryActionSheet: View {
                 Spacer(minLength: LifeTrackTheme.Spacing.small)
 
                 Text(headerValue)
-                    .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
             }
@@ -1614,7 +1627,7 @@ private struct StatisticsSummaryCard: View {
                         animationID: animationID,
                         animationsEnabled: animationsEnabled
                     )
-                    .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title2, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                     .lineLimit(1)
@@ -1715,7 +1728,7 @@ private struct StreakInsightCard: View {
                         animationID: animationID,
                         animationsEnabled: animationsEnabled
                     )
-                    .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title2, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
@@ -1802,7 +1815,7 @@ private struct FocusInsightCard: View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             if totalMinutes == 0 {
                 Text("0")
-                    .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title2, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                 Text("m")
@@ -1815,7 +1828,7 @@ private struct FocusInsightCard: View {
                     animationID: "\(animationID)-h",
                     animationsEnabled: animationsEnabled
                 )
-                .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                .font(.lifeTrack(.title2, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
@@ -1830,7 +1843,7 @@ private struct FocusInsightCard: View {
                         animationID: "\(animationID)-m",
                         animationsEnabled: animationsEnabled
                     )
-                    .font(.system(.title3, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title3, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
@@ -1845,7 +1858,7 @@ private struct FocusInsightCard: View {
                     animationID: "\(animationID)-m",
                     animationsEnabled: animationsEnabled
                 )
-                .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                .font(.lifeTrack(.title2, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
@@ -1994,6 +2007,17 @@ private struct BestWeekdayCard: View {
             .foregroundStyle(barStyle(for: point))
             .cornerRadius(5)
         }
+        .chartPlotStyle { plotArea in
+            plotArea
+                .background(
+                    LifeTrackTheme.ColorPalette.chartPlotBackground,
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(LifeTrackTheme.ColorPalette.chartPlotBorder, lineWidth: 0.8)
+                }
+        }
         .chartXScale(domain: weekdayBreakdown.map(\.shortTitle))
         .chartXAxis {
             AxisMarks(values: weekdayBreakdown.map(\.shortTitle)) { value in
@@ -2009,7 +2033,7 @@ private struct BestWeekdayCard: View {
         .chartYAxis {
             AxisMarks(position: .leading) {
                 AxisGridLine()
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.hairline.opacity(0.7))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.chartGrid.opacity(0.9))
                 AxisValueLabel()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
             }
@@ -2024,7 +2048,11 @@ private struct BestWeekdayCard: View {
         if point.weekday == bestWeekday?.weekday {
             return AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient)
         }
-        return AnyShapeStyle(LifeTrackTheme.ColorPalette.accent.opacity(0.28))
+        return AnyShapeStyle(
+            LifeTrackTheme.ColorPalette.isDarkTheme
+                ? LifeTrackTheme.ColorPalette.secondaryAccent.opacity(0.44)
+                : LifeTrackTheme.ColorPalette.accent.opacity(0.28)
+        )
     }
 
     private var emptyState: some View {

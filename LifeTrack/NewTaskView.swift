@@ -430,7 +430,7 @@ struct NewTaskView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(existingTask == nil ? "New Task" : "Edit Task")
-                .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                .font(.lifeTrack(.title, weight: .bold))
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
             Text(existingTask == nil ? "Capture the next step with enough context to act on it." : "Refine the details and keep reminders accurate.")
@@ -1485,6 +1485,7 @@ struct NewTaskView: View {
             categoryTitle: selectedCategoryOption.title,
             dueDate: task.dueDate,
             isCompleted: task.isCompleted,
+            isHighPriority: task.priority == .high,
             detailLine: task.reminderDetailLine(categoryTitle: selectedCategoryOption.title)
         )
         if let nextRecurringTask {
@@ -1676,7 +1677,7 @@ private struct DueDatePickerSheet: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(mode.title)
-                    .font(.system(.title3, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title3, weight: .bold))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                     .lineLimit(1)
 

@@ -49,7 +49,7 @@ struct SplashScreenView: View {
 
                 VStack(spacing: 9) {
                     Text("LifeTrack")
-                        .font(.system(size: 42, weight: .bold, design: LifeTrackAppTheme.current.fontDesign))
+                        .font(.lifeTrack(size: 42, role: .title, weight: .bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                         .overlay(shimmerHighlight.mask(titleMask))
                         .offset(y: titleOffset)
@@ -127,7 +127,7 @@ struct SplashScreenView: View {
 
     private var titleMask: some View {
         Text("LifeTrack")
-            .font(.system(size: 42, weight: .bold, design: LifeTrackAppTheme.current.fontDesign))
+            .font(.lifeTrack(size: 42, role: .title, weight: .bold))
     }
 }
 

@@ -86,7 +86,7 @@ struct LogMoneyView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Log Money")
-                .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                .font(.lifeTrack(.title, weight: .bold))
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
             Text("Track what you actually spent, saved, transferred, or earned.")

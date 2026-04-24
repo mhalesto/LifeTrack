@@ -194,6 +194,7 @@ enum TaskLifecycleManager {
                     dueDate: task.dueDate,
                     isCompleted: task.isCompleted,
                     isDeleted: task.isDeleted,
+                    isHighPriority: task.priority == .high,
                     detailLine: task.reminderDetailLine(categoryTitle: categoryTitle)
                 )
             )
@@ -213,6 +214,7 @@ enum TaskLifecycleManager {
                         categoryTitle: snapshot.categoryTitle,
                         dueDate: snapshot.dueDate,
                         isCompleted: snapshot.isCompleted,
+                        isHighPriority: snapshot.isHighPriority,
                         detailLine: snapshot.detailLine
                     )
                 }
@@ -227,6 +229,7 @@ enum TaskLifecycleManager {
         let dueDate: Date
         let isCompleted: Bool
         let isDeleted: Bool
+        let isHighPriority: Bool
         let detailLine: String
     }
 
@@ -246,6 +249,7 @@ enum TaskLifecycleManager {
             categoryTitle: categoryTitle,
             dueDate: task.dueDate,
             isCompleted: task.isCompleted,
+            isHighPriority: task.priority == .high,
             detailLine: task.reminderDetailLine(categoryTitle: categoryTitle)
         )
     }

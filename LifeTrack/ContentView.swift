@@ -11,13 +11,38 @@ import UIKit
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var systemColorScheme
 
     @State private var isShowingLaunchSplash = true
     @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.appearanceMode) private var appearanceModeRaw = AppearanceMode.current.rawValue
     @AppStorage(LifeTrackSettings.Keys.hideStatusBar) private var hideStatusBar = false
+    @AppStorage(LifeTrackSettings.Keys.appFontChoice) private var appFontChoice = LifeTrackFontChoice.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.titleTextScale) private var titleTextScale = LifeTrackTypography.defaultScale
+    @AppStorage(LifeTrackSettings.Keys.bodyTextScale) private var bodyTextScale = LifeTrackTypography.defaultScale
+    @AppStorage(LifeTrackSettings.Keys.captionTextScale) private var captionTextScale = LifeTrackTypography.defaultScale
 
     private var dashboardExperience: DashboardExperience {
         DashboardExperience(rawValue: dashboardExperienceRaw) ?? .default
+    }
+
+    private var appearanceMode: AppearanceMode {
+        AppearanceMode(rawValue: appearanceModeRaw) ?? .auto
+    }
+
+    private func syncEffectiveDarkMode(system: ColorScheme) {
+        let resolved = appearanceMode.resolve(system: system)
+        UserDefaults.standard.set(resolved == .dark, forKey: LifeTrackSettings.Keys.darkModeEnabled)
+    }
+
+    private var typographyRefreshToken: String {
+        [
+            appFontChoice,
+            String(format: "%.2f", titleTextScale),
+            String(format: "%.2f", bodyTextScale),
+            String(format: "%.2f", captionTextScale)
+        ]
+        .joined(separator: "-")
     }
 
     var body: some View {
@@ -33,6 +58,7 @@ struct ContentView: View {
                         HomeView()
                     }
                 }
+                .id(typographyRefreshToken)
                 .transition(.opacity)
             }
 
@@ -43,11 +69,21 @@ struct ContentView: View {
             }
         }
         .statusBarHidden(hideStatusBar)
+        .preferredColorScheme(appearanceMode.preferredColorScheme)
         .task {
             await completeInitialSplash()
         }
+        .onAppear {
+            syncEffectiveDarkMode(system: systemColorScheme)
+        }
         .onChange(of: scenePhase) { _, phase in
             handleScenePhaseChange(phase)
+        }
+        .onChange(of: systemColorScheme) { _, newValue in
+            syncEffectiveDarkMode(system: newValue)
+        }
+        .onChange(of: appearanceModeRaw) { _, _ in
+            syncEffectiveDarkMode(system: systemColorScheme)
         }
     }
 

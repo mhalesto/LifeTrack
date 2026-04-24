@@ -357,7 +357,7 @@ struct HomeView: View {
                         .frame(width: 8, height: 30)
 
                     Text("LifeTrack")
-                        .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                        .font(.lifeTrack(.title, weight: .bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                 }
 
@@ -1924,7 +1924,7 @@ private struct DashboardSummarySheet: View {
                     value: tasks.count,
                     animationsEnabled: animationsEnabled
                 )
-                    .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
             }

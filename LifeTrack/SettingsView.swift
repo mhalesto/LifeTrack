@@ -17,6 +17,11 @@ struct SettingsView: View {
 
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.appearanceMode) private var appearanceModeRaw = AppearanceMode.current.rawValue
+    @AppStorage(LifeTrackSettings.Keys.appFontChoice) private var appFontChoice = LifeTrackFontChoice.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.titleTextScale) private var titleTextScale = LifeTrackTypography.defaultScale
+    @AppStorage(LifeTrackSettings.Keys.bodyTextScale) private var bodyTextScale = LifeTrackTypography.defaultScale
+    @AppStorage(LifeTrackSettings.Keys.captionTextScale) private var captionTextScale = LifeTrackTypography.defaultScale
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
     @AppStorage(LifeTrackSettings.Keys.animationsEnabled) private var animationsEnabled = true
     @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength = 1.0
@@ -34,6 +39,7 @@ struct SettingsView: View {
     @State private var pendingAvatarImage: UIImage?
     @State private var avatarError: String?
     @State private var isImportingAvatar = false
+    @State private var isTypographyExpanded = false
     @State private var nicknameInputFrame: CGRect = .zero
     @FocusState private var focusedField: SettingsFocusField?
 
@@ -52,6 +58,7 @@ struct SettingsView: View {
                             aiCard
                         }
                         themeCard
+                        typographyCard
                         motionCard
                         dashboardExperienceCard
                         displayCard
@@ -81,7 +88,11 @@ struct SettingsView: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .foregroundStyle(
+                        LifeTrackTheme.ColorPalette.isDarkTheme
+                            ? selectedTheme.accent
+                            : LifeTrackTheme.ColorPalette.secondaryText
+                    )
                 }
             }
             .onChange(of: selectedPhotoItem) { _, newItem in
@@ -224,7 +235,7 @@ struct SettingsView: View {
                         }
                         .padding(14)
                 }
-                .background(LifeTrackTheme.ColorPalette.backgroundTop, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
                 .background {
                     GeometryReader { proxy in
                         Color.clear.preference(
@@ -270,8 +281,140 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                 }
 
+                AppearanceModePicker(selectionRaw: $appearanceModeRaw, theme: selectedTheme)
+
                 ThemeStrengthControl(strength: $colorStrength)
                     .padding(.top, LifeTrackTheme.Spacing.small)
+            }
+        }
+    }
+
+    private var typographyCard: some View {
+        SectionCardView {
+            Button {
+                withAnimation(.snappy(duration: 0.24)) {
+                    isTypographyExpanded.toggle()
+                }
+            } label: {
+                HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+                    Image(systemName: "textformat.alt")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(selectedTheme.accent)
+                        .frame(width: 42, height: 42)
+                        .background(selectedTheme.accentSoft, in: Circle())
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Typography")
+                            .font(.lifeTrackHeadline)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                        Text("Choose app fonts and keep text sizing comfortably in range.")
+                            .font(.lifeTrackFootnote)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: 8) {
+                            Text(selectedFontChoice.title)
+                                .font(.lifeTrackCaption)
+                                .foregroundStyle(selectedTheme.accent)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(selectedTheme.accentSoft, in: Capsule())
+
+                            Text(typographyScaleSummary)
+                                .font(.lifeTrackCaption)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+                    Image(systemName: isTypographyExpanded ? "chevron.up" : "chevron.down")
+                        .font(.lifeTrack(.caption, weight: .bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                        .frame(width: 32, height: 32)
+                        .background(LifeTrackTheme.ColorPalette.controlSurfaceStrong, in: Circle())
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isTypographyExpanded {
+                VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+                    typographyPreview
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Font Style")
+                            .font(.lifeTrackCaption)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                        LazyVGrid(
+                            columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                            spacing: 10
+                        ) {
+                            ForEach(LifeTrackFontChoice.allCases) { choice in
+                                Button {
+                                    withAnimation(.snappy(duration: 0.22)) {
+                                        appFontChoice = choice.rawValue
+                                    }
+                                } label: {
+                                    TypographyFontChoiceChip(
+                                        choice: choice,
+                                        isSelected: selectedFontChoice == choice,
+                                        theme: selectedTheme
+                                    )
+                                }
+                                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97, pressedOpacity: 0.92))
+                            }
+                        }
+                    }
+
+                    TypographyScaleControl(
+                        title: "Titles",
+                        subtitle: "Headings and large emphasis text.",
+                        value: titleScaleBinding,
+                        role: .title,
+                        accent: selectedTheme.accent
+                    )
+
+                    TypographyScaleControl(
+                        title: "Body",
+                        subtitle: "Descriptions, paragraphs, and supporting copy.",
+                        value: bodyScaleBinding,
+                        role: .body,
+                        accent: selectedTheme.accent
+                    )
+
+                    TypographyScaleControl(
+                        title: "Captions",
+                        subtitle: "Metadata, helper labels, and smaller notes.",
+                        value: captionScaleBinding,
+                        role: .caption,
+                        accent: selectedTheme.accent
+                    )
+
+                    Button(action: resetTypography) {
+                        Label("Reset Typography", systemImage: "arrow.counterclockwise")
+                            .font(.lifeTrack(.footnote, weight: .bold))
+                            .foregroundStyle(
+                                isTypographyDefault
+                                    ? LifeTrackTheme.ColorPalette.tertiaryText
+                                    : LifeTrackTheme.ColorPalette.primaryText
+                            )
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                isTypographyDefault
+                                    ? LifeTrackTheme.ColorPalette.controlSurface
+                                    : selectedTheme.accentSoft,
+                                in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98, pressedOpacity: 0.94))
+                    .disabled(isTypographyDefault)
+                }
+                .padding(.top, 2)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -305,7 +448,7 @@ struct SettingsView: View {
                     .tint(selectedTheme.accent)
             }
             .padding(12)
-            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
@@ -378,10 +521,10 @@ struct SettingsView: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
                         .frame(width: 32, height: 32)
-                        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: Circle())
+                        .background(LifeTrackTheme.ColorPalette.controlSurfaceStrong, in: Circle())
                 }
                 .padding(12)
-                .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+                .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                         .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
@@ -424,7 +567,7 @@ struct SettingsView: View {
                     .tint(selectedTheme.accent)
             }
             .padding(12)
-            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
@@ -463,7 +606,7 @@ struct SettingsView: View {
                 }
             }
             .padding(12)
-            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
@@ -516,7 +659,7 @@ struct SettingsView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                 .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
@@ -659,7 +802,7 @@ struct SettingsView: View {
                 Spacer(minLength: LifeTrackTheme.Spacing.small)
             }
             .padding(12)
-            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
@@ -727,13 +870,13 @@ struct SettingsView: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
                         .frame(width: 32, height: 32)
-                        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: Circle())
+                        .background(LifeTrackTheme.ColorPalette.controlSurfaceStrong, in: Circle())
                 }
                 .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
                 .accessibilityLabel("Open Bin")
             }
             .padding(12)
-            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                     .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
@@ -821,16 +964,97 @@ struct SettingsView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
                     .frame(width: 32, height: 32)
-                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: Circle())
+                    .background(LifeTrackTheme.ColorPalette.controlSurfaceStrong, in: Circle())
             }
             .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
         }
         .padding(12)
-        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                 .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
+    }
+
+    private var typographyPreview: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Preview")
+                .font(.lifeTrackCaption)
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Today's Plan")
+                    .font(.lifeTrack(.title2, weight: .bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text("Typography changes apply to major headings, descriptions, and smaller labels across LifeTrack.")
+                    .font(.lifeTrackBody)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Small copy stays tighter so layouts do not break when you increase the font.")
+                    .font(.lifeTrack(.footnote, weight: .medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+            }
+        }
+    }
+
+    private var selectedFontChoice: LifeTrackFontChoice {
+        LifeTrackFontChoice(rawValue: appFontChoice) ?? .fallback
+    }
+
+    private var typographyScaleSummary: String {
+        "T \(typographyPercentage(clampedTitleScale))  B \(typographyPercentage(clampedBodyScale))  C \(typographyPercentage(clampedCaptionScale))"
+    }
+
+    private var isTypographyDefault: Bool {
+        LifeTrackTypography.isDefault(
+            fontChoiceRaw: appFontChoice,
+            titleScale: titleTextScale,
+            bodyScale: bodyTextScale,
+            captionScale: captionTextScale
+        )
+    }
+
+    private var titleScaleBinding: Binding<Double> {
+        Binding(
+            get: { clampedTitleScale },
+            set: { titleTextScale = LifeTrackTypography.clamped($0, role: .title) }
+        )
+    }
+
+    private var bodyScaleBinding: Binding<Double> {
+        Binding(
+            get: { clampedBodyScale },
+            set: { bodyTextScale = LifeTrackTypography.clamped($0, role: .body) }
+        )
+    }
+
+    private var captionScaleBinding: Binding<Double> {
+        Binding(
+            get: { clampedCaptionScale },
+            set: { captionTextScale = LifeTrackTypography.clamped($0, role: .caption) }
+        )
+    }
+
+    private var clampedTitleScale: Double {
+        LifeTrackTypography.clamped(titleTextScale, role: .title)
+    }
+
+    private var clampedBodyScale: Double {
+        LifeTrackTypography.clamped(bodyTextScale, role: .body)
+    }
+
+    private var clampedCaptionScale: Double {
+        LifeTrackTypography.clamped(captionTextScale, role: .caption)
     }
 
     private var selectedTheme: LifeTrackAppTheme {
@@ -948,6 +1172,18 @@ struct SettingsView: View {
             focusedField = nil
         }
     }
+
+    private func resetTypography() {
+        appFontChoice = LifeTrackFontChoice.fallback.rawValue
+        titleTextScale = LifeTrackTypography.defaultScale
+        bodyTextScale = LifeTrackTypography.defaultScale
+        captionTextScale = LifeTrackTypography.defaultScale
+        LifeTrackHaptics.lightImpact()
+    }
+
+    private func typographyPercentage(_ scale: Double) -> String {
+        "\(Int((scale * 100).rounded()))%"
+    }
 }
 
 private enum SettingsFocusField: Hashable {
@@ -963,6 +1199,130 @@ private struct NicknameInputFramePreferenceKey: PreferenceKey {
 
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
         value = nextValue()
+    }
+}
+
+private struct TypographyFontChoiceChip: View {
+    let choice: LifeTrackFontChoice
+    let isSelected: Bool
+    let theme: LifeTrackAppTheme
+
+    private var previewDesign: Font.Design {
+        choice.resolvedDesign(default: theme.fontDesign)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("Aa")
+                .font(.system(size: 18, weight: .bold, design: previewDesign))
+                .foregroundStyle(isSelected ? theme.accent : LifeTrackTheme.ColorPalette.primaryText)
+                .frame(width: 36, height: 36)
+                .background(
+                    (isSelected ? theme.accentSoft : LifeTrackTheme.ColorPalette.controlSurfaceStrong),
+                    in: Circle()
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(choice.title)
+                    .font(.lifeTrack(.subheadline, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text(choice.subtitle)
+                    .font(.lifeTrack(.caption, weight: .medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            isSelected
+                ? theme.accentSoft.opacity(LifeTrackTheme.ColorPalette.isDarkTheme ? 0.9 : 1)
+                : LifeTrackTheme.ColorPalette.controlSurface,
+            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(
+                    isSelected
+                        ? theme.accent.opacity(LifeTrackTheme.ColorPalette.isDarkTheme ? 0.75 : 0.35)
+                        : LifeTrackTheme.ColorPalette.hairline.opacity(0.8),
+                    lineWidth: isSelected ? 1.1 : 0.8
+                )
+        }
+    }
+}
+
+private struct TypographyScaleControl: View {
+    let title: String
+    let subtitle: String
+    @Binding var value: Double
+    let role: LifeTrackTypography.Role
+    let accent: Color
+
+    private var percentage: String {
+        "\(Int((LifeTrackTypography.clamped(value, role: role) * 100).rounded()))%"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.lifeTrack(.subheadline, weight: .semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(subtitle)
+                        .font(.lifeTrack(.caption, weight: .medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(percentage)
+                    .font(.lifeTrack(.footnote, weight: .bold))
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(accent.opacity(0.14), in: Capsule())
+                    .monospacedDigit()
+            }
+
+            Slider(
+                value: $value,
+                in: LifeTrackTypography.range(for: role),
+                step: LifeTrackTypography.sliderStep
+            )
+            .tint(accent)
+
+            HStack {
+                Text("Smaller")
+                    .font(.lifeTrack(.caption, weight: .medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+
+                Spacer(minLength: 0)
+
+                Text("Default 100%")
+                    .font(.lifeTrack(.caption, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                Spacer(minLength: 0)
+
+                Text("Larger")
+                    .font(.lifeTrack(.caption, weight: .medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+        }
     }
 }
 
@@ -987,7 +1347,7 @@ private struct CompletedArchiveChip: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
         .background(
-            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82)),
+            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.controlSurfaceStrong),
             in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
         )
         .overlay {
@@ -1018,7 +1378,7 @@ private struct BinRetentionChip: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
         .background(
-            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82)),
+            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.controlSurfaceStrong),
             in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
         )
         .overlay {
@@ -1063,13 +1423,26 @@ private struct ThemeOptionRow: View {
         }
         .padding(12)
         .background(
-            isSelected ? theme.accentSoft.opacity(0.65) : LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78),
+            isSelected
+                ? selectedBackground
+                : LifeTrackTheme.ColorPalette.controlSurface,
             in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
-                .stroke(isSelected ? theme.accent.opacity(0.28) : LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+                .stroke(isSelected ? selectedBorder : LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
+    }
+
+    private var selectedBackground: Color {
+        if LifeTrackTheme.ColorPalette.isDarkTheme {
+            return theme.accentSoft.mixed(with: LifeTrackTheme.ColorPalette.cardElevated, amount: 0.34)
+        }
+        return theme.accentSoft.opacity(0.65)
+    }
+
+    private var selectedBorder: Color {
+        LifeTrackTheme.ColorPalette.isDarkTheme ? theme.accent.opacity(0.42) : theme.accent.opacity(0.28)
     }
 }
 
@@ -1138,7 +1511,7 @@ private struct ThemeStrengthControl: View {
 
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(LifeTrackTheme.ColorPalette.backgroundTop)
+                        .fill(LifeTrackTheme.ColorPalette.controlSurfaceStrong)
                         .frame(height: 10)
                         .overlay {
                             Capsule()
@@ -1169,7 +1542,12 @@ private struct ThemeStrengthControl: View {
                         }
                         .overlay {
                             Circle()
-                                .stroke(Color.white.opacity(0.9), lineWidth: 1)
+                                .stroke(
+                                    LifeTrackTheme.ColorPalette.isDarkTheme
+                                        ? LifeTrackTheme.ColorPalette.hairline.opacity(0.95)
+                                        : Color.white.opacity(0.9),
+                                    lineWidth: 1
+                                )
                         }
                         .shadow(color: LifeTrackTheme.ColorPalette.accent.opacity(0.22), radius: 10, x: 0, y: 5)
                         .offset(x: min(max(width * progress - 14, 0), width - 28))
@@ -1200,7 +1578,7 @@ private struct ThemeStrengthControl: View {
             .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
         }
         .padding(12)
-        .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.78), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
                 .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
@@ -1234,6 +1612,58 @@ private struct ThemeStrengthControl: View {
 
         withAnimation(.smooth(duration: 0.18)) {
             strength = nextValue
+        }
+    }
+}
+
+private struct AppearanceModePicker: View {
+    @Binding var selectionRaw: String
+
+    let theme: LifeTrackAppTheme
+
+    private var selection: AppearanceMode {
+        AppearanceMode(rawValue: selectionRaw) ?? .auto
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
+            HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                ZStack {
+                    Circle()
+                        .fill(theme.accentSoft)
+                        .frame(width: 42, height: 42)
+
+                    Image(systemName: selection.symbolName)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(theme.accent)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Appearance")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text("Auto follows your device. Light or Dark keeps your theme fixed either way.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Picker("Appearance", selection: $selectionRaw) {
+                ForEach(AppearanceMode.allCases) { mode in
+                    Text(mode.title).tag(mode.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
     }
 }
@@ -1305,7 +1735,7 @@ private struct DashboardExperienceChip: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(
-            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82)),
+            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.controlSurfaceStrong),
             in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
         )
         .overlay {

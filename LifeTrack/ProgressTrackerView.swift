@@ -22,7 +22,7 @@ struct ProgressTrackerView: View {
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(metrics.title)
-                        .font(.system(.title2, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                        .font(.lifeTrack(.title2, weight: .bold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                         .lineLimit(2)
 
@@ -238,7 +238,7 @@ private struct ProgressMetricSegment: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(value)
-                    .font(.system(.title3, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title3, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                     .lineLimit(1)

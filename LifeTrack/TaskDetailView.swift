@@ -180,7 +180,7 @@ struct TaskDetailView: View {
                 CategoryChipView(option: categoryOption)
 
                 Text(task.title)
-                    .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title, weight: .bold))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
 

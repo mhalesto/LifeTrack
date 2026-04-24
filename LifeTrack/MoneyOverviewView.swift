@@ -27,6 +27,7 @@ struct MoneyOverviewView: View {
     @State private var isShowingCurrencySetup = false
     @State private var isShowingBudgetPlanReview = false
     @State private var isShowingAIInsights = false
+    @State private var isShowingStatementImport = false
     @State private var editingTask: LifeTask?
 
     private var currencyCode: String {
@@ -67,6 +68,23 @@ struct MoneyOverviewView: View {
                         .background(LifeTrackTheme.ColorPalette.accentGradient, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
                     }
                     .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
+
+                    Button(action: { isShowingStatementImport = true }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                            Text("Import Bank Statement")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(LifeTrackTheme.ColorPalette.card, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                                .stroke(LifeTrackTheme.ColorPalette.hairline, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
                 }
                 .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
                 .padding(.top, LifeTrackTheme.Spacing.large)
@@ -77,6 +95,11 @@ struct MoneyOverviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isShowingLogMoney) {
             LogMoneyView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingStatementImport) {
+            BankStatementImportView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -300,7 +323,7 @@ struct MoneyOverviewView: View {
                             .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
 
                         Text(MoneyFormatting.currency(projectedMonthEndBalance, code: currencyCode))
-                            .font(.system(.largeTitle, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                            .font(.lifeTrack(.largeTitle, weight: .bold))
                             .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                             .minimumScaleFactor(0.7)
                             .lineLimit(1)

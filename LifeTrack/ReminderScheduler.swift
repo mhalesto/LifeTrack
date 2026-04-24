@@ -20,6 +20,9 @@ enum ReminderScheduler {
     static let categoryTitleUserInfoKey = "categoryTitle"
     static let dueTimestampUserInfoKey = "dueTimestamp"
     static let themeIDUserInfoKey = "themeID"
+    static let reminderStatusUserInfoKey = "reminderStatus"
+    static let reminderDetailUserInfoKey = "reminderDetail"
+    static let isHighPriorityUserInfoKey = "isHighPriority"
     private static let reminderLeadTime: TimeInterval = 30 * 60
 
     static func configureNotificationCategories() {
@@ -54,6 +57,7 @@ enum ReminderScheduler {
         categoryTitle: String,
         dueDate: Date,
         isCompleted: Bool,
+        isHighPriority: Bool = false,
         detailLine: String? = nil
     ) {
         let identifier = notificationIdentifier(for: taskID)
@@ -74,6 +78,7 @@ enum ReminderScheduler {
                 title: title,
                 categoryTitle: categoryTitle,
                 dueDate: dueDate,
+                isHighPriority: isHighPriority,
                 detailLine: detailLine
             )
         }
@@ -85,6 +90,7 @@ enum ReminderScheduler {
         categoryTitle: String,
         dueDate: Date,
         minutes: Int = 10,
+        isHighPriority: Bool = false,
         detailLine: String? = nil
     ) {
         let identifier = notificationIdentifier(for: taskID)
@@ -103,6 +109,7 @@ enum ReminderScheduler {
                 dueDate: dueDate,
                 preferredTriggerDate: snoozeDate,
                 titleOverride: "Snoozed for \(minutes) minutes",
+                isHighPriority: isHighPriority,
                 detailLine: detailLine
             )
         }
@@ -146,6 +153,7 @@ enum ReminderScheduler {
         dueDate: Date,
         preferredTriggerDate: Date? = nil,
         titleOverride: String? = nil,
+        isHighPriority: Bool = false,
         detailLine: String? = nil
     ) {
         let now = Date()
@@ -163,24 +171,35 @@ enum ReminderScheduler {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = titleOverride ?? notificationTitle(for: dueDate, referenceDate: triggerDate)
-        content.subtitle = title
-        content.body = notificationBody(
+        let statusLine = titleOverride ?? notificationTitle(for: dueDate, referenceDate: triggerDate)
+        let detailText = notificationDetailLine(
             categoryTitle: categoryTitle,
             dueDate: dueDate,
             detailLine: detailLine
         )
+        let footerText = dueFooterText(for: dueDate)
+
+        content.title = title
+        content.subtitle = detailText
+        content.body = composeBody(lines: [statusLine, footerText])
         content.sound = .default
         content.badge = 1
         content.categoryIdentifier = categoryIdentifier
         content.threadIdentifier = "lifetrack.task-reminders"
         content.targetContentIdentifier = identifier
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = isHighPriority ? .timeSensitive : .active
+            content.relevanceScore = isHighPriority ? 0.95 : 0.62
+        }
         content.userInfo = [
             taskIDUserInfoKey: String(identifier.dropFirst(identifierPrefix.count)),
             taskTitleUserInfoKey: title,
             categoryTitleUserInfoKey: categoryTitle,
             dueTimestampUserInfoKey: dueDate.timeIntervalSince1970,
-            themeIDUserInfoKey: LifeTrackAppTheme.current.rawValue
+            themeIDUserInfoKey: LifeTrackAppTheme.current.rawValue,
+            reminderStatusUserInfoKey: statusLine,
+            reminderDetailUserInfoKey: detailText,
+            isHighPriorityUserInfoKey: isHighPriority
         ]
 
         let components = Calendar.current.dateComponents(
@@ -206,12 +225,12 @@ enum ReminderScheduler {
         "\(identifierPrefix)\(taskID.uuidString)"
     }
 
-    private static func notificationTitle(for dueDate: Date, referenceDate: Date) -> String {
+    static func notificationTitle(for dueDate: Date, referenceDate: Date) -> String {
         let remainingSeconds = max(0, dueDate.timeIntervalSince(referenceDate))
-        let remainingMinutes = max(1, Int(ceil(remainingSeconds / 60)))
+        let remainingMinutes = Int(ceil(remainingSeconds / 60))
 
-        if remainingMinutes >= 30 {
-            return "Due in 30 minutes"
+        if remainingMinutes <= 0 {
+            return "Due now"
         }
 
         if remainingMinutes == 1 {
@@ -221,7 +240,7 @@ enum ReminderScheduler {
         return "Due in \(remainingMinutes) minutes"
     }
 
-    private static func notificationBody(
+    private static func notificationDetailLine(
         categoryTitle: String,
         dueDate: Date,
         detailLine: String?
@@ -236,6 +255,27 @@ enum ReminderScheduler {
         }
 
         return "\(categoryTitle) • \(dueDate.timeString)"
+    }
+
+    static func composeBody(lines: [String]) -> String {
+        lines
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+    }
+
+    static func dueFooterText(for dueDate: Date) -> String {
+        let calendar = Calendar.current
+        let timeText = dueDate.formatted(.dateTime.hour().minute())
+
+        if calendar.isDateInToday(dueDate) {
+            return "Today at \(timeText)"
+        }
+
+        if calendar.isDateInTomorrow(dueDate) {
+            return "Tomorrow at \(timeText)"
+        }
+
+        return dueDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
     }
 
     private static func queueActionTipIfNeeded() {

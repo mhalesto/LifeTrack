@@ -602,7 +602,7 @@ private struct MoneyAIHealthRing: View {
 
             VStack(spacing: 0) {
                 Text("\(max(0, min(100, score)))")
-                    .font(.system(.title, design: LifeTrackAppTheme.current.fontDesign, weight: .bold))
+                    .font(.lifeTrack(.title, weight: .bold))
                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                 Text("Score")
                     .font(.caption2.weight(.bold))

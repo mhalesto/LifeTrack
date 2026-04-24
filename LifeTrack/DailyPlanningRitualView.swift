@@ -11,6 +11,7 @@ import SwiftData
 struct DailyPlanningRitualView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var calendarManager = CalendarIntegrationManager.shared
 
     let tasks: [LifeTask]
     let customCategories: [CustomTaskCategory]
@@ -45,6 +46,24 @@ struct DailyPlanningRitualView: View {
         selectedTasks.reduce(0) { $0 + (taskDurations[$1.id] ?? $1.scheduledDurationMinutes) }
     }
 
+    private var planningDayInterval: DateInterval {
+        CalendarAwareScheduleEngine.dayLoadInterval(for: Date())
+    }
+
+    private var planningBusyBlocks: [CalendarBusyBlock] {
+        calendarManager.busyBlocks(overlapping: planningDayInterval)
+    }
+
+    private var ritualPlan: CalendarAwareSchedulePlan {
+        CalendarAwareScheduleEngine.sequentialPlan(
+            for: selectedTasks,
+            taskDurations: taskDurations,
+            busyBlocks: planningBusyBlocks,
+            referenceDate: Date(),
+            energyLevel: energyLevel
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -72,6 +91,7 @@ struct DailyPlanningRitualView: View {
         .task {
             await HealthKitEnergyReader.shared.requestAuthorizationAndRefresh()
             energyLevel = HealthKitEnergyReader.shared.energyLevel
+            await calendarManager.loadBusyBlocks(in: planningDayInterval)
         }
         .onAppear {
             if yesterdayTasks.isEmpty && step == .yesterdayReview {
@@ -131,9 +151,10 @@ struct DailyPlanningRitualView: View {
             )
         case .launchDay:
             LaunchDayStep(
-                selectedTasks: selectedTasks,
-                taskDurations: taskDurations,
+                scheduledBlocks: ritualPlan.blocks,
+                unscheduledTitles: ritualPlan.unscheduledTitles,
                 totalMinutes: totalCommittedMinutes,
+                busyBlockCount: planningBusyBlocks.count,
                 onStart: commitAndDismiss
             )
         }
@@ -154,14 +175,34 @@ struct DailyPlanningRitualView: View {
     }
 
     private func commitAndDismiss() {
+        let scheduledBlocksByTaskID = Dictionary(uniqueKeysWithValues: ritualPlan.blocks.map { ($0.taskID, $0) })
+        let now = Date()
+
         for task in selectedTasks {
             let duration = taskDurations[task.id] ?? task.scheduledDurationMinutes
-            if task.estimatedDurationMinutes != duration {
-                task.estimatedDurationMinutes = duration
-                task.updatedAt = Date()
+            let scheduledBlock = scheduledBlocksByTaskID[task.id]
+            let nextDueDate = scheduledBlock?.startDate ?? task.dueDate
+            let nextDuration = scheduledBlock?.durationMinutes ?? duration
+
+            if task.dueDate != nextDueDate {
+                task.dueDate = nextDueDate
+            }
+
+            if task.estimatedDurationMinutes != nextDuration {
+                task.estimatedDurationMinutes = nextDuration
+            }
+
+            if task.updatedAt != now {
+                task.updatedAt = now
             }
         }
+
         try? modelContext.save()
+
+        for task in selectedTasks {
+            TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        }
+
         dismiss()
     }
 }
@@ -466,9 +507,10 @@ private struct TimeBoxRow: View {
 // MARK: - Step 4: Launch Day
 
 private struct LaunchDayStep: View {
-    let selectedTasks: [LifeTask]
-    let taskDurations: [UUID: Int]
+    let scheduledBlocks: [ScheduledBlock]
+    let unscheduledTitles: [String]
     let totalMinutes: Int
+    let busyBlockCount: Int
     let onStart: () -> Void
 
     var body: some View {
@@ -477,13 +519,12 @@ private struct LaunchDayStep: View {
                 icon: "sunrise.fill",
                 iconColor: Color(red: 0.95, green: 0.65, blue: 0.1),
                 title: "You're Set!",
-                subtitle: "Your plan for today — \(formattedDuration(totalMinutes)) committed."
+                subtitle: launchSubtitle
             )
 
             ScrollView {
                 VStack(spacing: LifeTrackTheme.Spacing.small) {
-                    ForEach(Array(selectedTasks.enumerated()), id: \.element.id) { index, task in
-                        let duration = taskDurations[task.id] ?? task.scheduledDurationMinutes
+                    ForEach(Array(scheduledBlocks.enumerated()), id: \.element.id) { index, block in
                         HStack(spacing: 12) {
                             ZStack {
                                 Circle()
@@ -495,11 +536,11 @@ private struct LaunchDayStep: View {
                             }
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(task.title)
+                                Text(block.taskTitle)
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                                     .lineLimit(1)
-                                Text(formattedDuration(duration))
+                                Text("\(block.start)-\(block.end) · \(formattedDuration(block.durationMinutes))")
                                     .font(.caption)
                                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                             }
@@ -508,6 +549,28 @@ private struct LaunchDayStep: View {
                         }
                         .padding(LifeTrackTheme.Spacing.medium)
                         .background(LifeTrackTheme.ColorPalette.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+
+                    if !unscheduledTitles.isEmpty {
+                        SectionCardView {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Still needs space")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                                ForEach(unscheduledTitles, id: \.self) { title in
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "tray")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(LifeTrackTheme.ColorPalette.warning)
+                                        Text(title)
+                                            .font(.footnote)
+                                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                                            .lineLimit(2)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
@@ -528,6 +591,14 @@ private struct LaunchDayStep: View {
                 )
             }
         }
+    }
+
+    private var launchSubtitle: String {
+        var parts = ["\(formattedDuration(totalMinutes)) committed"]
+        if busyBlockCount > 0 {
+            parts.append("\(busyBlockCount) calendar \(busyBlockCount == 1 ? "event" : "events") protected")
+        }
+        return "Your plan for today — \(parts.joined(separator: " · "))."
     }
 }
 

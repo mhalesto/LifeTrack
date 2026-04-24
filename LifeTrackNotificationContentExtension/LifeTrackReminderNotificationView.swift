@@ -9,16 +9,22 @@ import UIKit
 import UserNotifications
 
 struct LifeTrackReminderNotificationModel {
-    let reminderTitle: String
+    let statusText: String
     let taskTitle: String
     let categoryTitle: String
+    let detailText: String
+    let footerText: String
     let dueDate: Date?
+    let isHighPriority: Bool
 
     static let placeholder = LifeTrackReminderNotificationModel(
-        reminderTitle: "Due in 30 minutes",
-        taskTitle: "Loading…",
-        categoryTitle: "Task",
-        dueDate: nil
+        statusText: "Due in 30 minutes",
+        taskTitle: "Take medication",
+        categoryTitle: "Health",
+        detailText: "High priority • Health • 30 min",
+        footerText: "Today at 10:45",
+        dueDate: nil,
+        isHighPriority: true
     )
 
     init(content: UNNotificationContent) {
@@ -26,23 +32,46 @@ struct LifeTrackReminderNotificationModel {
         let taskTitle = userInfo["taskTitle"] as? String
         let categoryTitle = userInfo["categoryTitle"] as? String
         let dueTimestamp = userInfo["dueTimestamp"] as? TimeInterval
+        let statusText = userInfo["reminderStatus"] as? String
+        let detailText = userInfo["reminderDetail"] as? String
+        let isHighPriority = userInfo["isHighPriority"] as? Bool
+        let bodyLines = content.body
+            .components(separatedBy: .newlines)
+            .compactMap(\.nonEmptyValue)
 
-        self.reminderTitle = content.title.nonEmptyValue ?? "Task reminder"
-        self.taskTitle = taskTitle?.nonEmptyValue ?? content.subtitle.nonEmptyValue ?? "LifeTrack task"
+        let resolvedStatus = statusText?.nonEmptyValue ?? content.subtitle.nonEmptyValue ?? bodyLines.first ?? "Task reminder"
+        let remainingLines: [String]
+        if let first = bodyLines.first, first.compare(resolvedStatus, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame {
+            remainingLines = Array(bodyLines.dropFirst())
+        } else {
+            remainingLines = bodyLines
+        }
+
+        self.statusText = resolvedStatus
+        self.taskTitle = taskTitle?.nonEmptyValue ?? content.title.nonEmptyValue ?? "LifeTrack task"
         self.categoryTitle = categoryTitle?.nonEmptyValue ?? "Task"
+        self.detailText = detailText?.nonEmptyValue ?? remainingLines.first ?? "Stay on track."
+        self.footerText = remainingLines.dropFirst().joined(separator: " • ").nonEmptyValue ?? dueTimestamp.map { Self.footerText(for: Date(timeIntervalSince1970: $0)) } ?? "Due soon"
         self.dueDate = dueTimestamp.map(Date.init(timeIntervalSince1970:))
+        self.isHighPriority = isHighPriority ?? self.detailText.localizedCaseInsensitiveContains("high priority")
     }
 
     init(
-        reminderTitle: String,
+        statusText: String,
         taskTitle: String,
         categoryTitle: String,
-        dueDate: Date?
+        detailText: String,
+        footerText: String,
+        dueDate: Date?,
+        isHighPriority: Bool
     ) {
-        self.reminderTitle = reminderTitle
+        self.statusText = statusText
         self.taskTitle = taskTitle
         self.categoryTitle = categoryTitle
+        self.detailText = detailText
+        self.footerText = footerText
         self.dueDate = dueDate
+        self.isHighPriority = isHighPriority
     }
 
     var dueTimeText: String {
@@ -88,6 +117,46 @@ struct LifeTrackReminderNotificationModel {
         default:
             return UIColor(red: 0.19, green: 0.35, blue: 0.85, alpha: 1.0)
         }
+    }
+
+    var statusTint: UIColor {
+        isHighPriority ? UIColor(red: 0.82, green: 0.24, blue: 0.28, alpha: 1.0) : categoryTint
+    }
+
+    var symbolName: String {
+        switch categoryTitle.lowercased() {
+        case "health":
+            return "heart.text.square.fill"
+        case "finance":
+            return "creditcard.fill"
+        case "work":
+            return "briefcase.fill"
+        case "home":
+            return "house.fill"
+        case "personal":
+            return "person.crop.circle.fill"
+        default:
+            return "checklist"
+        }
+    }
+
+    private static func footerText(for dueDate: Date) -> String {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        let timeText = formatter.string(from: dueDate)
+
+        if calendar.isDateInToday(dueDate) {
+            return "Today at \(timeText)"
+        }
+        if calendar.isDateInTomorrow(dueDate) {
+            return "Tomorrow at \(timeText)"
+        }
+
+        formatter.dateStyle = .medium
+        return formatter.string(from: dueDate)
     }
 }
 

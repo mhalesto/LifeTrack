@@ -74,716 +74,48 @@ struct BetaAnimatedShapesBackground: View {
     }
 }
 
-// MARK: - Palette
-
-/// Beta dashboard palette. Keeps the warm purple/pink/peach pastel
-/// aesthetic as the default look, but routes accent/status tints and
-/// text tones through `LifeTrackAppTheme.current` so it reacts to
-/// theme and color-strength changes just like the default dashboard.
-private enum BetaPalette {
-    // Background washes (beta aesthetic — stay constant)
-    static let bgTop = Color(hex: 0xF8F2FB)
-    static let bgMid = Color(hex: 0xF7ECF1)
-    static let bgBottom = Color(hex: 0xFBF2E9)
-
-    // Hero streak card (beta aesthetic — stay constant)
-    static let heroTop = Color(hex: 0xE8DEF6)
-    static let heroMid = Color(hex: 0xF0DEEA)
-    static let heroBottom = Color(hex: 0xFBE5D2)
-
-    static let faintBorder = Color.black.opacity(0.05)
-
-    static let peach = Color(hex: 0xFFB07A)
-    static let peachDeep = Color(hex: 0xFF8EAC)
-
-    // Alert (cream/peach — beta aesthetic)
-    static let alertBg = Color(hex: 0xFCE7DA)
-    static let alertIconBg = Color(hex: 0xFFD2B8)
-    static let alertIcon = Color(hex: 0xD97757)
-    static let alertText = Color(hex: 0xB35A3F)
-
-    // Category placeholders kept for any legacy usage
-    static let catHome = Color(hex: 0xC98258)
-    static let catHomeBg = Color(hex: 0xF2E4D6)
-    static let catPersonal = Color(hex: 0x3B82F6)
-    static let catPersonalBg = Color(hex: 0xE0ECFE)
-    static let catHealth = Color(hex: 0x10B981)
-    static let catHealthBg = Color(hex: 0xDCF3E8)
-    static let catFallback = Color(hex: 0x8B5CF6)
-    static let catFallbackBg = Color(hex: 0xEADDFB)
-
-    // MARK: Theme-reactive tones
-
-    private static var theme: LifeTrackAppTheme { LifeTrackAppTheme.current }
-
-    static var primaryText: Color { theme.primaryText }
-    static var secondaryText: Color { theme.secondaryText }
-    static var tertiaryText: Color { theme.tertiaryText }
-
-    static var accent: Color { theme.accent }
-    static var accentDeep: Color { theme.accentDeep }
-    static var accentSoft: Color { theme.accentSoft }
-
-    static var overdue: Color { theme.danger }
-
-    // Stat icons — tinted per category of stat, but each routed through the theme
-    static var statDueToday: Color { theme.accent }
-    static var statDueTodayBg: Color { theme.accentSoft }
-    static var statUpcoming: Color { theme.secondaryAccent }
-    static var statUpcomingBg: Color { theme.secondaryAccent.opacity(0.18) }
-    static var statCompleted: Color { theme.success }
-    static var statCompletedBg: Color { theme.success.opacity(0.18) }
-    static var statOverdue: Color { theme.danger }
-    static var statOverdueBg: Color { theme.danger.opacity(0.18) }
-
-    // Wave strokes below each stat
-    static var waveDueToday: Color { theme.accentDeep }
-    static var waveUpcoming: Color { theme.secondaryAccent }
-    static var waveCompleted: Color { theme.success }
-    static var waveOverdue: Color { theme.danger }
-
-    // Quick actions
-    static var qaPlanTint: Color { theme.warning }
-    static var qaPlanBg: Color { theme.warning.opacity(0.14) }
-    static var qaHabitsTint: Color { theme.danger }
-    static var qaHabitsBg: Color { theme.danger.opacity(0.14) }
-    static var qaReviewTint: Color { theme.secondaryAccent }
-    static var qaReviewBg: Color { theme.secondaryAccent.opacity(0.14) }
-    static var qaFocusTint: Color { theme.accent }
-    static var qaFocusBg: Color { theme.accentSoft }
-    static var qaAccentTint: Color { theme.accent }
-    static var qaAccentBg: Color { theme.accentSoft }
-    static var qaSuccessTint: Color { theme.success }
-    static var qaSuccessBg: Color { theme.success.opacity(0.14) }
-    static var qaInfoTint: Color { theme.secondaryAccent }
-    static var qaInfoBg: Color { theme.secondaryAccent.opacity(0.14) }
-    static var qaWarningTint: Color { theme.warning }
-    static var qaWarningBg: Color { theme.warning.opacity(0.14) }
-    static var qaDangerTint: Color { theme.danger }
-    static var qaDangerBg: Color { theme.danger.opacity(0.14) }
-
-    // Gradients
-    static var appBackground: LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: bgTop, location: 0.0),
-                .init(color: bgMid, location: 0.45),
-                .init(color: bgBottom, location: 1.0)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    static var heroBackground: LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: heroTop, location: 0.0),
-                .init(color: heroMid, location: 0.55),
-                .init(color: heroBottom, location: 1.0)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    static var fabGradient: LinearGradient {
-        LinearGradient(
-            colors: [accentDeep, accent],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    static var primaryGradient: LinearGradient {
-        LinearGradient(
-            colors: [accent, accentDeep],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-    }
-}
 
 // MARK: - Serif font helpers
 
-private extension Font {
-    static let betaBrand = Font.system(size: 30, weight: .bold, design: .serif)
-    static let betaGreeting = Font.system(size: 22, weight: .semibold, design: .serif)
-    static let betaHeroTitle = Font.system(size: 28, weight: .bold, design: .serif)
-    static let betaSection = Font.system(size: 20, weight: .bold, design: .serif)
-    static let betaMetric = Font.system(size: 26, weight: .bold, design: .serif)
-    static let betaStreakStat = Font.system(size: 20, weight: .bold, design: .serif)
-}
+extension Font {
+    static var betaBrand: Font { .lifeTrack(size: 30, role: .title, weight: .bold, defaultDesign: .serif) }
+    static var betaGreeting: Font { .lifeTrack(size: 22, role: .title, weight: .semibold, defaultDesign: .serif) }
+    static var betaHeroTitle: Font { .lifeTrack(size: 28, role: .title, weight: .bold, defaultDesign: .serif) }
+    static var betaSection: Font { .lifeTrack(size: 20, role: .title, weight: .bold, defaultDesign: .serif) }
+    static var betaMetric: Font { .lifeTrack(size: 26, role: .title, weight: .bold, defaultDesign: .serif) }
+    static var betaStreakStat: Font { .lifeTrack(size: 20, role: .title, weight: .bold, defaultDesign: .serif) }
 
-// MARK: - Stat Wave shape
+    static func betaBody(_ size: CGFloat, weight: Font.Weight = .regular, defaultDesign: Font.Design = .default) -> Font {
+        .lifeTrack(size: size, role: .body, weight: weight, defaultDesign: defaultDesign)
+    }
 
-private struct StatSparkline: Shape {
-    var values: [Double]
-    var closed: Bool = false
+    static func betaCaption(_ size: CGFloat, weight: Font.Weight = .medium, defaultDesign: Font.Design = .default) -> Font {
+        .lifeTrack(size: size, role: .caption, weight: weight, defaultDesign: defaultDesign)
+    }
 
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let topInset: CGFloat = 2
-        let bottomInset: CGFloat = 2
-        let usableHeight = max(rect.height - topInset - bottomInset, 1)
-
-        guard values.count >= 2 else {
-            let y = rect.midY
-            path.move(to: CGPoint(x: 0, y: y))
-            path.addLine(to: CGPoint(x: rect.width, y: y))
-            if closed {
-                path.addLine(to: CGPoint(x: rect.width, y: rect.height))
-                path.addLine(to: CGPoint(x: 0, y: rect.height))
-                path.closeSubpath()
-            }
-            return path
-        }
-
-        let maxV = values.max() ?? 0
-        let minV = values.min() ?? 0
-        let range = maxV - minV
-
-        let stepX = rect.width / CGFloat(values.count - 1)
-        var points: [CGPoint] = []
-        for (i, v) in values.enumerated() {
-            let x = CGFloat(i) * stepX
-            let y: CGFloat
-            if range < 0.0001 {
-                y = rect.midY
-            } else {
-                let normalized = (v - minV) / range
-                y = rect.maxY - bottomInset - CGFloat(normalized) * usableHeight
-            }
-            points.append(CGPoint(x: x, y: y))
-        }
-
-        path.move(to: points[0])
-        for i in 0..<(points.count - 1) {
-            let p0 = points[max(i - 1, 0)]
-            let p1 = points[i]
-            let p2 = points[i + 1]
-            let p3 = points[min(i + 2, points.count - 1)]
-            let c1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6)
-            let c2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6)
-            path.addCurve(to: p2, control1: c1, control2: c2)
-        }
-
-        if closed {
-            path.addLine(to: CGPoint(x: rect.width, y: rect.height))
-            path.addLine(to: CGPoint(x: 0, y: rect.height))
-            path.closeSubpath()
-        }
-        return path
+    static func betaRounded(_ size: CGFloat, role: LifeTrackTypography.Role, weight: Font.Weight = .semibold) -> Font {
+        .lifeTrack(size: size, role: role, weight: weight, defaultDesign: .rounded)
     }
 }
 
-private struct BetaMetricTrends {
-    var dueToday: [Double]
-    var upcoming: [Double]
-    var completed: [Double]
-    var overdue: [Double]
-}
-
-private struct StatWave: Shape {
-    var amplitude: CGFloat
-    var frequency: CGFloat
-    var phase: CGFloat
-    var closed: Bool = false
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let midY = rect.midY
-        let steps = 60
-        path.move(to: CGPoint(x: 0, y: midY))
-        for i in 1...steps {
-            let x = CGFloat(i) / CGFloat(steps) * rect.width
-            let relative = x / rect.width
-            let envelope = sin(relative * .pi) // taper ends
-            let y = midY + sin(relative * .pi * 2 * frequency + phase) * amplitude * envelope
-            path.addLine(to: CGPoint(x: x, y: y))
-        }
-        if closed {
-            path.addLine(to: CGPoint(x: rect.width, y: rect.height))
-            path.addLine(to: CGPoint(x: 0, y: rect.height))
-            path.closeSubpath()
-        }
-        return path
-    }
-}
-
-// MARK: - Streak Hero Illustration
-
-private struct PedestalShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let w = rect.width
-        let h = rect.height
-        // Rounded, slightly asymmetric stone silhouette
-        path.move(to: CGPoint(x: w * 0.06, y: h * 0.52))
-        path.addCurve(
-            to: CGPoint(x: w * 0.34, y: h * 0.06),
-            control1: CGPoint(x: w * 0.02, y: h * 0.28),
-            control2: CGPoint(x: w * 0.15, y: h * 0.08)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.68, y: h * 0.04),
-            control1: CGPoint(x: w * 0.46, y: h * 0.00),
-            control2: CGPoint(x: w * 0.56, y: h * 0.02)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.96, y: h * 0.46),
-            control1: CGPoint(x: w * 0.86, y: h * 0.08),
-            control2: CGPoint(x: w * 0.98, y: h * 0.22)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.84, y: h * 0.94),
-            control1: CGPoint(x: w * 0.98, y: h * 0.76),
-            control2: CGPoint(x: w * 0.96, y: h * 0.92)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.16, y: h * 0.92),
-            control1: CGPoint(x: w * 0.56, y: h * 1.02),
-            control2: CGPoint(x: w * 0.42, y: h * 1.00)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.06, y: h * 0.52),
-            control1: CGPoint(x: w * 0.04, y: h * 0.86),
-            control2: CGPoint(x: w * 0.02, y: h * 0.72)
-        )
-        path.closeSubpath()
-        return path
-    }
-}
-
-private struct FlameShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let w = rect.width
-        let h = rect.height
-        path.move(to: CGPoint(x: w * 0.52, y: h * 0.99))
-        path.addCurve(
-            to: CGPoint(x: w * 0.12, y: h * 0.58),
-            control1: CGPoint(x: w * 0.15, y: h * 0.94),
-            control2: CGPoint(x: w * 0.02, y: h * 0.78)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.34, y: h * 0.18),
-            control1: CGPoint(x: w * 0.22, y: h * 0.36),
-            control2: CGPoint(x: w * 0.18, y: h * 0.28)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.58, y: h * 0.02),
-            control1: CGPoint(x: w * 0.46, y: h * 0.10),
-            control2: CGPoint(x: w * 0.48, y: h * 0.04)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.74, y: h * 0.40),
-            control1: CGPoint(x: w * 0.66, y: h * 0.12),
-            control2: CGPoint(x: w * 0.62, y: h * 0.28)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.92, y: h * 0.62),
-            control1: CGPoint(x: w * 0.82, y: h * 0.46),
-            control2: CGPoint(x: w * 0.94, y: h * 0.50)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.52, y: h * 0.99),
-            control1: CGPoint(x: w * 0.94, y: h * 0.86),
-            control2: CGPoint(x: w * 0.76, y: h * 0.98)
-        )
-        path.closeSubpath()
-        return path
-    }
-}
-
-private struct StreakHeroIllustration: View {
-    private struct SparkleDot: Identifiable {
-        let id = UUID()
-        let offsetX: CGFloat
-        let offsetY: CGFloat
-        let size: CGFloat
-        let opacity: Double
-    }
-
-    private let sparkles: [SparkleDot] = [
-        .init(offsetX: -58, offsetY: -55, size: 12, opacity: 0.9),
-        .init(offsetX: 52, offsetY: -70, size: 10, opacity: 0.8),
-        .init(offsetX: 78, offsetY: -10, size: 8, opacity: 0.95),
-        .init(offsetX: -40, offsetY: -80, size: 6, opacity: 0.6),
-        .init(offsetX: 28, offsetY: -96, size: 6, opacity: 0.55),
-        .init(offsetX: -78, offsetY: 10, size: 7, opacity: 0.7),
-        .init(offsetX: 92, offsetY: -50, size: 6, opacity: 0.6),
-        .init(offsetX: -20, offsetY: -38, size: 5, opacity: 0.55),
-        .init(offsetX: 64, offsetY: 22, size: 5, opacity: 0.5)
-    ]
-
-    var body: some View {
-        ZStack {
-            // Warm ambient glow behind everything
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(hex: 0xFFB07A).opacity(0.45),
-                            Color(hex: 0xFFD2A8).opacity(0.22),
-                            Color.clear
-                        ],
-                        center: .center,
-                        startRadius: 10,
-                        endRadius: 130
-                    )
-                )
-                .frame(width: 240, height: 210)
-                .offset(y: -10)
-
-            // Back decorative ferns (right)
-            Group {
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 46, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(hex: 0x9986CC), Color(hex: 0x5E4E8F)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .rotationEffect(.degrees(32))
-                    .offset(x: 86, y: -6)
-                    .shadow(color: Color(hex: 0x4A3D78).opacity(0.3), radius: 3, y: 2)
-
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(hex: 0xB5A2DE), Color(hex: 0x7464A8)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .rotationEffect(.degrees(-12))
-                    .offset(x: 100, y: 28)
-                    .opacity(0.9)
-
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Color(hex: 0xC8B7E5))
-                    .rotationEffect(.degrees(50))
-                    .offset(x: 74, y: -30)
-                    .opacity(0.75)
-            }
-
-            // Sparkles layer (behind ring)
-            ForEach(sparkles) { dot in
-                Image(systemName: "sparkle")
-                    .font(.system(size: dot.size, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.white, Color(hex: 0xFFE8C8).opacity(0.9)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .opacity(dot.opacity)
-                    .offset(x: dot.offsetX, y: dot.offsetY)
-                    .shadow(color: Color(hex: 0xFFCFA0).opacity(0.7), radius: 3)
-            }
-
-            // Rocky pedestal — 3D layered stone
-            ZStack {
-                // Soft ground shadow
-                Ellipse()
-                    .fill(Color.black.opacity(0.28))
-                    .frame(width: 196, height: 20)
-                    .blur(radius: 10)
-                    .offset(y: 94)
-
-                // Darker back/base of rock
-                PedestalShape()
-                    .fill(
-                        LinearGradient(
-                            stops: [
-                                .init(color: Color(hex: 0x8A7AB4), location: 0.0),
-                                .init(color: Color(hex: 0x6B5C96), location: 0.4),
-                                .init(color: Color(hex: 0x3F3368), location: 0.9),
-                                .init(color: Color(hex: 0x2A2050), location: 1.0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 200, height: 100)
-                    .offset(y: 54)
-                    .shadow(color: Color.black.opacity(0.18), radius: 6, y: 4)
-
-                // Inner rim lighting (warm from the flame)
-                PedestalShape()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color(hex: 0xFFC99A).opacity(0.55),
-                                Color.clear
-                            ],
-                            center: UnitPoint(x: 0.5, y: 0.1),
-                            startRadius: 4,
-                            endRadius: 90
-                        )
-                    )
-                    .frame(width: 200, height: 100)
-                    .offset(y: 54)
-                    .blendMode(.plusLighter)
-
-                // Upper facet — brighter top of the stone
-                PedestalShape()
-                    .fill(
-                        LinearGradient(
-                            stops: [
-                                .init(color: Color(hex: 0xDFCEF1), location: 0.0),
-                                .init(color: Color(hex: 0xAF9ED6), location: 0.55),
-                                .init(color: Color(hex: 0x7A68AD), location: 1.0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 176, height: 62)
-                    .offset(y: 38)
-
-                // Specular top highlight (glossy arc)
-                Ellipse()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.75),
-                                Color.white.opacity(0.0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 150, height: 18)
-                    .offset(y: 30)
-                    .blur(radius: 0.5)
-
-                // Side fern (left, in front of rock)
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(hex: 0xB19ED8), Color(hex: 0x6B5CA0)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
-                    .rotationEffect(.degrees(-38))
-                    .offset(x: -86, y: 52)
-
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(hex: 0xD3C2E8), Color(hex: 0x8A79BE)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
-                    .rotationEffect(.degrees(22))
-                    .offset(x: -72, y: 66)
-
-                // Tiny pink bud on right
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: 0xE9B4C4))
-                    .rotationEffect(.degrees(18))
-                    .offset(x: 74, y: 44)
-                    .opacity(0.88)
-            }
-
-            // Streak ring — outer warm glow
-            Circle()
-                .stroke(Color(hex: 0xFF8A4C).opacity(0.28), lineWidth: 28)
-                .frame(width: 128, height: 128)
-                .blur(radius: 10)
-
-            // Streak ring — main (angular gradient with strong orange hotspot on right)
-            Circle()
-                .stroke(
-                    AngularGradient(
-                        stops: [
-                            .init(color: Color(hex: 0x6B5CE0), location: 0.0),
-                            .init(color: Color(hex: 0x9884F2), location: 0.10),
-                            .init(color: Color(hex: 0xCBBDFF), location: 0.25),
-                            .init(color: Color(hex: 0xFFE3CE), location: 0.42),
-                            .init(color: Color(hex: 0xFFB071), location: 0.55),
-                            .init(color: Color(hex: 0xFF7A3E), location: 0.68),
-                            .init(color: Color(hex: 0xFFB47A), location: 0.82),
-                            .init(color: Color(hex: 0x8B5CF6), location: 1.0)
-                        ],
-                        center: .center,
-                        startAngle: .degrees(-110),
-                        endAngle: .degrees(250)
-                    ),
-                    style: StrokeStyle(lineWidth: 20, lineCap: .round)
-                )
-                .frame(width: 128, height: 128)
-                .shadow(color: Color(hex: 0xFF8A4C).opacity(0.35), radius: 10, x: 0, y: 4)
-
-            // Specular highlight on top-right of ring
-            Circle()
-                .trim(from: 0.60, to: 0.88)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.9), Color.white.opacity(0.0)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                )
-                .frame(width: 128, height: 128)
-
-            // Inner dark rim to give ring depth
-            Circle()
-                .stroke(Color(hex: 0x3A2D6E).opacity(0.25), lineWidth: 1.4)
-                .frame(width: 112, height: 112)
-
-            // Flame layered glow
-            Circle()
-                .fill(Color(hex: 0xFFA64C).opacity(0.55))
-                .frame(width: 72, height: 72)
-                .blur(radius: 14)
-
-            Circle()
-                .fill(Color(hex: 0xFFD98A).opacity(0.5))
-                .frame(width: 46, height: 46)
-                .blur(radius: 8)
-
-            // Flame body — outer orange
-            FlameShape()
-                .fill(
-                    LinearGradient(
-                        stops: [
-                            .init(color: Color(hex: 0xFFDA7A), location: 0.0),
-                            .init(color: Color(hex: 0xFFA84B), location: 0.45),
-                            .init(color: Color(hex: 0xFF5E1C), location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 42, height: 62)
-                .shadow(color: Color(hex: 0xFF5E1C).opacity(0.6), radius: 8, y: 2)
-
-            // Flame inner — yellow/white core
-            FlameShape()
-                .fill(
-                    LinearGradient(
-                        stops: [
-                            .init(color: Color.white, location: 0.0),
-                            .init(color: Color(hex: 0xFFF0C4), location: 0.35),
-                            .init(color: Color(hex: 0xFFB261).opacity(0.8), location: 0.9)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 22, height: 38)
-                .offset(y: 6)
-                .blendMode(.plusLighter)
-        }
-        .frame(width: 220, height: 220)
-    }
-}
-
-// MARK: - Daily Focus Backdrop
-
-private struct DailyFocusBackdrop: View {
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(hex: 0xF1E7DC),
-                    Color(hex: 0xEEDCE4),
-                    Color(hex: 0xE8D8EA)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            // Back mountain (lavender)
-            MountainShape(peaks: [
-                (0.0, 0.68), (0.2, 0.45), (0.42, 0.58), (0.65, 0.36), (0.85, 0.52), (1.0, 0.48)
-            ])
-            .fill(
-                LinearGradient(
-                    colors: [Color(hex: 0xC9B5D9).opacity(0.65), Color(hex: 0xB39CCE).opacity(0.4)],
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
-            .offset(y: 8)
-
-            // Mid mountain (peach)
-            MountainShape(peaks: [
-                (0.0, 0.85), (0.18, 0.62), (0.38, 0.76), (0.6, 0.55), (0.82, 0.72), (1.0, 0.6)
-            ])
-            .fill(
-                LinearGradient(
-                    colors: [Color(hex: 0xE9B7A2).opacity(0.55), Color(hex: 0xE9A4AB).opacity(0.35)],
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
-            .offset(y: 32)
-
-            // Foreground haze
-            LinearGradient(
-                colors: [Color.clear, Color(hex: 0xF0D9C4).opacity(0.45), Color(hex: 0xEEC9D5).opacity(0.25)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-    }
-}
-
-private struct MountainShape: Shape {
-    let peaks: [(CGFloat, CGFloat)]
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: 0, y: rect.height))
-        for peak in peaks {
-            path.addLine(to: CGPoint(x: peak.0 * rect.width, y: peak.1 * rect.height))
-        }
-        path.addLine(to: CGPoint(x: rect.width, y: rect.height))
-        path.closeSubpath()
-        return path
-    }
-}
+// Sibling files:
+//   BetaDashboardShapes.swift        — StatSparkline, StatWave, PedestalShape,
+//                                      FlameShape, MountainShape, BetaLeafShape,
+//                                      BetaMetricTrends
+//   BetaDashboardIllustrations.swift — StreakHeroIllustration, DailyFocusBackdrop
+//   BetaDashboardPalette.swift       — BetaPalette
+//   BetaDashboardTypes.swift         — BetaTab, BetaHomeRoute, BetaQuickAction,
+//                                      DashboardSortOrder, BetaSummaryKind
+//   BetaDashboardComponents.swift    — BetaDashboardTabBar, BetaRecentDocumentRow,
+//                                      BetaSummaryTaskCard, HeroPager, HeroPagerDots
+//   BetaDashboardSheets.swift        — DailyFocusSortSheet, BetaStatSummarySheet,
+//                                      FocusTimerSheet, QuickActionsCustomizeSheet
+//   BetaDashboardHeroHelpers.swift   — productivityHeroShell, heroMetricPill,
+//                                      heroProgressRow, heroInsightRow,
+//                                      heroActionButton, heroInlineActionButton,
+//                                      streakStatCell, betaFocusPlanningButton
 
 // MARK: - LifeTrack Logo Mark
-
-private struct BetaLeafShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let w = rect.width
-        let h = rect.height
-
-        // Curved leaf: narrow at top, wider at base, with a soft point at top-left
-        path.move(to: CGPoint(x: w * 0.22, y: h * 0.08))
-        path.addCurve(
-            to: CGPoint(x: w * 0.95, y: h * 0.72),
-            control1: CGPoint(x: w * 0.92, y: h * 0.04),
-            control2: CGPoint(x: w * 1.05, y: h * 0.36)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.35, y: h * 0.96),
-            control1: CGPoint(x: w * 0.85, y: h * 1.02),
-            control2: CGPoint(x: w * 0.55, y: h * 1.05)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.22, y: h * 0.08),
-            control1: CGPoint(x: w * 0.02, y: h * 0.82),
-            control2: CGPoint(x: w * -0.10, y: h * 0.32)
-        )
-        path.closeSubpath()
-        return path
-    }
-}
 
 private struct BetaLogoMark: View {
     var body: some View {
@@ -830,120 +162,12 @@ private struct BetaLogoMark: View {
     }
 }
 
-// MARK: - Routes & Tabs
-
-private enum BetaHomeRoute: Hashable {
-    case statistics
-    case calendar
-    case documents
-    case importTasks
-    case exportTasks
-    case money
-}
-
-private struct BetaQuickAction: Identifiable {
-    let id: String
-    let title: String
-    let subtitle: String
-    let icon: String
-    let iconBg: Color
-    let iconTint: Color
-    var isLocked: Bool = false
-    let action: () -> Void
-}
-
-private enum BetaTab: Hashable {
-    case home, tasks, focus, habits, more
-}
-
-private enum DashboardSortOrder: String, CaseIterable {
-    case today = "Today"
-    case dueDate = "Due Date"
-    case priority = "Priority"
-    case title = "Title"
-}
-
-enum BetaSummaryKind: String, CaseIterable, Identifiable {
-    case dueToday, upcoming, completed, overdue
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .dueToday: "Due Today"
-        case .upcoming: "Upcoming"
-        case .completed: "Completed"
-        case .overdue: "Overdue"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .dueToday: "Needs attention"
-        case .upcoming: "Planned ahead"
-        case .completed: "Finished"
-        case .overdue: "Past due"
-        }
-    }
-
-    var sheetSubtitle: String {
-        switch self {
-        case .dueToday: "Tasks that need attention before the day closes."
-        case .upcoming: "Planned work coming up after today."
-        case .completed: "Finished tasks you can review or move back to open."
-        case .overdue: "Past-due tasks that need a new decision."
-        }
-    }
-
-    var emptyTitle: String {
-        switch self {
-        case .dueToday: "Nothing due today"
-        case .upcoming: "No upcoming tasks"
-        case .completed: "No completed tasks yet"
-        case .overdue: "Nothing overdue"
-        }
-    }
-
-    var emptyMessage: String {
-        switch self {
-        case .dueToday: "Your day is clear. Create a task if something needs attention."
-        case .upcoming: "Add due dates to see what is planned beyond today."
-        case .completed: "Completed tasks will appear here once you finish them."
-        case .overdue: "No past-due items. Keep the dashboard current by updating due dates."
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .dueToday: "sun.max.fill"
-        case .upcoming: "calendar"
-        case .completed: "checkmark.seal.fill"
-        case .overdue: "exclamationmark.triangle.fill"
-        }
-    }
-
-    var iconTint: Color {
-        switch self {
-        case .dueToday: BetaPalette.statDueToday
-        case .upcoming: BetaPalette.statUpcoming
-        case .completed: BetaPalette.statCompleted
-        case .overdue: BetaPalette.statOverdue
-        }
-    }
-
-    var iconBg: Color {
-        switch self {
-        case .dueToday: BetaPalette.statDueTodayBg
-        case .upcoming: BetaPalette.statUpcomingBg
-        case .completed: BetaPalette.statCompletedBg
-        case .overdue: BetaPalette.statOverdueBg
-        }
-    }
-}
 
 // MARK: - BetaDashboardHomeView
 
 struct BetaDashboardHomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
 
     @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && !$0.isCompleted }, sort: \LifeTask.dueDate, order: .forward)
@@ -1091,6 +315,18 @@ struct BetaDashboardHomeView: View {
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
         }
+        .onAppear {
+            if scenePhase == .active {
+                openPendingNotificationTaskIfNeeded()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else {
+                return
+            }
+
+            openPendingNotificationTaskIfNeeded()
+        }
     }
 
     private var fabOverlay: some View {
@@ -1188,6 +424,19 @@ struct BetaDashboardHomeView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             isShowingTaskEditor = true
         }
+    }
+
+    private func openPendingNotificationTaskIfNeeded() {
+        guard let task = LifeTrackNotificationActionHandler.consumePendingOpenTask(in: allTasks) else {
+            return
+        }
+
+        selectedTab = .home
+        selectedTemplate = nil
+        shouldAutoStartVoice = false
+        isShowingTemplatePicker = false
+        isShowingTaskEditor = false
+        editingTask = task
     }
 
     private func openTemplateFromPicker(_ template: TaskTemplate) {
@@ -1677,7 +926,7 @@ struct BetaDashboardView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text(dateLabel)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.betaCaption(13, weight: .medium))
                     .foregroundStyle(BetaPalette.secondaryText)
             }
 
@@ -1756,7 +1005,7 @@ struct BetaDashboardView: View {
             }
 
             Text("You can still make this dashboard useful today.")
-                .font(.system(size: 13, weight: .medium))
+                .font(.betaCaption(13, weight: .medium))
                 .foregroundStyle(BetaPalette.alertText)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
@@ -1766,12 +1015,12 @@ struct BetaDashboardView: View {
                 openMoneyAIInsights()
             } label: {
                 Label("AI", systemImage: "brain.head.profile")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.betaCaption(11, weight: .bold))
                     .foregroundStyle(BetaPalette.alertText)
                     .labelStyle(.titleAndIcon)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.45), in: Capsule())
+                    .background(BetaPalette.heroGlassFill, in: Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open AI money insights")
@@ -1785,7 +1034,7 @@ struct BetaDashboardView: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(BetaPalette.alertText.opacity(0.75))
                     .frame(width: 24, height: 24)
-                    .background(Color.white.opacity(0.35), in: Circle())
+                    .background(BetaPalette.heroGlassFill, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss dashboard alert")
@@ -1846,9 +1095,9 @@ struct BetaDashboardView: View {
                 .fill(BetaPalette.heroBackground)
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                        .stroke(BetaPalette.heroShellStroke, lineWidth: 1)
                 }
-                .shadow(color: BetaPalette.accentDeep.opacity(0.08), radius: 18, y: 8)
+                .shadow(color: BetaPalette.heroShadow, radius: 18, y: 8)
 
             VStack(alignment: .leading, spacing: 0) {
                 // — top row: title + crown
@@ -1863,7 +1112,7 @@ struct BetaDashboardView: View {
                         Text(isUltimate
                              ? "Every premium feature unlocked."
                              : "AI, scheduling, backups & more.")
-                            .font(.system(size: 13, weight: .regular))
+                            .font(.betaBody(13))
                             .foregroundStyle(BetaPalette.secondaryText)
                             .lineLimit(1)
                     }
@@ -1905,7 +1154,7 @@ struct BetaDashboardView: View {
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(BetaPalette.accent)
                             Text(label)
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.betaCaption(10, weight: .semibold))
                                 .foregroundStyle(BetaPalette.primaryText)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
@@ -1913,10 +1162,10 @@ struct BetaDashboardView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(isUltimate ? 0.55 : 0.38), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(BetaPalette.heroGlassFill.opacity(isUltimate ? 1 : 0.9), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(BetaPalette.accent.opacity(0.18), lineWidth: 0.7)
+                                .stroke(BetaPalette.heroGlassStroke, lineWidth: 0.7)
                         }
                     }
                 }
@@ -1931,7 +1180,7 @@ struct BetaDashboardView: View {
                         Image(systemName: isUltimate ? "checkmark.seal.fill" : "crown.fill")
                             .font(.system(size: 12, weight: .bold))
                         Text(isUltimate ? "Your Plan" : "See Plans")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.betaBody(14, weight: .semibold))
                         if !isUltimate {
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 11, weight: .bold))
@@ -1974,9 +1223,9 @@ struct BetaDashboardView: View {
                 .fill(BetaPalette.heroBackground)
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                        .stroke(BetaPalette.heroShellStroke, lineWidth: 1)
                 }
-                .shadow(color: BetaPalette.accentDeep.opacity(0.08), radius: 18, y: 8)
+                .shadow(color: BetaPalette.heroShadow, radius: 18, y: 8)
 
             VStack(alignment: .leading, spacing: 9) {
                 Text("This Week's Rhythm")
@@ -1988,7 +1237,7 @@ struct BetaDashboardView: View {
                 Text(streakWeek > 0
                      ? "You finished a task on \(streakWeek) of 7 days."
                      : "No completions yet.\nFinish one to start the rhythm.")
-                    .font(.system(size: 13, weight: .regular))
+                    .font(.betaBody(13))
                     .foregroundStyle(BetaPalette.secondaryText)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2025,7 +1274,7 @@ struct BetaDashboardView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text("Open Review")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.betaBody(14, weight: .semibold))
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .bold))
                     }
@@ -2074,7 +1323,7 @@ struct BetaDashboardView: View {
                         .minimumScaleFactor(0.75)
 
                     Text(subtitle)
-                        .font(.system(size: 13, weight: .regular))
+                        .font(.betaBody(13))
                         .foregroundStyle(BetaPalette.secondaryText)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2157,7 +1406,7 @@ struct BetaDashboardView: View {
                     )
                 }
                 .padding(10)
-                .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(BetaPalette.heroGlassFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                 Spacer(minLength: 0)
 
@@ -2179,7 +1428,7 @@ struct BetaDashboardView: View {
                     }
 
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.betaCaption(12, weight: .medium))
                         .foregroundStyle(BetaPalette.secondaryText)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2196,174 +1445,6 @@ struct BetaDashboardView: View {
         isShowingMoneyAIInsights = true
     }
 
-    private func productivityHeroShell<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(BetaPalette.heroBackground)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                }
-                .shadow(color: BetaPalette.accentDeep.opacity(0.08), radius: 18, y: 8)
-
-            content()
-                .padding(.horizontal, 22)
-                .padding(.top, 18)
-                .padding(.bottom, 14)
-        }
-        .frame(minHeight: 240)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-    }
-
-    private func heroMetricPill(title: String, value: String, subtitle: String, tint: Color, symbolName: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
-                Image(systemName: symbolName)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(tint)
-                    .frame(width: 18, height: 18)
-                    .background(tint.opacity(0.13), in: Circle())
-
-                Text(title)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(BetaPalette.secondaryText)
-                    .lineLimit(1)
-            }
-
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
-                    .foregroundStyle(BetaPalette.primaryText)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(BetaPalette.tertiaryText)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
-        .frame(height: 68)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(Color.white.opacity(0.55), lineWidth: 1)
-        }
-    }
-
-    private func heroProgressRow(title: String, value: String, progress: Double, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(BetaPalette.primaryText)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                Text(value)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(BetaPalette.secondaryText)
-                    .monospacedDigit()
-            }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(tint.opacity(0.14))
-                    Capsule()
-                        .fill(tint)
-                        .frame(width: max(8, proxy.size.width * CGFloat(min(max(progress, 0), 1))))
-                }
-            }
-            .frame(height: 7)
-        }
-    }
-
-    private func heroInsightRow(title: String, subtitle: String, symbolName: String, tint: Color) -> some View {
-        HStack(spacing: 9) {
-            Image(systemName: symbolName)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(tint)
-                .frame(width: 28, height: 28)
-                .background(tint.opacity(0.12), in: Circle())
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(BetaPalette.primaryText)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(BetaPalette.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-        .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(Color.white.opacity(0.55), lineWidth: 1)
-        }
-    }
-
-    private func heroActionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .bold))
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 11)
-            .background(
-                LinearGradient(
-                    colors: [Color(hex: 0x1F1B2E), Color(hex: 0x2A2540)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                in: Capsule()
-            )
-            .shadow(color: Color.black.opacity(0.18), radius: 8, y: 4)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func heroInlineActionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: .bold))
-                Text(title)
-                    .font(.system(size: 12, weight: .bold))
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
-            }
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(
-                LinearGradient(
-                    colors: [Color(hex: 0x1F1B2E), Color(hex: 0x2A2540)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                in: Capsule()
-            )
-            .shadow(color: Color.black.opacity(0.14), radius: 7, y: 3)
-        }
-        .buttonStyle(.plain)
-    }
 
     // MARK: Streak hero card
 
@@ -2374,9 +1455,9 @@ struct BetaDashboardView: View {
                 .fill(BetaPalette.heroBackground)
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                        .stroke(BetaPalette.heroShellStroke, lineWidth: 1)
                 }
-                .shadow(color: BetaPalette.accentDeep.opacity(0.08), radius: 18, y: 8)
+                .shadow(color: BetaPalette.heroShadow, radius: 18, y: 8)
 
             // Illustration on right — extends down so the stone reads above the stats row
             HStack {
@@ -2399,7 +1480,7 @@ struct BetaDashboardView: View {
                         .minimumScaleFactor(0.8)
 
                     Text(streakSubtitle)
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.betaBody(14))
                         .foregroundStyle(BetaPalette.secondaryText)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2409,7 +1490,7 @@ struct BetaDashboardView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Text("View Streaks")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.betaBody(14, weight: .semibold))
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 11, weight: .bold))
                         }
@@ -2458,39 +1539,14 @@ struct BetaDashboardView: View {
         .padding(.horizontal, 8)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.78))
+                .fill(BetaPalette.heroGlassFill)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+                .stroke(BetaPalette.heroGlassStroke, lineWidth: 1)
         }
     }
 
-    private func streakStatCell(icon: String, iconTint: Color, value: String, unit: String, label: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(iconTint)
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(value)
-                    .font(.betaStreakStat)
-                    .foregroundStyle(BetaPalette.primaryText)
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
-                Text(unit)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(BetaPalette.secondaryText)
-                Text(label)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(BetaPalette.secondaryText)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity)
-    }
 
     // MARK: Stats grid
 
@@ -2539,22 +1595,22 @@ struct BetaDashboardView: View {
             }
 
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(BetaPalette.secondaryText)
+                .font(.betaCaption(11, weight: .semibold))
+                .foregroundStyle(BetaPalette.lightCardSecondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
 
             Text(formattedValue(value))
                 .font(.betaMetric)
-                .foregroundStyle(BetaPalette.primaryText)
+                .foregroundStyle(BetaPalette.lightCardPrimaryText)
                 .minimumScaleFactor(0.45)
                 .lineLimit(1)
                 .monospacedDigit()
                 .frame(maxWidth: .infinity, alignment: .center)
 
             Text(subtitle)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(BetaPalette.tertiaryText)
+                .font(.betaCaption(10, weight: .medium))
+                .foregroundStyle(BetaPalette.lightCardTertiaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -2583,12 +1639,12 @@ struct BetaDashboardView: View {
         .frame(maxWidth: .infinity, minHeight: 140, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.04), radius: 10, y: 4)
+                .fill(BetaPalette.lightCardFill)
+                .shadow(color: BetaPalette.lightCardShadow, radius: 10, y: 4)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(BetaPalette.faintBorder, lineWidth: 0.8)
+                .stroke(BetaPalette.lightCardBorder, lineWidth: 0.8)
         }
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onTapGesture {
@@ -2626,17 +1682,18 @@ struct BetaDashboardView: View {
                         Image(systemName: "pencil")
                             .font(.system(size: 11, weight: .bold))
                         Text("Customize")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.betaCaption(12, weight: .semibold))
                     }
-                    .foregroundStyle(BetaPalette.secondaryText)
+                    .foregroundStyle(BetaPalette.lightChromeText)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
                     .background(
-                        Capsule().fill(Color.white)
-                            .shadow(color: Color.black.opacity(0.04), radius: 4, y: 2)
+                        Capsule()
+                            .fill(BetaPalette.lightCardFill)
+                            .shadow(color: BetaPalette.lightCardShadow, radius: 4, y: 2)
                     )
                     .overlay {
-                        Capsule().stroke(BetaPalette.faintBorder, lineWidth: 0.8)
+                        Capsule().stroke(BetaPalette.lightCardBorder, lineWidth: 0.8)
                     }
                 }
                 .buttonStyle(.plain)
@@ -2814,13 +1871,13 @@ struct BetaDashboardView: View {
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(item.title)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(BetaPalette.primaryText)
+                        .font(.betaBody(13, weight: .bold))
+                        .foregroundStyle(BetaPalette.lightCardPrimaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     Text(item.subtitle)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(BetaPalette.secondaryText)
+                        .font(.betaCaption(11, weight: .medium))
+                        .foregroundStyle(BetaPalette.lightCardSecondaryText)
                         .lineLimit(1)
                 }
             }
@@ -2828,12 +1885,12 @@ struct BetaDashboardView: View {
             .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
+                    .fill(BetaPalette.lightCardFill)
+                    .shadow(color: BetaPalette.lightCardShadow, radius: 8, y: 3)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(BetaPalette.faintBorder, lineWidth: 0.8)
+                    .stroke(BetaPalette.lightCardBorder, lineWidth: 0.8)
             }
             .overlay(alignment: .topTrailing) {
                 if item.isLocked {
@@ -2861,19 +1918,19 @@ struct BetaDashboardView: View {
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.55), lineWidth: 1)
+                        .stroke(BetaPalette.lightCardBorder, lineWidth: 1)
                 }
-                .shadow(color: Color.black.opacity(0.06), radius: 14, y: 6)
+                .shadow(color: BetaPalette.lightCardShadow, radius: 14, y: 6)
 
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .center, spacing: 8) {
                     Text("Daily Focus")
                         .font(.betaSection)
-                        .foregroundStyle(BetaPalette.primaryText)
+                        .foregroundStyle(BetaPalette.lightCardPrimaryText)
 
                     Text(dailyFocusCountLabel)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(BetaPalette.secondaryText)
+                        .font(.betaCaption(12, weight: .medium))
+                        .foregroundStyle(BetaPalette.lightCardSecondaryText)
 
                     Spacer(minLength: 0)
 
@@ -2895,17 +1952,17 @@ struct BetaDashboardView: View {
         } label: {
             HStack(spacing: 6) {
                 Text(focusSortOrder.rawValue)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(BetaPalette.primaryText)
+                    .font(.betaCaption(13, weight: .semibold))
+                    .foregroundStyle(BetaPalette.lightCardPrimaryText)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(BetaPalette.secondaryText)
+                    .foregroundStyle(BetaPalette.lightCardSecondaryText)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background {
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white)
+                    Capsule().fill(BetaPalette.lightCardFill)
                     if focusSortOrder == .today {
                         GeometryReader { proxy in
                             Capsule()
@@ -2923,7 +1980,7 @@ struct BetaDashboardView: View {
                         lineWidth: 1
                     )
             }
-            .shadow(color: Color.black.opacity(0.05), radius: 4, y: 2)
+            .shadow(color: BetaPalette.lightCardShadow, radius: 4, y: 2)
             .animation(.easeInOut(duration: 0.22), value: todayFocusProgress)
             .animation(.easeInOut(duration: 0.18), value: focusSortOrder)
         }
@@ -2936,14 +1993,14 @@ struct BetaDashboardView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 22, weight: .regular))
-                        .foregroundStyle(BetaPalette.secondaryText)
+                        .foregroundStyle(BetaPalette.lightCardSecondaryText)
                     Text("Nothing in focus — you're all caught up.")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(BetaPalette.secondaryText)
+                        .font(.betaBody(14, weight: .medium))
+                        .foregroundStyle(BetaPalette.lightCardSecondaryText)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 28)
-                .background(Color.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(BetaPalette.lightCardFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             } else {
                 VStack(spacing: 8) {
                     ForEach(dailyFocusTasks) { task in
@@ -2989,12 +2046,12 @@ struct BetaDashboardView: View {
                 Spacer(minLength: 0)
 
                 if !documentTasks.isEmpty {
-                    Text("\(documentTasks.count)")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(BetaPalette.secondaryText)
+                Text("\(documentTasks.count)")
+                    .font(.betaCaption(12, weight: .semibold))
+                    .foregroundStyle(BetaPalette.lightChromeText)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 3)
-                        .background(Color.white.opacity(0.85), in: Capsule())
+                        .background(BetaPalette.lightCardFill, in: Capsule())
                 }
             }
 
@@ -3011,11 +2068,11 @@ struct BetaDashboardView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text("No documents yet")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(BetaPalette.primaryText)
+                            .font(.lifeTrack(.subheadline, weight: .semibold))
+                            .foregroundStyle(BetaPalette.lightCardPrimaryText)
                         Text("Attach a file from any task to keep supporting context nearby.")
-                            .font(.footnote)
-                            .foregroundStyle(BetaPalette.secondaryText)
+                            .font(.lifeTrack(.footnote, weight: .regular))
+                            .foregroundStyle(BetaPalette.lightCardSecondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -3023,10 +2080,10 @@ struct BetaDashboardView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(BetaPalette.lightCardFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(BetaPalette.faintBorder, lineWidth: 0.8)
+                        .stroke(BetaPalette.lightCardBorder, lineWidth: 0.8)
                 }
             } else {
                 VStack(spacing: 8) {
@@ -3046,24 +2103,6 @@ struct BetaDashboardView: View {
         }
     }
 
-    private func betaFocusPlanningButton(title: String, symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 9)
-                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(tint.opacity(0.22), lineWidth: 0.8)
-                }
-        }
-        .buttonStyle(.plain)
-    }
 
     private func toggleFocusCompletion(_ task: LifeTask) {
         let pending = withAnimation(.snappy(duration: 0.24)) {
@@ -3093,860 +2132,3 @@ struct BetaDashboardView: View {
     }
 }
 
-private struct DailyFocusSortSheet: View {
-    @Binding var selectedOrder: DashboardSortOrder
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ZStack {
-            LifeTrackTheme.appBackground
-                .ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
-                HStack(spacing: LifeTrackTheme.Spacing.medium) {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(BetaPalette.accent)
-                        .frame(width: 42, height: 42)
-                        .background(BetaPalette.accent.opacity(0.13), in: Circle())
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Sort Daily Focus")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(BetaPalette.primaryText)
-                        Text("Choose what this list should show first.")
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(BetaPalette.secondaryText)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-
-                VStack(spacing: LifeTrackTheme.Spacing.small) {
-                    ForEach(DashboardSortOrder.allCases, id: \.self) { order in
-                        sortOption(order)
-                    }
-                }
-            }
-            .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
-            .padding(.top, LifeTrackTheme.Spacing.large)
-            .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
-        }
-    }
-
-    private func sortOption(_ order: DashboardSortOrder) -> some View {
-        let isSelected = selectedOrder == order
-        return Button {
-            selectedOrder = order
-            dismiss()
-        } label: {
-            HStack(spacing: LifeTrackTheme.Spacing.medium) {
-                ZStack {
-                    Circle()
-                        .fill(isSelected ? BetaPalette.accent : BetaPalette.accent.opacity(0.08))
-                    Image(systemName: isSelected ? "checkmark" : iconName(for: order))
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(isSelected ? .white : BetaPalette.accent)
-                }
-                .frame(width: 34, height: 34)
-                .animation(.snappy(duration: 0.2), value: isSelected)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(order.rawValue)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(BetaPalette.primaryText)
-                    Text(subtitle(for: order))
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(BetaPalette.secondaryText)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(LifeTrackTheme.Spacing.medium)
-            .background(
-                isSelected ? BetaPalette.accent.opacity(0.09) : Color.white.opacity(0.82),
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(isSelected ? BetaPalette.accent.opacity(0.35) : BetaPalette.faintBorder, lineWidth: 1)
-            }
-        }
-        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98, pressedOpacity: 0.94))
-    }
-
-    private func iconName(for order: DashboardSortOrder) -> String {
-        switch order {
-        case .today: "sun.max.fill"
-        case .dueDate: "calendar"
-        case .priority: "flag.fill"
-        case .title: "textformat"
-        }
-    }
-
-    private func subtitle(for order: DashboardSortOrder) -> String {
-        switch order {
-        case .today: "Only tasks for today"
-        case .dueDate: "Earliest dates first"
-        case .priority: "High priority first"
-        case .title: "Alphabetical order"
-        }
-    }
-}
-
-// MARK: - Stat Summary Sheet
-
-private struct BetaStatSummarySheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && !$0.isCompleted }, sort: \LifeTask.dueDate)
-    private var openTasks: [LifeTask]
-    @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && $0.isCompleted }, sort: \LifeTask.dueDate, order: .reverse)
-    private var completedTasks: [LifeTask]
-    @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
-    @State private var editingTask: LifeTask?
-    @AppStorage(LifeTrackSettings.Keys.themeID) private var themeID = LifeTrackAppTheme.fallback.rawValue
-    @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength: Double = 1.0
-
-    let kind: BetaSummaryKind
-
-    private var filteredTasks: [LifeTask] {
-        let cal = Calendar.current
-        let now = Date()
-        switch kind {
-        case .dueToday:
-            return openTasks.filter { cal.isDateInToday($0.dueDate) }
-        case .upcoming:
-            return openTasks.filter { $0.dueDate > now && !cal.isDateInToday($0.dueDate) }
-        case .completed:
-            return completedTasks
-        case .overdue:
-            return openTasks.filter(\.isOverdue)
-        }
-    }
-
-    private var uniqueCategoryCount: Int {
-        Set(filteredTasks.map(\.categoryRawValue)).count
-    }
-
-    private var fileCount: Int {
-        filteredTasks.filter(\.hasDocument).count
-    }
-
-    private var latestLabel: String {
-        if kind == .completed {
-            return filteredTasks.compactMap(\.completedAt).max()?.dayMonthString ?? "—"
-        }
-        return filteredTasks.map(\.dueDate).min()?.dayMonthString ?? "—"
-    }
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                LifeTrackTheme.appBackground.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        summaryHeader
-
-                        statsRow
-
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text("Tasks")
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                            Text(kind.subtitle)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                        }
-
-                        if filteredTasks.isEmpty {
-                            emptyState
-                        } else {
-                            LazyVStack(spacing: LifeTrackTheme.Spacing.small) {
-                                ForEach(filteredTasks) { task in
-                                    BetaSummaryTaskCard(
-                                        task: task,
-                                        categoryOption: task.categoryOption(customCategories: customCategories),
-                                        onToggleCompletion: { toggleCompletion(task) },
-                                        onEdit: { editingTask = task },
-                                        onDelete: { deleteTask(task) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 40)
-                }
-                .scrollIndicators(.hidden)
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                }
-            }
-        }
-        .sheet(item: $editingTask) { task in
-            NewTaskView(task: task)
-        }
-    }
-
-    private var summaryHeader: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(kind.iconBg)
-                    .frame(width: 56, height: 56)
-                Image(systemName: kind.symbolName)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(kind.iconTint)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(kind.title)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                    Text("\(filteredTasks.count)")
-                        .font(.title.weight(.bold))
-                        .foregroundStyle(kind.iconTint)
-                }
-                Text(kind.sheetSubtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 0)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.6), lineWidth: 0.7)
-        }
-    }
-
-    private var statsRow: some View {
-        HStack(spacing: 0) {
-            statCell(value: "\(uniqueCategoryCount)", label: "Categories")
-            Divider().frame(height: 36)
-            statCell(value: "\(fileCount)", label: "Files")
-            Divider().frame(height: 36)
-            statCell(value: latestLabel, label: kind == .completed ? "Latest" : "Nearest")
-        }
-        .padding(.vertical, 12)
-        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.6), lineWidth: 0.7)
-        }
-    }
-
-    private func statCell(value: String, label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Text(label)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: kind.symbolName)
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
-            Text(kind.emptyTitle)
-                .font(.headline)
-                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-            Text(kind.emptyMessage)
-                .font(.subheadline)
-                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                .multilineTextAlignment(.center)
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity)
-        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func toggleCompletion(_ task: LifeTask) {
-        let pending = TaskLifecycleManager.beginToggleCompletion(for: task)
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 16_000_000)
-            TaskLifecycleManager.finishToggleCompletion(pending, in: modelContext, customCategories: customCategories)
-        }
-    }
-
-    private func deleteTask(_ task: LifeTask) {
-        _ = TaskLifecycleManager.delete(task, in: modelContext)
-    }
-}
-
-// MARK: - Focus Timer Sheet
-
-private struct FocusTimerSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var timeRemaining: Int = 25 * 60
-    @State private var isRunning = false
-    @State private var isBreak = false
-    @State private var timerTask: Task<Void, Never>?
-
-    private let workDuration = 25 * 60
-    private let breakDuration = 5 * 60
-
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 36) {
-                Spacer()
-
-                Text(isBreak ? "Break" : "Focus")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(isBreak ? BetaPalette.statCompleted : BetaPalette.accent)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule().fill(isBreak ? BetaPalette.statCompletedBg : BetaPalette.accentSoft)
-                    )
-
-                ZStack {
-                    Circle()
-                        .stroke(BetaPalette.faintBorder, lineWidth: 14)
-                        .frame(width: 240, height: 240)
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(
-                            isBreak ? BetaPalette.statCompleted : BetaPalette.accent,
-                            style: StrokeStyle(lineWidth: 14, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 240, height: 240)
-                        .animation(.linear(duration: 0.8), value: progress)
-
-                    Text(timeString)
-                        .font(.system(size: 54, weight: .bold, design: .monospaced))
-                        .foregroundStyle(BetaPalette.primaryText)
-                }
-
-                HStack(spacing: 24) {
-                    circleButton(icon: "arrow.counterclockwise", size: 56) {
-                        resetTimer()
-                    }
-
-                    circleButton(icon: isRunning ? "pause.fill" : "play.fill", size: 72, isPrimary: true) {
-                        isRunning ? pauseTimer() : startTimer()
-                    }
-
-                    circleButton(icon: "forward.end.fill", size: 56) {
-                        skipPhase()
-                    }
-                }
-
-                HStack(spacing: 24) {
-                    sessionLabel(value: "25 min", caption: "Focus")
-                    Rectangle()
-                        .fill(BetaPalette.faintBorder)
-                        .frame(width: 1, height: 32)
-                    sessionLabel(value: "5 min", caption: "Break")
-                }
-
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
-            .background(BetaPalette.appBackground.ignoresSafeArea())
-            .navigationTitle("Focus Timer")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(BetaPalette.accent)
-                }
-            }
-        }
-        .onDisappear { pauseTimer() }
-    }
-
-    private var timeString: String {
-        String(format: "%02d:%02d", timeRemaining / 60, timeRemaining % 60)
-    }
-
-    private var progress: Double {
-        let total = isBreak ? Double(breakDuration) : Double(workDuration)
-        return 1.0 - Double(timeRemaining) / total
-    }
-
-    private func startTimer() {
-        isRunning = true
-        timerTask = Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { break }
-                if timeRemaining > 0 {
-                    timeRemaining -= 1
-                } else {
-                    isBreak.toggle()
-                    timeRemaining = isBreak ? breakDuration : workDuration
-                    LifeTrackHaptics.lightImpact()
-                }
-            }
-        }
-    }
-
-    private func pauseTimer() {
-        timerTask?.cancel()
-        timerTask = nil
-        isRunning = false
-    }
-
-    private func resetTimer() {
-        pauseTimer()
-        isBreak = false
-        timeRemaining = workDuration
-        LifeTrackHaptics.lightImpact()
-    }
-
-    private func skipPhase() {
-        pauseTimer()
-        isBreak.toggle()
-        timeRemaining = isBreak ? breakDuration : workDuration
-        LifeTrackHaptics.lightImpact()
-    }
-
-    private func circleButton(icon: String, size: CGFloat, isPrimary: Bool = false, action: @escaping () -> Void) -> some View {
-        Button {
-            LifeTrackHaptics.lightImpact()
-            action()
-        } label: {
-            Image(systemName: icon)
-                .font(.system(size: isPrimary ? 26 : 20, weight: .semibold))
-                .foregroundStyle(isPrimary ? .white : BetaPalette.secondaryText)
-                .frame(width: size, height: size)
-                .background(
-                    Circle()
-                        .fill(isPrimary ? AnyShapeStyle(BetaPalette.primaryGradient) : AnyShapeStyle(Color.white))
-                        .shadow(
-                            color: isPrimary ? BetaPalette.accent.opacity(0.4) : Color.black.opacity(0.06),
-                            radius: isPrimary ? 12 : 8,
-                            y: isPrimary ? 6 : 3
-                        )
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func sessionLabel(value: String, caption: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(BetaPalette.primaryText)
-            Text(caption)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(BetaPalette.secondaryText)
-        }
-    }
-}
-
-// MARK: - Quick Actions Customize Sheet
-
-private struct QuickActionsCustomizeSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var showPlanMyDay: Bool
-    @Binding var showHabits: Bool
-    @Binding var showReview: Bool
-    @Binding var showFocusTimer: Bool
-    @Binding var showNewTask: Bool
-    @Binding var showTemplates: Bool
-    @Binding var showAvailability: Bool
-    @Binding var showCalendar: Bool
-    @Binding var showStatistics: Bool
-    @Binding var showDocuments: Bool
-    @Binding var showImport: Bool
-    @Binding var showExport: Bool
-    @Binding var showEmail: Bool
-    @Binding var showBill: Bool
-    @Binding var showMedication: Bool
-    @Binding var showBudget: Bool
-    @Binding var showCheckup: Bool
-    @Binding var showAISuggestions: Bool
-    @Binding var showSmartSchedule: Bool
-
-    var body: some View {
-        NavigationView {
-            List {
-                Section("Rituals & focus") {
-                    actionRow(title: "Plan My Day", subtitle: "Daily ritual",
-                              icon: "sun.max.fill", iconBg: BetaPalette.qaPlanBg, iconTint: BetaPalette.qaPlanTint,
-                              isOn: $showPlanMyDay)
-                    actionRow(title: "Habits", subtitle: "Streaks",
-                              icon: "flame.fill", iconBg: BetaPalette.qaHabitsBg, iconTint: BetaPalette.qaHabitsTint,
-                              isOn: $showHabits)
-                    actionRow(title: "Review", subtitle: "Progress",
-                              icon: "chart.bar.fill", iconBg: BetaPalette.qaReviewBg, iconTint: BetaPalette.qaReviewTint,
-                              isOn: $showReview)
-                    actionRow(title: "Focus Timer", subtitle: "Deep work",
-                              icon: "timer", iconBg: BetaPalette.qaFocusBg, iconTint: BetaPalette.qaFocusTint,
-                              isOn: $showFocusTimer)
-                    actionRow(title: "AI Suggestions", subtitle: "Smart focus",
-                              icon: "sparkles", iconBg: BetaPalette.qaWarningBg, iconTint: BetaPalette.qaWarningTint,
-                              isOn: $showAISuggestions)
-                    actionRow(title: "Schedule", subtitle: "Optimize day",
-                              icon: "brain.head.profile", iconBg: BetaPalette.qaWarningBg, iconTint: BetaPalette.qaWarningTint,
-                              isOn: $showSmartSchedule)
-                }
-
-                Section("Capture") {
-                    actionRow(title: "New Task", subtitle: "Start fresh",
-                              icon: "plus", iconBg: BetaPalette.qaAccentBg, iconTint: BetaPalette.qaAccentTint,
-                              isOn: $showNewTask)
-                    actionRow(title: "Templates", subtitle: "Smart shortcuts",
-                              icon: "sparkles", iconBg: BetaPalette.qaInfoBg, iconTint: BetaPalette.qaInfoTint,
-                              isOn: $showTemplates)
-                    actionRow(title: "Availability", subtitle: "Share times",
-                              icon: "calendar.badge.clock", iconBg: BetaPalette.qaAccentBg, iconTint: BetaPalette.qaAccentTint,
-                              isOn: $showAvailability)
-                    actionRow(title: "Email follow-up", subtitle: "Use template",
-                              icon: "envelope.badge", iconBg: BetaPalette.qaInfoBg, iconTint: BetaPalette.qaInfoTint,
-                              isOn: $showEmail)
-                    actionRow(title: "Pay bill", subtitle: "Monthly",
-                              icon: "creditcard", iconBg: BetaPalette.qaSuccessBg, iconTint: BetaPalette.qaSuccessTint,
-                              isOn: $showBill)
-                    actionRow(title: "Medication", subtitle: "Daily routine",
-                              icon: "cross.case", iconBg: BetaPalette.qaDangerBg, iconTint: BetaPalette.qaDangerTint,
-                              isOn: $showMedication)
-                    actionRow(title: "Money", subtitle: "Budget & actuals",
-                              icon: "chart.pie", iconBg: BetaPalette.qaSuccessBg, iconTint: BetaPalette.qaSuccessTint,
-                              isOn: $showBudget)
-                    actionRow(title: "Health check", subtitle: "Book visit",
-                              icon: "heart.text.square", iconBg: BetaPalette.qaDangerBg, iconTint: BetaPalette.qaDangerTint,
-                              isOn: $showCheckup)
-                }
-
-                Section("Navigate") {
-                    actionRow(title: "Calendar", subtitle: "See dates",
-                              icon: "calendar", iconBg: BetaPalette.qaInfoBg, iconTint: BetaPalette.qaInfoTint,
-                              isOn: $showCalendar)
-                    actionRow(title: "Statistics", subtitle: "See trends",
-                              icon: "chart.bar.xaxis", iconBg: BetaPalette.qaSuccessBg, iconTint: BetaPalette.qaSuccessTint,
-                              isOn: $showStatistics)
-                    actionRow(title: "Documents", subtitle: "Search files",
-                              icon: "doc.text.magnifyingglass", iconBg: BetaPalette.qaWarningBg, iconTint: BetaPalette.qaWarningTint,
-                              isOn: $showDocuments)
-                    actionRow(title: "Import", subtitle: "From file",
-                              icon: "tray.and.arrow.down", iconBg: BetaPalette.qaAccentBg, iconTint: BetaPalette.qaAccentTint,
-                              isOn: $showImport)
-                    actionRow(title: "Export", subtitle: "Share/AirDrop",
-                              icon: "square.and.arrow.up", iconBg: BetaPalette.qaSuccessBg, iconTint: BetaPalette.qaSuccessTint,
-                              isOn: $showExport)
-                }
-            }
-            .navigationTitle("Quick Actions")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(BetaPalette.accent)
-                }
-            }
-        }
-    }
-
-    private func actionRow(title: String, subtitle: String, icon: String, iconBg: Color, iconTint: Color, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(iconBg).frame(width: 36, height: 36)
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(iconTint)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(BetaPalette.accent)
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - Tab Bar
-
-private struct BetaDashboardTabBar: View {
-    @Binding var selectedTab: BetaTab
-
-    private struct Item {
-        let tab: BetaTab
-        let icon: String
-        let selectedIcon: String
-        let label: String
-    }
-
-    private let items: [Item] = [
-        Item(tab: .home, icon: "house", selectedIcon: "house.fill", label: "Home"),
-        Item(tab: .tasks, icon: "list.bullet", selectedIcon: "list.bullet", label: "Tasks"),
-        Item(tab: .focus, icon: "scope", selectedIcon: "scope", label: "Focus"),
-        Item(tab: .habits, icon: "flame", selectedIcon: "flame.fill", label: "Habits"),
-        Item(tab: .more, icon: "ellipsis", selectedIcon: "ellipsis", label: "More")
-    ]
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(items, id: \.tab) { item in
-                tabButton(item)
-            }
-        }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.8), lineWidth: 1)
-        }
-    }
-
-    private func tabButton(_ item: Item) -> some View {
-        let isSelected = selectedTab == item.tab
-        return Button {
-            selectedTab = item.tab
-        } label: {
-            VStack(spacing: 5) {
-                Image(systemName: isSelected ? item.selectedIcon : item.icon)
-                    .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? BetaPalette.accent : BetaPalette.tertiaryText)
-                Text(item.label)
-                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? BetaPalette.accent : BetaPalette.tertiaryText)
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct BetaRecentDocumentRow: View {
-    let task: LifeTask
-    let categoryOption: TaskCategoryOption
-
-    var body: some View {
-        HStack(spacing: LifeTrackTheme.Spacing.medium) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(categoryOption.tint)
-                .frame(width: 42, height: 42)
-                .background(categoryOption.background, in: Circle())
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(task.documentDisplayName ?? "Document")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                    .lineLimit(1)
-
-                Text(task.title)
-                    .font(.footnote)
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 0)
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
-        }
-    }
-}
-
-private struct BetaSummaryTaskCard: View {
-    let task: LifeTask
-    let categoryOption: TaskCategoryOption
-    let onToggleCompletion: () -> Void
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.small) {
-            Button(action: onToggleCompletion) {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(task.isCompleted ? LifeTrackTheme.ColorPalette.success : LifeTrackTheme.ColorPalette.tertiaryText)
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text(task.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(task.isCompleted ? LifeTrackTheme.ColorPalette.secondaryText : LifeTrackTheme.ColorPalette.primaryText)
-                    .strikethrough(task.isCompleted)
-                    .lineLimit(2)
-
-                WrappingChipLayout(spacing: 7, rowSpacing: 6) {
-                    CategoryChipView(option: categoryOption)
-
-                    StatusPillView(
-                        title: task.dueDate.dayMonthString,
-                        symbolName: task.isOverdue ? "exclamationmark.circle.fill" : "clock",
-                        tint: task.isOverdue ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.secondaryText
-                    )
-
-                    StatusPillView(
-                        title: task.durationTitle,
-                        symbolName: "timer",
-                        tint: LifeTrackTheme.ColorPalette.secondaryText
-                    )
-
-                    if task.priority == .high {
-                        StatusPillView(
-                            title: "High",
-                            symbolName: "flag.fill",
-                            tint: TaskPriority.high.tint
-                        )
-                    }
-
-                    if task.recurrence != .none {
-                        StatusPillView(
-                            title: task.recurrence.shortTitle,
-                            symbolName: "repeat",
-                            tint: task.recurrence.tint
-                        )
-                    }
-
-                    if task.hasDocument {
-                        Image(systemName: "paperclip")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                            .frame(width: 22, height: 22)
-                            .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Circle())
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Menu {
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                }
-                Button(role: .destructive, action: onDelete) {
-                    Label("Move to Bin", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                    .frame(width: 30, height: 30)
-                    .background(LifeTrackTheme.ColorPalette.backgroundBottom.opacity(0.8), in: Circle())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .background(LifeTrackTheme.ColorPalette.cardElevated, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
-                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
-        }
-    }
-}
-
-private struct HeroPager: View {
-    let pages: [AnyView]
-
-    private let cardHeight: CGFloat = 240
-    @State private var currentIndex: Int? = 0
-    @State private var isDragging: Bool = false
-    @State private var lastInteraction: Date = .distantPast
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 0) {
-                    ForEach(pages.indices, id: \.self) { index in
-                        pages[index]
-                            .frame(height: cardHeight)
-                            .containerRelativeFrame(.horizontal)
-                            .id(index)
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollIndicators(.hidden)
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $currentIndex)
-            .frame(height: cardHeight)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !isDragging { isDragging = true }
-                    }
-                    .onEnded { _ in
-                        isDragging = false
-                        lastInteraction = Date()
-                    }
-            )
-            .onChange(of: currentIndex) { _, _ in
-                lastInteraction = Date()
-            }
-            .onReceive(Timer.publish(every: 7, on: .main, in: .common).autoconnect()) { now in
-                guard !isDragging else { return }
-                guard !pages.isEmpty else { return }
-                guard now.timeIntervalSince(lastInteraction) >= 6.5 else { return }
-                let current = currentIndex ?? 0
-                withAnimation(.easeInOut(duration: 0.45)) {
-                    currentIndex = (current + 1) % pages.count
-                }
-                lastInteraction = now
-            }
-
-            HeroPagerDots(currentIndex: currentIndex ?? 0, count: pages.count)
-        }
-    }
-}
-
-private struct HeroPagerDots: View {
-    let currentIndex: Int
-    let count: Int
-
-    var body: some View {
-        HStack(spacing: 7) {
-            ForEach(0..<count, id: \.self) { i in
-                Capsule()
-                    .fill(i == currentIndex ? BetaPalette.accent : BetaPalette.accent.opacity(0.25))
-                    .frame(width: i == currentIndex ? 20 : 7, height: 7)
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: currentIndex)
-    }
-}

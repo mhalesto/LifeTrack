@@ -45,7 +45,7 @@ struct SectionHeaderView: View {
 
                 if let subtitle {
                     Text(subtitle)
-                        .font(.footnote)
+                        .font(.lifeTrackFootnote)
                         .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -156,7 +156,7 @@ private struct InfoTooltipView: View {
     var body: some View {
         VStack(spacing: 0) {
             Text(message)
-                .font(.footnote.weight(.medium))
+                .font(.lifeTrack(.footnote, weight: .medium))
                 .lineSpacing(2)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                 .fixedSize(horizontal: false, vertical: true)

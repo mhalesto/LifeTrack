@@ -93,6 +93,12 @@ nonisolated enum LifeTrackSettings {
     nonisolated enum Keys {
         static let nickname = "LifeTrack.settings.nickname"
         static let themeID = "LifeTrack.settings.themeID"
+        static let darkModeEnabled = "LifeTrack.settings.darkModeEnabled"
+        static let appearanceMode = "LifeTrack.settings.appearanceMode"
+        static let appFontChoice = "LifeTrack.settings.appFontChoice"
+        static let titleTextScale = "LifeTrack.settings.titleTextScale"
+        static let bodyTextScale = "LifeTrack.settings.bodyTextScale"
+        static let captionTextScale = "LifeTrack.settings.captionTextScale"
         static let avatarVersion = "LifeTrack.settings.avatarVersion"
         static let animationsEnabled = "LifeTrack.settings.animationsEnabled"
         static let colorStrength = "LifeTrack.settings.colorStrength"
@@ -109,6 +115,7 @@ nonisolated enum LifeTrackSettings {
         static let hideStatusBar = "LifeTrack.settings.hideStatusBar"
         static let moneyCurrencyCode = "LifeTrack.settings.moneyCurrencyCode"
         static let moneyCurrencyLocked = "LifeTrack.settings.moneyCurrencyLocked"
+        static let calendarSyncedEventMap = "LifeTrack.settings.calendarSyncedEventMap"
     }
 }
 

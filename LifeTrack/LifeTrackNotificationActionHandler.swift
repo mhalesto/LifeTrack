@@ -140,6 +140,7 @@ enum LifeTrackNotificationActionHandler {
             title: task.title,
             categoryTitle: categoryTitle,
             dueDate: task.dueDate,
+            isHighPriority: task.priority == .high,
             detailLine: task.reminderDetailLine(categoryTitle: categoryTitle)
         )
     }

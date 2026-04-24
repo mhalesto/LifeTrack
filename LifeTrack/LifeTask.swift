@@ -415,6 +415,10 @@ final class LifeTask {
     }
 
     func reminderDetailLine(categoryTitle: String) -> String {
+        alertDetailLine(categoryTitle: categoryTitle, includeLocationFallback: true)
+    }
+
+    func alertDetailLine(categoryTitle: String, includeLocationFallback: Bool) -> String {
         if financialEnabled {
             if let detail = notificationLine(from: financialNotes) {
                 return detail
@@ -442,7 +446,7 @@ final class LifeTask {
             return "Document: \(detail)"
         }
 
-        if let location = notificationLine(from: locationReminderName) {
+        if includeLocationFallback, let location = notificationLine(from: locationReminderName) {
             return "Location reminder • \(location)"
         }
 
@@ -454,7 +458,7 @@ final class LifeTask {
             return "\(recurrence.shortTitle) • \(categoryTitle) • \(durationTitle)"
         }
 
-        return "\(categoryTitle) • \(durationTitle) • \(dueDate.timeString)"
+        return "\(categoryTitle) • \(durationTitle)"
     }
 
     private func notificationLine(from value: String?) -> String? {

@@ -19,6 +19,7 @@
 		5EA0B00000000000000000F4 /* LifeTrackShareTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E5 /* LifeTrackShareTheme.swift */; };
 		5EA0B00000000000000000F5 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA0A00000000000000000E6 /* ShareSheetView.swift */; };
 		987C15AE045B4251AA6EF384 /* LifeTrackReminderNotificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20C197A37A04E7482CE77B7 /* LifeTrackReminderNotificationView.swift */; };
+		A4B5C6D7E8F9012345678901 /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A4B5C6D7E8F9012345678902 /* MainInterface.storyboard */; };
 		C3BC15F4831D459D843E29EA /* LifeTrackNotificationContentExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 983DB111F429489ABB1A88C2 /* LifeTrackNotificationContentExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -94,6 +95,7 @@
 		5EA0A00000000000000000E6 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
 		76124E7C741E4028A87AE4EF /* NotificationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationViewController.swift; sourceTree = "<group>"; };
 		983DB111F429489ABB1A88C2 /* LifeTrackNotificationContentExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LifeTrackNotificationContentExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A4B5C6D7E8F9012345678902 /* MainInterface.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = MainInterface.storyboard; sourceTree = "<group>"; };
 		C3CBFF25FAFC42BEA7F37B8F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E20C197A37A04E7482CE77B7 /* LifeTrackReminderNotificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeTrackReminderNotificationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -186,6 +188,7 @@
 			isa = PBXGroup;
 			children = (
 				C3CBFF25FAFC42BEA7F37B8F /* Info.plist */,
+				A4B5C6D7E8F9012345678902 /* MainInterface.storyboard */,
 				76124E7C741E4028A87AE4EF /* NotificationViewController.swift */,
 				E20C197A37A04E7482CE77B7 /* LifeTrackReminderNotificationView.swift */,
 			);
@@ -475,6 +478,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A4B5C6D7E8F9012345678901 /* MainInterface.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -689,11 +693,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LifeTrack/LifeTrack.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "LifeTrack reads your Apple Calendar busy times to avoid meetings when planning tasks, and can optionally sync scheduled task blocks back to Calendar.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "LifeTrack reads your Apple Calendar busy times to avoid meetings when planning tasks, and can optionally sync scheduled task blocks back to Calendar.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "LifeTrack uses the camera so you can scan a document and turn it into a task.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "LifeTrack reads your sleep and heart rate variability to surface the right tasks for your energy level today.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "LifeTrack may write health data to help you track wellness-related tasks.";
@@ -731,11 +737,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LifeTrack/LifeTrack.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "LifeTrack reads your Apple Calendar busy times to avoid meetings when planning tasks, and can optionally sync scheduled task blocks back to Calendar.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "LifeTrack reads your Apple Calendar busy times to avoid meetings when planning tasks, and can optionally sync scheduled task blocks back to Calendar.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "LifeTrack uses the camera so you can scan a document and turn it into a task.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "LifeTrack reads your sleep and heart rate variability to surface the right tasks for your energy level today.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "LifeTrack may write health data to help you track wellness-related tasks.";
@@ -771,7 +779,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -793,7 +801,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -814,7 +822,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
@@ -834,7 +842,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
@@ -857,7 +865,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = LifeTrackControlWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LifeTrackControlWidget/Info.plist;
@@ -888,7 +896,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = LifeTrackControlWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LifeTrackControlWidget/Info.plist;
@@ -918,7 +926,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = LifeTrackShareExtension/LifeTrackShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LifeTrackShareExtension/Info.plist;
@@ -949,7 +957,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = LifeTrackShareExtension/LifeTrackShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LifeTrackShareExtension/Info.plist;
@@ -979,7 +987,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LifeTrackNotificationContentExtension/Info.plist;
@@ -1009,7 +1017,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 53;
 				DEVELOPMENT_TEAM = B98QD8MH9U;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LifeTrackNotificationContentExtension/Info.plist;

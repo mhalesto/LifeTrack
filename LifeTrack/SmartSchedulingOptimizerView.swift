@@ -3,14 +3,24 @@
 //  LifeTrack
 //
 
+import EventKit
+import SwiftData
 import SwiftUI
+import UIKit
 
 struct SmartSchedulingOptimizerView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.openURL) private var openURL
+    @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
     @ObservedObject private var advisor = SmartSchedulingAdvisor.shared
     @ObservedObject private var energyReader = HealthKitEnergyReader.shared
+    @ObservedObject private var calendarManager = CalendarIntegrationManager.shared
 
     let tasks: [LifeTask]
+
+    @State private var isApplyingSchedule = false
+    @State private var applyFeedback: ScheduleApplyFeedback?
 
     private let gold = Color(red: 0.95, green: 0.72, blue: 0.1)
 
@@ -36,11 +46,8 @@ struct SmartSchedulingOptimizerView: View {
             }
             .padding(LifeTrackTheme.Spacing.xLarge)
         }
-        .task {
-            if advisor.scheduledBlocks.isEmpty && advisor.dayStrategy.isEmpty {
-                await energyReader.refresh()
-                await advisor.optimize(tasks: tasks, energyLevel: energyReader.energyLevel)
-            }
+        .task(id: scheduleRefreshKey) {
+            await refreshSchedule(forceCalendarReload: false)
         }
     }
 
@@ -50,7 +57,8 @@ struct SmartSchedulingOptimizerView: View {
         ZStack {
             LinearGradient(
                 colors: [Color(red: 0.12, green: 0.06, blue: 0.28), Color(red: 0.07, green: 0.04, blue: 0.18)],
-                startPoint: .top, endPoint: .bottom
+                startPoint: .top,
+                endPoint: .bottom
             )
             VStack(spacing: 14) {
                 Spacer().frame(height: 48)
@@ -70,7 +78,7 @@ struct SmartSchedulingOptimizerView: View {
                         Image(systemName: energyReader.energyLevel.sfSymbol)
                             .font(.caption)
                             .foregroundStyle(energyReader.energyLevel.color)
-                        Text("\(energyReader.energyLevel.label) · Powered by Claude · Ultimate")
+                        Text(headerSubtitle)
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.5))
                     }
@@ -120,8 +128,7 @@ struct SmartSchedulingOptimizerView: View {
                 .multilineTextAlignment(.center)
             Button("Try Again") {
                 Task {
-                    await energyReader.refresh()
-                    await advisor.optimize(tasks: tasks, energyLevel: energyReader.energyLevel)
+                    await refreshSchedule(forceCalendarReload: true)
                 }
             }
             .font(.subheadline.weight(.semibold))
@@ -132,21 +139,70 @@ struct SmartSchedulingOptimizerView: View {
 
     private var scheduleContent: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+            calendarStatusCard
+
+            if let applyFeedback {
+                applyFeedbackCard(applyFeedback)
+            }
+
             if !advisor.dayStrategy.isEmpty {
                 strategyCard
             }
+
             if !advisor.scheduledBlocks.isEmpty {
                 timelineSection
+                applySection
             }
+
             if !advisor.unscheduledTitles.isEmpty {
                 unscheduledSection
             }
+
             refreshButton
         }
         .padding(.top, LifeTrackTheme.Spacing.xLarge)
     }
 
-    // MARK: - Strategy Card
+    // MARK: - Status
+
+    private var calendarStatusCard: some View {
+        SectionCardView {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: calendarStatusSymbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(calendarStatusTint)
+                    .frame(width: 32, height: 32)
+                    .background(calendarStatusTint.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(calendarStatusTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(calendarStatusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                if let actionTitle = calendarActionTitle {
+                    Button(actionTitle, action: handleCalendarAction)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(calendarStatusTint)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .background(calendarStatusTint.opacity(0.1), in: Capsule())
+                        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.92))
+                        .disabled(calendarManager.isRequestingAccess || calendarManager.isLoadingBusyBlocks)
+                } else if calendarManager.isLoadingBusyBlocks {
+                    ProgressView()
+                        .tint(calendarStatusTint)
+                }
+            }
+        }
+    }
 
     private var strategyCard: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -246,6 +302,49 @@ struct SmartSchedulingOptimizerView: View {
         }
     }
 
+    private var applySection: some View {
+        VStack(spacing: 10) {
+            Button {
+                Task { await applySchedule(syncToCalendar: false) }
+            } label: {
+                HStack(spacing: 8) {
+                    if isApplyingSchedule {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                    }
+                    Text("Apply to Tasks")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(gold, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
+            .disabled(isApplyingSchedule)
+
+            if calendarManager.hasReadAccess {
+                Button {
+                    Task { await applySchedule(syncToCalendar: true) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar.badge.plus")
+                        Text("Apply + Sync Calendar")
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(gold)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(gold.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
+                .disabled(isApplyingSchedule)
+            }
+        }
+    }
+
     // MARK: - Unscheduled
 
     private var unscheduledSection: some View {
@@ -284,8 +383,7 @@ struct SmartSchedulingOptimizerView: View {
         VStack(spacing: 6) {
             Button {
                 Task {
-                    await energyReader.refresh()
-                    await advisor.optimize(tasks: tasks, energyLevel: energyReader.energyLevel)
+                    await refreshSchedule(forceCalendarReload: true)
                 }
             } label: {
                 HStack(spacing: 6) {
@@ -307,4 +405,240 @@ struct SmartSchedulingOptimizerView: View {
             }
         }
     }
+
+    // MARK: - Actions
+
+    private var scheduleDayInterval: DateInterval {
+        CalendarAwareScheduleEngine.dayLoadInterval(for: Date())
+    }
+
+    private var scheduleRefreshKey: String {
+        "\(calendarManager.authorizationStatus.rawValue)-\(tasks.count)-\(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)"
+    }
+
+    private var loadedBusyBlocks: [CalendarBusyBlock] {
+        calendarManager.busyBlocks(overlapping: scheduleDayInterval)
+    }
+
+    private var headerSubtitle: String {
+        let source = advisor.scheduleSourceLabel.isEmpty ? "Calendar-aware planning" : advisor.scheduleSourceLabel
+        return "\(energyReader.energyLevel.label) · \(source) · Ultimate"
+    }
+
+    private var calendarStatusTitle: String {
+        switch calendarManager.authorizationStatus {
+        case .authorized, .fullAccess:
+            return "Apple Calendar Connected"
+        case .notDetermined, .writeOnly:
+            return "Connect Apple Calendar"
+        case .denied, .restricted:
+            return "Apple Calendar Access Off"
+        @unknown default:
+            return "Apple Calendar Unavailable"
+        }
+    }
+
+    private var calendarStatusMessage: String {
+        switch calendarManager.authorizationStatus {
+        case .authorized, .fullAccess:
+            let count = loadedBusyBlocks.count
+            return "\(count) busy \(count == 1 ? "event" : "events") reserved today. Only busy windows, not event titles, are used for AI scheduling."
+        case .notDetermined:
+            return "Connect Apple Calendar so Smart Scheduling avoids meetings, appointments, and other real busy time."
+        case .writeOnly:
+            return "LifeTrack needs full calendar access to read busy times before it can build a calendar-aware plan."
+        case .denied, .restricted:
+            return "Enable Calendar access in Settings to make Smart Scheduling respect your real day."
+        @unknown default:
+            return "Calendar status is unavailable right now."
+        }
+    }
+
+    private var calendarStatusSymbol: String {
+        switch calendarManager.authorizationStatus {
+        case .authorized, .fullAccess:
+            return "calendar.badge.checkmark"
+        case .denied, .restricted:
+            return "calendar.badge.exclamationmark"
+        default:
+            return "calendar.badge.plus"
+        }
+    }
+
+    private var calendarStatusTint: Color {
+        switch calendarManager.authorizationStatus {
+        case .authorized, .fullAccess:
+            return LifeTrackTheme.ColorPalette.success
+        case .denied, .restricted:
+            return LifeTrackTheme.ColorPalette.warning
+        default:
+            return gold
+        }
+    }
+
+    private var calendarActionTitle: String? {
+        if calendarManager.needsPermissionPrompt {
+            return "Connect"
+        }
+
+        switch calendarManager.authorizationStatus {
+        case .denied, .restricted:
+            return "Settings"
+        default:
+            return nil
+        }
+    }
+
+    private func handleCalendarAction() {
+        if calendarManager.needsPermissionPrompt {
+            Task {
+                let granted = await calendarManager.requestAccessIfNeeded()
+                guard granted else { return }
+                await refreshSchedule(forceCalendarReload: true)
+            }
+            return
+        }
+
+        if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+            openURL(settingsURL)
+        }
+    }
+
+    private func refreshSchedule(forceCalendarReload: Bool) async {
+        await calendarManager.loadBusyBlocks(in: scheduleDayInterval, force: forceCalendarReload)
+        await energyReader.refresh()
+        await advisor.optimize(
+            tasks: tasks,
+            energyLevel: energyReader.energyLevel,
+            busyBlocks: loadedBusyBlocks,
+            referenceDate: Date()
+        )
+    }
+
+    @MainActor
+    private func applySchedule(syncToCalendar: Bool) async {
+        guard !advisor.scheduledBlocks.isEmpty else {
+            return
+        }
+
+        isApplyingSchedule = true
+        defer { isApplyingSchedule = false }
+
+        let scheduledBlocksByTaskID = Dictionary(uniqueKeysWithValues: advisor.scheduledBlocks.map { ($0.taskID, $0) })
+        let now = Date()
+
+        for task in tasks {
+            guard let block = scheduledBlocksByTaskID[task.id] else {
+                continue
+            }
+
+            task.dueDate = block.startDate
+            task.estimatedDurationMinutes = block.durationMinutes
+            task.updatedAt = now
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            applyFeedback = ScheduleApplyFeedback(
+                title: "Couldn’t apply schedule",
+                message: error.localizedDescription,
+                tint: LifeTrackTheme.ColorPalette.danger,
+                symbolName: "exclamationmark.circle.fill"
+            )
+            return
+        }
+
+        for task in tasks where scheduledBlocksByTaskID[task.id] != nil {
+            TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        }
+
+        if syncToCalendar {
+            var syncedCount = 0
+            var removedCount = 0
+            var failedCount = 0
+
+            for task in tasks {
+                if let block = scheduledBlocksByTaskID[task.id] {
+                    do {
+                        try calendarManager.upsertSyncedEvent(for: task, startDate: block.startDate, endDate: block.endDate)
+                        syncedCount += 1
+                    } catch {
+                        failedCount += 1
+                    }
+                } else {
+                    do {
+                        try calendarManager.removeSyncedEvent(for: task.id)
+                        removedCount += 1
+                    } catch {
+                        failedCount += 1
+                    }
+                }
+            }
+
+            if failedCount == 0 {
+                applyFeedback = ScheduleApplyFeedback(
+                    title: "Schedule applied",
+                    message: calendarFeedbackMessage(syncedCount: syncedCount, removedCount: removedCount),
+                    tint: LifeTrackTheme.ColorPalette.success,
+                    symbolName: "checkmark.circle.fill"
+                )
+            } else {
+                applyFeedback = ScheduleApplyFeedback(
+                    title: "Tasks updated, calendar partial",
+                    message: "LifeTrack updated the task schedule, but couldn’t sync \(failedCount) \(failedCount == 1 ? "event" : "events").",
+                    tint: LifeTrackTheme.ColorPalette.warning,
+                    symbolName: "exclamationmark.circle.fill"
+                )
+            }
+        } else {
+            applyFeedback = ScheduleApplyFeedback(
+                title: "Schedule applied",
+                message: "\(scheduledBlocksByTaskID.count) \(scheduledBlocksByTaskID.count == 1 ? "task" : "tasks") moved onto the new timeline.",
+                tint: LifeTrackTheme.ColorPalette.success,
+                symbolName: "checkmark.circle.fill"
+            )
+        }
+    }
+
+    private func applyFeedbackCard(_ feedback: ScheduleApplyFeedback) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: feedback.symbolName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(feedback.tint)
+                .frame(width: 32, height: 32)
+                .background(feedback.tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(feedback.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                Text(feedback.message)
+                    .font(.footnote)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(LifeTrackTheme.Spacing.medium)
+        .background(feedback.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(feedback.tint.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private func calendarFeedbackMessage(syncedCount: Int, removedCount: Int) -> String {
+        if removedCount > 0 {
+            return "\(syncedCount) \(syncedCount == 1 ? "task was" : "tasks were") synced and \(removedCount) stale \(removedCount == 1 ? "calendar block was" : "calendar blocks were") removed."
+        }
+
+        return "\(syncedCount) \(syncedCount == 1 ? "task was" : "tasks were") updated and synced to Apple Calendar."
+    }
+}
+
+private struct ScheduleApplyFeedback {
+    let title: String
+    let message: String
+    let tint: Color
+    let symbolName: String
 }

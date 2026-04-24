@@ -87,15 +87,30 @@ final class LocationReminderManager: NSObject, CLLocationManagerDelegate {
     }
 
     private func scheduleLocationNotification(for task: LifeTask, region: CLCircularRegion) {
+        let categoryTitle = resolvedCategoryTitle(for: task)
+        let statusLine = locationStatusLine(for: task)
+        let detailLine = task.alertDetailLine(categoryTitle: categoryTitle, includeLocationFallback: false)
+
         let content = UNMutableNotificationContent()
-        content.title = task.locationReminderOnArrival ? "You've arrived!" : "You're leaving!"
-        content.subtitle = task.title
-        content.body = task.locationReminderName.map { "Near \($0)" } ?? ""
+        content.title = task.title
+        content.subtitle = detailLine
+        content.body = ReminderScheduler.composeBody(lines: [statusLine, "Just now"])
         content.sound = .default
         content.categoryIdentifier = ReminderScheduler.categoryIdentifier
+        content.threadIdentifier = "lifetrack.task-reminders"
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = task.priority == .high ? .timeSensitive : .active
+            content.relevanceScore = task.priority == .high ? 0.97 : 0.7
+        }
         content.userInfo = [
             ReminderScheduler.taskIDUserInfoKey: task.id.uuidString,
-            ReminderScheduler.taskTitleUserInfoKey: task.title
+            ReminderScheduler.taskTitleUserInfoKey: task.title,
+            ReminderScheduler.categoryTitleUserInfoKey: categoryTitle,
+            ReminderScheduler.dueTimestampUserInfoKey: task.dueDate.timeIntervalSince1970,
+            ReminderScheduler.themeIDUserInfoKey: LifeTrackAppTheme.current.rawValue,
+            ReminderScheduler.reminderStatusUserInfoKey: statusLine,
+            ReminderScheduler.reminderDetailUserInfoKey: detailLine,
+            ReminderScheduler.isHighPriorityUserInfoKey: task.priority == .high
         ]
 
         let trigger = UNLocationNotificationTrigger(region: region, repeats: false)
@@ -110,5 +125,37 @@ final class LocationReminderManager: NSObject, CLLocationManagerDelegate {
 
     private func deliverIfNeeded(identifier: String, event: String) {
         // Notification is already scheduled via UNLocationNotificationTrigger — iOS delivers it automatically
+    }
+
+    private func locationStatusLine(for task: LifeTask) -> String {
+        if let locationName = task.locationReminderName?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !locationName.isEmpty {
+            return task.locationReminderOnArrival ? "Arrived near \(locationName)" : "Leaving \(locationName)"
+        }
+
+        return task.locationReminderOnArrival ? "You've arrived" : "You're leaving"
+    }
+
+    private func resolvedCategoryTitle(for task: LifeTask) -> String {
+        if let category = TaskCategory(rawValue: task.categoryRawValue) {
+            return category.title
+        }
+
+        return task.categoryRawValue
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .map { $0.capitalized }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nonEmptyValue ?? TaskCategory.other.title
+    }
+}
+
+private extension String {
+    var nonEmptyValue: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

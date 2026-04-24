@@ -67,7 +67,7 @@ enum VoiceTaskParser {
         body = stripTimeExpressions(body)
         body = collapseWhitespace(body)
         body = trimmedTrailingConnectors(body)
-        body = body.trimmingCharacters(in: CharacterSet(charactersIn: ",.;: "))
+        body = body.trimmingCharacters(in: CharacterSet(charactersIn: ",;: "))
         return body.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -129,7 +129,8 @@ enum VoiceTaskParser {
             }
         }
 
-        return (capitalized(text), nil)
+        let trimmed = text.trimmingCharacters(in: CharacterSet(charactersIn: " .,;:!?"))
+        return (capitalized(trimmed), nil)
     }
 
     private static func splitOnSentenceBoundary(_ text: String) -> (String, String)? {
