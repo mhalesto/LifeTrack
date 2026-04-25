@@ -116,6 +116,7 @@ struct MoneyComparisonBar: View {
 struct MoneyCategoryRow: View {
     let total: MoneyCategoryTotal
     let maxAmount: Double
+    var carryIn: Double = 0
 
     var body: some View {
         HStack(spacing: LifeTrackTheme.Spacing.medium) {
@@ -130,6 +131,14 @@ struct MoneyCategoryRow: View {
                     Text(total.category)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    if carryIn > 0 {
+                        Text("+\(MoneyFormatting.currency(carryIn, code: total.currencyCode)) rolled over")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.success)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(LifeTrackTheme.ColorPalette.success.opacity(0.12), in: Capsule())
+                    }
                     Spacer()
                     Text(MoneyFormatting.currency(total.actual, code: total.currencyCode))
                         .font(.subheadline.weight(.bold))
@@ -137,12 +146,19 @@ struct MoneyCategoryRow: View {
                 }
 
                 GeometryReader { proxy in
+                    let adjustedPlanned = max(total.planned + carryIn, 0)
+                    let denominator = max(adjustedPlanned, max(total.actual, maxAmount))
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(LifeTrackTheme.ColorPalette.hairline.opacity(0.5))
+                        if adjustedPlanned > 0 {
+                            Capsule()
+                                .fill(total.kind.tint.opacity(0.25))
+                                .frame(width: proxy.size.width * min(max(adjustedPlanned / denominator, 0), 1))
+                        }
                         Capsule()
                             .fill(total.kind.tint)
-                            .frame(width: proxy.size.width * min(max(total.actual / maxAmount, 0), 1))
+                            .frame(width: proxy.size.width * min(max(total.actual / denominator, 0), 1))
                     }
                 }
                 .frame(height: 6)

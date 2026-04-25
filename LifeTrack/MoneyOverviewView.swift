@@ -28,6 +28,7 @@ struct MoneyOverviewView: View {
     @State private var isShowingBudgetPlanReview = false
     @State private var isShowingAIInsights = false
     @State private var isShowingStatementImport = false
+    @State private var isShowingRecurring = false
     @State private var editingTask: LifeTask?
 
     private var currencyCode: String {
@@ -85,6 +86,23 @@ struct MoneyOverviewView: View {
                         )
                     }
                     .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
+
+                    Button(action: { isShowingRecurring = true }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "clock.arrow.circlepath")
+                            Text("Recurring Transactions")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(LifeTrackTheme.ColorPalette.card, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                                .stroke(LifeTrackTheme.ColorPalette.hairline, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
                 }
                 .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
                 .padding(.top, LifeTrackTheme.Spacing.large)
@@ -100,6 +118,11 @@ struct MoneyOverviewView: View {
         }
         .sheet(isPresented: $isShowingStatementImport) {
             BankStatementImportView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingRecurring) {
+            RecurringTransactionsView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -505,7 +528,11 @@ struct MoneyOverviewView: View {
             } else {
                 VStack(spacing: 9) {
                     ForEach(rows) { total in
-                        MoneyCategoryRow(total: total, maxAmount: maxSpendingCategoryAmount)
+                        MoneyCategoryRow(
+                            total: total,
+                            maxAmount: maxSpendingCategoryAmount,
+                            carryIn: carryIn(for: total.category)
+                        )
                     }
                 }
             }
@@ -829,6 +856,24 @@ struct MoneyOverviewView: View {
         categoryTotals
             .filter { $0.kind == .expense || $0.kind == .debtPayment }
             .filter { $0.actual > 0 || $0.planned > 0 }
+    }
+
+    private var carryInsByCategory: [String: Double] {
+        let rollovers = BudgetRollover.carryOver(
+            intoMonth: selectedMonth,
+            entries: entries,
+            tasks: tasks,
+            currencyCode: currencyCode
+        )
+        var map: [String: Double] = [:]
+        for r in rollovers where r.carryOver > 0 {
+            map[r.category.lowercased()] = r.carryOver
+        }
+        return map
+    }
+
+    private func carryIn(for category: String) -> Double {
+        carryInsByCategory[category.lowercased()] ?? 0
     }
 
     private var maxSpendingCategoryAmount: Double {

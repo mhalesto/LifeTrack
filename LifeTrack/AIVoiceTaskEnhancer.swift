@@ -24,10 +24,12 @@ final class AIVoiceTaskEnhancer: ObservableObject {
         error = nil
         defer { isEnhancing = false }
 
+        let redacted = SensitiveTextRedactor.redact(transcript)
+
         do {
             let text = try await ClaudeAPIClient.shared.send(
                 system: Self.singleSystemPrompt,
-                userContent: Self.userContent(forTranscript: transcript),
+                userContent: Self.userContent(forTranscript: redacted),
                 maxTokens: 650,
                 cacheTTL: 60 * 60
             )
@@ -81,7 +83,7 @@ final class AIVoiceTaskEnhancer: ObservableObject {
         defer { isEnhancing = false }
 
         let numbered = filledIndexes.enumerated().map { i, idx in
-            "\(i + 1). \"\(cleaned[idx])\""
+            "\(i + 1). \"\(SensitiveTextRedactor.redact(cleaned[idx]))\""
         }.joined(separator: "\n")
 
         let isoFormatter = ISO8601DateFormatter()

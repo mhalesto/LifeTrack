@@ -64,7 +64,7 @@ final class ClaudeAPIClient {
     // MARK: - Public API
 
     private var apiKey: String {
-        UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.claudeAPIKey) ?? ""
+        ClaudeAPIKeyStore.current
     }
 
     var isConfigured: Bool { !apiKey.isEmpty }

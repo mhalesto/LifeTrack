@@ -10,6 +10,7 @@ import SwiftUI
 struct LifeTrackControlWidgetBundle: WidgetBundle {
     var body: some Widget {
         LifeTrackControlWidget()
+        MoneyWidget()
         LifeTrackControlWidgetControl()
         NewBlankTaskControl()
         TodaysFocusControl()

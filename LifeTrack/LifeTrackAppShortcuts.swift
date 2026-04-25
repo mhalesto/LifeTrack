@@ -62,5 +62,36 @@ struct LifeTrackAppShortcuts: AppShortcutsProvider {
             shortTitle: "Today's Focus",
             systemImageName: "sparkles"
         )
+
+        AppShortcut(
+            intent: LogMoneyEntryIntent(),
+            phrases: [
+                "Log money in \(.applicationName)",
+                "Log an expense in \(.applicationName)",
+                "Add an expense to \(.applicationName)"
+            ],
+            shortTitle: "Log Money",
+            systemImageName: "creditcard.fill"
+        )
+
+        AppShortcut(
+            intent: SpentTodayIntent(),
+            phrases: [
+                "How much have I spent today in \(.applicationName)",
+                "What did I spend today in \(.applicationName)"
+            ],
+            shortTitle: "Spent Today",
+            systemImageName: "dollarsign.circle"
+        )
+
+        AppShortcut(
+            intent: SpentThisMonthIntent(),
+            phrases: [
+                "How much have I spent this month in \(.applicationName)",
+                "Monthly spending in \(.applicationName)"
+            ],
+            shortTitle: "Spent This Month",
+            systemImageName: "calendar.badge.clock"
+        )
     }
 }

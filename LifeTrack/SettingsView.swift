@@ -29,7 +29,8 @@ struct SettingsView: View {
     @AppStorage(LifeTrackSettings.Keys.completedArchivePeriod) private var completedArchiveRawValue = CompletedArchivePeriod.fallback.rawValue
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
     @State private var isShowingPaywall = false
-    @AppStorage(LifeTrackSettings.Keys.claudeAPIKey) private var claudeAPIKey = ""
+    @State private var claudeAPIKey = ClaudeAPIKeyStore.current
+    @AppStorage(LifeTrackSettings.Keys.anonymiseBillNamesInAI) private var anonymiseBillNamesInAI = false
     @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.hideStatusBar) private var hideStatusBar = false
     @AppStorage(LifeTrackSettings.Keys.moneyCurrencyCode) private var moneyCurrencyCode = MoneyCurrency.defaultCode
@@ -760,16 +761,32 @@ struct SettingsView: View {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(LifeTrackTheme.ColorPalette.hairline, lineWidth: 0.8)
                     }
+                    .onChange(of: claudeAPIKey) { _, newValue in
+                        ClaudeAPIKeyStore.set(newValue)
+                    }
 
                 if !claudeAPIKey.isEmpty {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
-                        Text("API key saved")
+                        Text("Stored securely in Keychain")
                             .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     }
                     .font(.caption)
                 }
+
+                Toggle(isOn: $anonymiseBillNamesInAI) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Anonymise bill names in AI prompts")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        Text("Replace category and bill titles with placeholders before sending to Claude.")
+                            .font(.caption)
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, 4)
             }
         }
     }

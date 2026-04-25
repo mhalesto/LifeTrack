@@ -15,6 +15,7 @@ enum LifeTrackDataStore {
             LifeTask.self,
             CustomTaskCategory.self,
             MoneyEntry.self,
+            RecurringMoneyTransaction.self,
         ])
         ensureDefaultStoreDirectoryExists()
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)

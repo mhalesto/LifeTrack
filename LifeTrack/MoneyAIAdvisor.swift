@@ -129,17 +129,27 @@ final class MoneyAIAdvisor: ObservableObject {
 
         func fmt(_ v: Double) -> String { MoneyFormatting.currency(v, code: currencyCode) }
 
+        let anonymise = UserDefaults.standard.bool(forKey: LifeTrackSettings.Keys.anonymiseBillNamesInAI)
+
         let topCategories = categoryTotals
             .filter { $0.kind == .expense || $0.kind == .debtPayment }
             .sorted { $0.actual > $1.actual }
             .prefix(5)
-            .map { "\($0.category): actual \(fmt($0.actual)) / planned \(fmt($0.planned))" }
+            .enumerated()
+            .map { idx, total in
+                let label = anonymise ? "Category #\(idx + 1)" : total.category
+                return "\(label): actual \(fmt(total.actual)) / planned \(fmt(total.planned))"
+            }
             .joined(separator: "; ")
 
         let upcomingBills = plannedBills
             .filter { $0.status == .upcoming || $0.status == .atRisk }
             .prefix(3)
-            .map { "\($0.title) \(fmt($0.plannedAmount))" }
+            .enumerated()
+            .map { idx, bill in
+                let title = anonymise ? "Bill #\(idx + 1)" : bill.title
+                return "\(title) \(fmt(bill.plannedAmount))"
+            }
             .joined(separator: ", ")
 
         let userContent = """
@@ -209,24 +219,38 @@ final class MoneyAIAdvisor: ObservableObject {
 
         let monthTitle = DateFormatter.localizedString(from: month, dateStyle: .medium, timeStyle: .none)
 
+        let anonymise = UserDefaults.standard.bool(forKey: LifeTrackSettings.Keys.anonymiseBillNamesInAI)
+
         let spending = categoryTotals
             .filter { $0.kind == .expense || $0.kind == .debtPayment }
             .filter { $0.actual > 0 || $0.planned > 0 }
             .sorted { max($0.actual, $0.planned) > max($1.actual, $1.planned) }
             .prefix(8)
-            .map { "\($0.category): actual \(fmt($0.actual)) / planned \(fmt($0.planned))" }
+            .enumerated()
+            .map { idx, t in
+                let label = anonymise ? "Category #\(idx + 1)" : t.category
+                return "\(label): actual \(fmt(t.actual)) / planned \(fmt(t.planned))"
+            }
             .joined(separator: "; ")
 
         let savingsCats = categoryTotals
             .filter { $0.kind == .savings }
             .filter { $0.actual > 0 || $0.planned > 0 }
-            .map { "\($0.category): actual \(fmt($0.actual)) / planned \(fmt($0.planned))" }
+            .enumerated()
+            .map { idx, t in
+                let label = anonymise ? "Savings #\(idx + 1)" : t.category
+                return "\(label): actual \(fmt(t.actual)) / planned \(fmt(t.planned))"
+            }
             .joined(separator: "; ")
 
         let upcoming = plannedBills
             .filter { $0.status == .upcoming || $0.status == .atRisk }
             .prefix(5)
-            .map { "\($0.title) \(fmt($0.plannedAmount)) [\($0.status.title.lowercased())]" }
+            .enumerated()
+            .map { idx, b in
+                let title = anonymise ? "Bill #\(idx + 1)" : b.title
+                return "\(title) \(fmt(b.plannedAmount)) [\(b.status.title.lowercased())]"
+            }
             .joined(separator: ", ")
 
         let paidBills = plannedBills

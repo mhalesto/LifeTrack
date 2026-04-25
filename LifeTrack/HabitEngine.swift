@@ -25,9 +25,12 @@ enum HabitEngine {
             groupMap[key, default: []].append(task)
         }
 
+        // Index linked-task completions by their target habit group id.
+        let contributions = contributionDates(from: tasks)
+
         var results: [HabitSummary] = []
 
-        for (_, group) in groupMap {
+        for (groupID, group) in groupMap {
             guard let representative = group
                 .filter({ !$0.isCompleted })
                 .sorted(by: { $0.dueDate < $1.dueDate })
@@ -38,7 +41,12 @@ enum HabitEngine {
                 .filter { $0.isCompleted && $0.completedAt != nil }
                 .sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
 
-            let dates = completed.compactMap { $0.completedAt ?? ($0.isCompleted ? $0.updatedAt : nil) }
+            var dates = completed.compactMap { $0.completedAt ?? ($0.isCompleted ? $0.updatedAt : nil) }
+            if let extra = contributions[groupID] {
+                dates.append(contentsOf: extra)
+            }
+            dates.sort(by: >)
+
             let current = currentStreak(dates: dates, recurrence: representative.recurrence)
             let longest = longestStreak(dates: dates, recurrence: representative.recurrence)
             let count = cellCount(for: representative.recurrence)
@@ -58,12 +66,32 @@ enum HabitEngine {
         return results.sorted { $0.currentStreak > $1.currentStreak }
     }
 
+    /// Map of habit-group-id → completion dates from non-recurring tasks
+    /// linked to that habit via `habitContributionID`.
+    private static func contributionDates(from tasks: [LifeTask]) -> [UUID: [Date]] {
+        var map: [UUID: [Date]] = [:]
+        for task in tasks {
+            guard !task.isDeleted, task.isCompleted, !task.isHabit else { continue }
+            guard let target = task.habitContributionID else { continue }
+            let date = task.completedAt ?? task.updatedAt
+            map[target, default: []].append(date)
+        }
+        return map
+    }
+
     static func currentStreak(for task: LifeTask, in tasks: [LifeTask]) -> Int {
         let groupID = task.habitGroupID ?? task.id
-        let completed = tasks
+        var completed = tasks
             .filter { ($0.habitGroupID ?? $0.id) == groupID && $0.isCompleted }
             .compactMap { $0.completedAt ?? ($0.isCompleted ? $0.updatedAt : nil) }
-            .sorted(by: >)
+
+        // Include contributions from linked non-habit tasks.
+        for other in tasks {
+            guard !other.isHabit, other.isCompleted, other.habitContributionID == groupID else { continue }
+            completed.append(other.completedAt ?? other.updatedAt)
+        }
+
+        completed.sort(by: >)
         return currentStreak(dates: completed, recurrence: task.recurrence)
     }
 

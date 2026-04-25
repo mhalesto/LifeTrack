@@ -12,6 +12,10 @@ import UIKit
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var systemColorScheme
+    @Environment(\.modelContext) private var modelContext
+    @Query private var recurringTemplates: [RecurringMoneyTransaction]
+    @Query private var moneyEntries: [MoneyEntry]
+    @Query private var allTasks: [LifeTask]
 
     @State private var isShowingLaunchSplash = true
     @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
@@ -72,6 +76,9 @@ struct ContentView: View {
         .preferredColorScheme(appearanceMode.preferredColorScheme)
         .task {
             await completeInitialSplash()
+            runRecurringMoneyExpansion()
+            publishMoneyWidgetSnapshot()
+            syncMoneyReminders()
         }
         .onAppear {
             syncEffectiveDarkMode(system: systemColorScheme)
@@ -101,11 +108,103 @@ struct ContentView: View {
         }
     }
 
+    private func runRecurringMoneyExpansion() {
+        guard !recurringTemplates.isEmpty else { return }
+        _ = RecurringMoneyExpander.runPendingExpansions(
+            templates: recurringTemplates.filter(\.isActive),
+            modelContext: modelContext
+        )
+    }
+
+    private func syncMoneyReminders() {
+        let now = Date()
+        let currency = UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.moneyCurrencyCode)
+            ?? MoneyCurrency.primaryCurrencyCode(entries: moneyEntries, tasks: allTasks)
+
+        let bills = MoneyAnalytics.plannedBills(
+            for: now,
+            tasks: allTasks,
+            currencyCode: currency
+        )
+        let summary = MoneyAnalytics.monthlySummary(
+            for: now,
+            entries: moneyEntries,
+            tasks: allTasks,
+            currencyCode: currency
+        )
+        let rollovers = BudgetRollover.carryOver(
+            intoMonth: now,
+            entries: moneyEntries,
+            tasks: allTasks,
+            currencyCode: currency
+        )
+        let rolloverTotal = rollovers.filter { $0.carryOver > 0 }.reduce(0) { $0 + $1.carryOver }
+        let adjustedPlanned = max(summary.plannedSpending + rolloverTotal, 0)
+
+        MoneyReminderScheduler.synchronize(
+            bills: bills,
+            monthlyActualSpending: summary.actualSpending,
+            monthlyAdjustedPlannedSpending: adjustedPlanned,
+            currencyCode: currency,
+            now: now
+        )
+    }
+
+    private func publishMoneyWidgetSnapshot() {
+        let calendar = Calendar.current
+        let now = Date()
+        let currency = UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.moneyCurrencyCode)
+            ?? MoneyCurrency.primaryCurrencyCode(entries: moneyEntries, tasks: allTasks)
+
+        let day = calendar.dateInterval(of: .day, for: now)
+            ?? DateInterval(start: now, duration: 86_400)
+        var spentToday: Double = 0
+        for entry in moneyEntries {
+            guard MoneyCurrency.normalized(entry.currencyCode) == MoneyCurrency.normalized(currency) else { continue }
+            guard entry.includeInMonthlySpending else { continue }
+            switch entry.type {
+            case .expense, .debtPayment:
+                spentToday += MoneyAnalytics.amount(for: entry, in: day, calendar: calendar)
+            case .income, .savings, .transfer:
+                continue
+            }
+        }
+
+        let summary = MoneyAnalytics.monthlySummary(
+            for: now,
+            entries: moneyEntries,
+            tasks: allTasks,
+            currencyCode: currency
+        )
+        let categoryTotals = MoneyAnalytics.categoryTotals(
+            for: now,
+            entries: moneyEntries,
+            tasks: allTasks,
+            currencyCode: currency
+        )
+        let topExpense = categoryTotals
+            .filter { $0.kind == .expense }
+            .max(by: { $0.actual < $1.actual })
+
+        MoneyWidgetSnapshotPublisher.publish(
+            spentToday: spentToday,
+            spentThisMonth: summary.actualSpending,
+            plannedThisMonth: summary.plannedSpending,
+            topCategoryName: topExpense?.category,
+            topCategoryAmount: topExpense?.actual ?? 0,
+            currencyCode: currency,
+            referenceDate: now
+        )
+    }
+
     private func handleScenePhaseChange(_ phase: ScenePhase) {
         switch phase {
         case .active:
             guard !isShowingLaunchSplash else { return }
             AppSnapshotCover.hide(animated: true)
+            runRecurringMoneyExpansion()
+            publishMoneyWidgetSnapshot()
+            syncMoneyReminders()
         case .inactive:
             break
         case .background:

@@ -34,6 +34,50 @@ nonisolated struct FocusWidgetSnapshot: Codable {
     let upcomingCount: Int
 }
 
+nonisolated struct MoneyWidgetSnapshot: Codable {
+    static let userDefaultsKey = "widget.moneySnapshot"
+
+    let generatedAt: Date
+    let currencyCode: String
+    let spentToday: Double
+    let spentThisMonth: Double
+    let plannedThisMonth: Double
+    let topCategoryName: String?
+    let topCategoryAmount: Double
+}
+
+enum MoneyWidgetSnapshotPublisher {
+    @MainActor
+    static func publish(
+        spentToday: Double,
+        spentThisMonth: Double,
+        plannedThisMonth: Double,
+        topCategoryName: String?,
+        topCategoryAmount: Double,
+        currencyCode: String,
+        referenceDate: Date = Date()
+    ) {
+        let snapshot = MoneyWidgetSnapshot(
+            generatedAt: referenceDate,
+            currencyCode: currencyCode,
+            spentToday: spentToday,
+            spentThisMonth: spentThisMonth,
+            plannedThisMonth: plannedThisMonth,
+            topCategoryName: topCategoryName,
+            topCategoryAmount: topCategoryAmount
+        )
+
+        guard let defaults = LifeTrackSharedGroup.defaults,
+              let data = try? JSONEncoder.snapshotEncoder.encode(snapshot)
+        else {
+            return
+        }
+
+        defaults.set(data, forKey: MoneyWidgetSnapshot.userDefaultsKey)
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+}
+
 enum FocusWidgetSnapshotPublisher {
     @MainActor
     static func publish(
@@ -116,6 +160,8 @@ nonisolated enum LifeTrackSettings {
         static let moneyCurrencyCode = "LifeTrack.settings.moneyCurrencyCode"
         static let moneyCurrencyLocked = "LifeTrack.settings.moneyCurrencyLocked"
         static let calendarSyncedEventMap = "LifeTrack.settings.calendarSyncedEventMap"
+        static let voiceTranscriptDisclosureShown = "LifeTrack.settings.voiceTranscriptDisclosureShown"
+        static let anonymiseBillNamesInAI = "LifeTrack.settings.anonymiseBillNamesInAI"
     }
 }
 

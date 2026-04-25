@@ -163,6 +163,10 @@ final class LifeTask {
     // Habit tracking
     var habitGroupID: UUID?
     var completedAt: Date?
+    // When set, completing this task contributes to the streak of the habit
+    // identified by `habitContributionID` (the habit group ID, which equals
+    // either the habit's id or its habitGroupID).
+    var habitContributionID: UUID?
     // Location reminder
     var locationReminderName: String?
     var locationReminderLatitude: Double?

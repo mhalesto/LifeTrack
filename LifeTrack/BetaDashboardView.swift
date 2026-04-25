@@ -1076,7 +1076,8 @@ struct BetaDashboardView: View {
                 AnyView(nextMoveHeroCard),
                 AnyView(streakHeroCard),
                 AnyView(upgradeHeroCard)
-            ]
+            ],
+            isPremium: subscriptionManager.tier >= .standard
         )
     }
 
@@ -2012,6 +2013,24 @@ struct BetaDashboardView: View {
                             categoryOption: task.categoryOption(customCategories: customCategories),
                             showsBorder: false
                         )
+                        .contextMenu {
+                            if FocusActivityController.shared.isPinned(task) {
+                                Button(role: .destructive) {
+                                    FocusActivityController.shared.stop()
+                                } label: {
+                                    Label("Unpin from Lock Screen", systemImage: "pin.slash")
+                                }
+                            } else if !task.isCompleted {
+                                Button {
+                                    FocusActivityController.shared.start(
+                                        for: task,
+                                        customCategories: customCategories
+                                    )
+                                } label: {
+                                    Label("Pin to Lock Screen", systemImage: "pin")
+                                }
+                            }
+                        }
                     }
 
                     HStack(spacing: 10) {
@@ -2111,10 +2130,12 @@ struct BetaDashboardView: View {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 16_000_000)
             TaskLifecycleManager.finishToggleCompletion(pending, in: modelContext, customCategories: customCategories)
+            FocusActivityController.shared.update(for: task)
         }
     }
 
     private func deleteFocusTask(_ task: LifeTask) {
+        FocusActivityController.shared.stop(matching: task.id)
         _ = TaskLifecycleManager.delete(task, in: modelContext)
     }
 

@@ -209,11 +209,13 @@ struct BetaSummaryTaskCard: View {
 
 struct HeroPager: View {
     let pages: [AnyView]
+    var isPremium: Bool = false
 
     private let cardHeight: CGFloat = 240
     @State private var currentIndex: Int? = 0
     @State private var isDragging: Bool = false
     @State private var lastInteraction: Date = .distantPast
+    @State private var isPinned: Bool = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -231,6 +233,7 @@ struct HeroPager: View {
             .scrollIndicators(.hidden)
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $currentIndex)
+            .scrollDisabled(isPinned)
             .frame(height: cardHeight)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
@@ -242,10 +245,18 @@ struct HeroPager: View {
                         lastInteraction = Date()
                     }
             )
+            .overlay(alignment: .topTrailing) {
+                if isPremium {
+                    HeroPagerPinButton(isPinned: $isPinned)
+                        .padding(.top, 14)
+                        .padding(.trailing, 16)
+                }
+            }
             .onChange(of: currentIndex) { _, _ in
                 lastInteraction = Date()
             }
             .onReceive(Timer.publish(every: 7, on: .main, in: .common).autoconnect()) { now in
+                guard !isPinned else { return }
                 guard !isDragging else { return }
                 guard !pages.isEmpty else { return }
                 guard now.timeIntervalSince(lastInteraction) >= 6.5 else { return }
@@ -258,6 +269,34 @@ struct HeroPager: View {
 
             HeroPagerDots(currentIndex: currentIndex ?? 0, count: pages.count)
         }
+    }
+}
+
+private struct HeroPagerPinButton: View {
+    @Binding var isPinned: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                isPinned.toggle()
+            }
+        } label: {
+            Image(systemName: isPinned ? "pin.fill" : "pin")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(isPinned ? Color.red : BetaPalette.secondaryText)
+                .rotationEffect(.degrees(isPinned ? 0 : 35))
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
+                        .fill(isPinned ? Color.red.opacity(0.16) : LifeTrackTheme.ColorPalette.cardElevated.opacity(0.85))
+                )
+                .overlay(
+                    Circle()
+                        .stroke(isPinned ? Color.red.opacity(0.55) : LifeTrackTheme.ColorPalette.hairline.opacity(0.7), lineWidth: 0.8)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isPinned ? "Unpin slide" : "Pin slide")
     }
 }
 

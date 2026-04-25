@@ -64,6 +64,8 @@ struct NewTaskView: View {
     @State private var locationConfig: LocationReminderConfig?
     @State private var isShowingLocationPicker = false
     @State private var isAIEnhancing = false
+    @State private var isShowingVoiceTranscriptDisclosure = false
+    @AppStorage(LifeTrackSettings.Keys.voiceTranscriptDisclosureShown) private var voiceTranscriptDisclosureShown = false
     @State private var advancedFieldValues: [String: String] = [:]
     @State private var isAdvancedExpanded = false
     @State private var financialEnabled = false
@@ -309,6 +311,15 @@ struct NewTaskView: View {
                 }
             } message: { draft in
                 Text(resumePromptMessage(for: draft))
+            }
+            .alert("Send voice note to AI?", isPresented: $isShowingVoiceTranscriptDisclosure) {
+                Button("Not now", role: .cancel) { }
+                Button("Allow") {
+                    voiceTranscriptDisclosureShown = true
+                    Task { await enhanceVoiceDraftWithAI() }
+                }
+            } message: {
+                Text("To turn your voice note into a structured task, the transcript is sent to Anthropic's Claude API. Avoid speaking sensitive details (full names, addresses, ID numbers, medical info) you don't want to leave the device.")
             }
         }
     }
@@ -1351,6 +1362,11 @@ struct NewTaskView: View {
     }
 
     private func enhanceVoiceDraftWithAI() async {
+        if !voiceTranscriptDisclosureShown {
+            await MainActor.run { isShowingVoiceTranscriptDisclosure = true }
+            return
+        }
+
         isAIEnhancing = true
         defer { isAIEnhancing = false }
 
