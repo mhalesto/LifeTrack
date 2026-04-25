@@ -168,6 +168,7 @@ enum TaskExchangeManager {
         "financial_notes",
         "created_at",
         "updated_at",
+        "completed_at",
         "deleted_at",
         "document_name",
         "document_keywords",
@@ -395,6 +396,12 @@ enum TaskExchangeManager {
             let status = TaskExchangeStatus(record.status)
             let createdAt = parsedDate(record.createdAt) ?? now
             let updatedAt = parsedDate(record.updatedAt) ?? now
+            let completedAt: Date? = {
+                if status == .done {
+                    return parsedDate(record.completedAt) ?? updatedAt
+                }
+                return parsedDate(record.completedAt)
+            }()
             let deletedAt = status == .bin ? (parsedDate(record.deletedAt) ?? now) : nil
 
             if let existing = existingByID[taskID] {
@@ -406,7 +413,8 @@ enum TaskExchangeManager {
                     categoryRawValue: categoryRawValue,
                     status: status,
                     deletedAt: deletedAt,
-                    updatedAt: updatedAt
+                    updatedAt: updatedAt,
+                    completedAt: completedAt
                 )
                 updated += 1
                 affectedTasks.append(existing)
@@ -441,6 +449,7 @@ enum TaskExchangeManager {
                 )
                 applyFinancialRecord(record, to: task)
                 task.advancedFields = sanitizedAdvancedFields(record.advancedFields, forCategoryRawValue: categoryRawValue)
+                task.completedAt = completedAt
                 modelContext.insert(task)
                 existingByID[taskID] = task
                 created += 1
@@ -474,12 +483,14 @@ enum TaskExchangeManager {
         categoryRawValue: String,
         status: TaskExchangeStatus,
         deletedAt: Date?,
-        updatedAt: Date
+        updatedAt: Date,
+        completedAt: Date?
     ) {
         task.title = title
         task.dueDate = dueDate
         task.categoryRawValue = categoryRawValue
         task.isCompleted = status == .done
+        task.completedAt = completedAt
         task.deletedAt = deletedAt
         task.notes = record.notes ?? ""
         task.templateAction = TaskTemplateAction(rawValue: record.templateAction ?? "") ?? .none
@@ -555,6 +566,7 @@ enum TaskExchangeManager {
             financialNotes: task.financialEnabled ? task.financialNotes : nil,
             createdAt: isoDateString(task.createdAt),
             updatedAt: isoDateString(task.updatedAt),
+            completedAt: task.completedAt.map(isoDateString),
             deletedAt: task.deletedAt.map(isoDateString),
             documentDisplayName: task.documentDisplayName,
             documentKeywords: task.documentKeywords,
@@ -634,6 +646,7 @@ enum TaskExchangeManager {
                 financialNotes: firstValue(in: values, keys: ["financial_notes", "money_notes"]),
                 createdAt: firstValue(in: values, keys: ["created_at", "created"]),
                 updatedAt: firstValue(in: values, keys: ["updated_at", "updated"]),
+                completedAt: firstValue(in: values, keys: ["completed_at", "completed", "finished_at", "finished"]),
                 deletedAt: firstValue(in: values, keys: ["deleted_at", "deleted"]),
                 documentDisplayName: firstValue(in: values, keys: ["document_name", "document", "file_name"]),
                 documentKeywords: firstValue(in: values, keys: ["document_keywords", "keywords"])?
@@ -702,6 +715,7 @@ enum TaskExchangeManager {
             record.financialNotes ?? "",
             record.createdAt ?? "",
             record.updatedAt ?? "",
+            record.completedAt ?? "",
             record.deletedAt ?? "",
             record.documentDisplayName ?? "",
             keywords,
@@ -1076,6 +1090,7 @@ private struct TaskExchangeRecord: Codable {
     var financialNotes: String?
     var createdAt: String?
     var updatedAt: String?
+    var completedAt: String?
     var deletedAt: String?
     var documentDisplayName: String?
     var documentKeywords: [String]?
@@ -1110,6 +1125,7 @@ private struct TaskExchangeRecord: Codable {
         financialNotes: String? = nil,
         createdAt: String? = nil,
         updatedAt: String? = nil,
+        completedAt: String? = nil,
         deletedAt: String? = nil,
         documentDisplayName: String? = nil,
         documentKeywords: [String]? = nil,
@@ -1143,6 +1159,7 @@ private struct TaskExchangeRecord: Codable {
         self.financialNotes = financialNotes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.completedAt = completedAt
         self.deletedAt = deletedAt
         self.documentDisplayName = documentDisplayName
         self.documentKeywords = documentKeywords

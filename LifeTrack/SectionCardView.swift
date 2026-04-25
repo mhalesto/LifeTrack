@@ -57,6 +57,9 @@ struct SectionHeaderView: View {
                 Text(trailing)
                     .font(.lifeTrackCaption)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
             }
         }
     }

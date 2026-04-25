@@ -11,11 +11,13 @@ import SwiftUI
 
 struct StatisticsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
     let tasks: [LifeTask]
 
     @State private var selectedRange: StatisticsTimeRange = .days
+    @State private var rangeEndAnchor: Date = Date()
     @State private var hasAppeared = false
     @State private var chartProgress = 1.0
     @State private var statsSnapshot = ProductivityStatsSnapshot.empty
@@ -78,15 +80,45 @@ struct StatisticsView: View {
                 .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
                 .padding(.top, LifeTrackTheme.Spacing.large)
                 .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 30)
+                        .onEnded { value in
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            guard abs(dx) > abs(dy) * 1.6, abs(dx) > 70 else { return }
+                            if dx < 0 {
+                                if canStepRangeForward { stepRange(by: 1) }
+                            } else {
+                                stepRange(by: -1)
+                            }
+                        }
+                )
             }
             .scrollIndicators(.hidden)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                }
+                .accessibilityLabel("Back")
+            }
+        }
         .onAppear {
             runEntranceAnimation()
             refreshStats()
         }
         .onChange(of: selectedRange) { _, _ in
+            rangeEndAnchor = Date()
+            refreshStats()
+        }
+        .onChange(of: rangeEndAnchor) { _, _ in
             refreshStats()
         }
         .onChange(of: animationsEnabled) { _, _ in
@@ -132,7 +164,80 @@ struct StatisticsView: View {
     }
 
     private var rangeSelector: some View {
-        StatisticsRangeSelector(selectedRange: $selectedRange)
+        VStack(spacing: LifeTrackTheme.Spacing.small) {
+            StatisticsRangeSelector(selectedRange: $selectedRange)
+            StatisticsRangeNavigator(
+                label: rangeNavigatorLabel,
+                canStepForward: canStepRangeForward,
+                isOnCurrentWindow: isOnCurrentRangeWindow,
+                onBack: { stepRange(by: -1) },
+                onForward: { stepRange(by: 1) },
+                onJumpToNow: { rangeEndAnchor = Date() }
+            )
+        }
+    }
+
+    private var rangeNavigatorLabel: String {
+        guard let interval = selectedRangeInterval else {
+            return selectedRange.title
+        }
+        let calendar = Calendar.current
+        let startBucket = interval.start
+        let lastBucket = calendar.date(byAdding: selectedRange.calendarComponent, value: -1, to: interval.end) ?? interval.start
+        switch selectedRange {
+        case .days:
+            let formatter = DateFormatter()
+            formatter.dateFormat = "d MMM"
+            return "\(formatter.string(from: startBucket)) – \(formatter.string(from: lastBucket))"
+        case .weeks:
+            let formatter = DateFormatter()
+            formatter.dateFormat = "d MMM"
+            return "\(formatter.string(from: startBucket)) – \(formatter.string(from: lastBucket))"
+        case .months:
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM yyyy"
+            return "\(formatter.string(from: startBucket)) – \(formatter.string(from: lastBucket))"
+        }
+    }
+
+    private var canStepRangeForward: Bool {
+        let calendar = Calendar.current
+        guard let candidate = calendar.date(
+            byAdding: selectedRange.calendarComponent,
+            value: selectedRange.bucketCount,
+            to: rangeEndAnchor
+        ) else { return false }
+        return candidate <= Date()
+    }
+
+    private var isOnCurrentRangeWindow: Bool {
+        let calendar = Calendar.current
+        return calendar.isDate(rangeEndAnchor, inSameDayAs: Date())
+            || rangeEndAnchor.timeIntervalSinceNow > -60
+    }
+
+    private var paddedPointsDomain: ClosedRange<Date>? {
+        guard let first = points.first?.date, let last = points.last?.date else { return nil }
+        guard points.count >= 2 else {
+            let pad: TimeInterval = 12 * 60 * 60
+            return first.addingTimeInterval(-pad)...last.addingTimeInterval(pad)
+        }
+        let avg = last.timeIntervalSince(first) / Double(points.count - 1)
+        let pad = max(avg / 2, 1)
+        let lower = first.addingTimeInterval(-pad)
+        let upper = last.addingTimeInterval(pad)
+        guard upper > lower else { return nil }
+        return lower...upper
+    }
+
+    private func stepRange(by direction: Int) {
+        let calendar = Calendar.current
+        guard let stepped = calendar.date(
+            byAdding: selectedRange.calendarComponent,
+            value: direction * selectedRange.bucketCount,
+            to: rangeEndAnchor
+        ) else { return }
+        rangeEndAnchor = min(stepped, Date())
     }
 
     private var statisticsLoadingState: some View {
@@ -331,6 +436,7 @@ struct StatisticsView: View {
                 }
             }
             .chartYScale(domain: 0...paddedCountAxisUpperBound(points.map(\.completedCount).max() ?? 0))
+            .applyPaddedDateDomain(paddedPointsDomain)
             .frame(height: 230)
             .padding(.top, 6)
             .animation(animationsEnabled ? .smooth(duration: 0.85) : nil, value: chartProgress)
@@ -421,6 +527,7 @@ struct StatisticsView: View {
                 }
             }
             .chartYScale(domain: 0...max(1, points.map(\.overdueCount).max() ?? 1))
+            .applyPaddedDateDomain(paddedPointsDomain)
             .frame(height: 230)
             .animation(animationsEnabled ? .smooth(duration: 0.85) : nil, value: chartProgress)
 
@@ -465,7 +572,7 @@ struct StatisticsView: View {
         case .overdue:
             overdueTasksInRange
         case .completion:
-            (completedTasksInRange + overdueTasksInRange).sorted { $0.updatedAt > $1.updatedAt }
+            (completedTasksInRange + overdueTasksInRange).sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
         case .best:
             tasksForBestPoint
         }
@@ -477,8 +584,11 @@ struct StatisticsView: View {
         }
 
         return activeTasks
-            .filter { $0.isCompleted && $0.updatedAt >= interval.start && $0.updatedAt < interval.end }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .filter { task in
+                let stamp = task.completedAt ?? task.updatedAt
+                return task.isCompleted && stamp >= interval.start && stamp < interval.end
+            }
+            .sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
     }
 
     private var overdueTasksInRange: [LifeTask] {
@@ -497,8 +607,11 @@ struct StatisticsView: View {
         }
 
         return activeTasks
-            .filter { $0.isCompleted && $0.updatedAt >= bestPoint.date && $0.updatedAt < bestPoint.endDate }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .filter { task in
+                let stamp = task.completedAt ?? task.updatedAt
+                return task.isCompleted && stamp >= bestPoint.date && stamp < bestPoint.endDate
+            }
+            .sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
     }
 
     private var selectedRangeInterval: DateInterval? {
@@ -556,6 +669,7 @@ struct StatisticsView: View {
 
         let taskSnapshots = tasks.map(StatisticsTaskSnapshot.init(task:))
         let range = selectedRange
+        let endDate = rangeEndAnchor
 
         if showLoader {
             if animationsEnabled {
@@ -572,7 +686,7 @@ struct StatisticsView: View {
         let calendar = Calendar.current  // capture on @MainActor before crossing to detached
 
         Task.detached(priority: .userInitiated) {
-            let snapshot = ProductivityStatsBuilder.snapshot(for: taskSnapshots, range: range, calendar: calendar)
+            let snapshot = ProductivityStatsBuilder.snapshot(for: taskSnapshots, range: range, calendar: calendar, endDate: endDate)
 
             await MainActor.run {
                 guard statsRefreshID == refreshID else {
@@ -771,6 +885,7 @@ nonisolated private struct StatisticsTaskSnapshot: Sendable {
     let id: UUID
     let dueDate: Date
     let updatedAt: Date
+    let completedAt: Date?
     let isCompleted: Bool
     let isDeleted: Bool
     let categoryRawValue: String
@@ -780,11 +895,14 @@ nonisolated private struct StatisticsTaskSnapshot: Sendable {
         id = task.id
         dueDate = task.dueDate
         updatedAt = task.updatedAt
+        completedAt = task.completedAt
         isCompleted = task.isCompleted
         isDeleted = task.isDeleted
         categoryRawValue = task.categoryRawValue
         scheduledDurationMinutes = task.scheduledDurationMinutes
     }
+
+    var completionTimestamp: Date { completedAt ?? updatedAt }
 
     func isOverdue(at date: Date) -> Bool {
         !isDeleted && !isCompleted && dueDate < date
@@ -1281,9 +1399,10 @@ private enum ProductivityStatsBuilder {
     nonisolated static func snapshot(
         for tasks: [StatisticsTaskSnapshot],
         range: StatisticsTimeRange,
-        calendar: Calendar
+        calendar: Calendar,
+        endDate: Date = Date()
     ) -> ProductivityStatsSnapshot {
-        let points = points(for: tasks, range: range, calendar: calendar)
+        let points = points(for: tasks, range: range, calendar: calendar, endDate: endDate)
         let totalCompleted = points.reduce(0) { $0 + $1.completedCount }
         let totalOverdue = points.reduce(0) { $0 + $1.overdueCount }
         let bestPoint = points.max { $0.completedCount < $1.completedCount }
@@ -1293,7 +1412,7 @@ private enum ProductivityStatsBuilder {
             : 0
 
         let activeTasks = tasks.filter { !$0.isDeleted }
-        let interval = rangeInterval(for: range, calendar: calendar)
+        let interval = rangeInterval(for: range, calendar: calendar, endDate: endDate)
         let streakData = streaks(for: activeTasks, calendar: calendar)
         let weekdayBreakdown = weekdayBreakdown(for: activeTasks, interval: interval, calendar: calendar)
         let bestWeekdayCandidate = weekdayBreakdown.max { $0.completedCount < $1.completedCount }
@@ -1317,8 +1436,8 @@ private enum ProductivityStatsBuilder {
         )
     }
 
-    nonisolated private static func rangeInterval(for range: StatisticsTimeRange, calendar: Calendar) -> DateInterval {
-        let now = Date()
+    nonisolated private static func rangeInterval(for range: StatisticsTimeRange, calendar: Calendar, endDate: Date = Date()) -> DateInterval {
+        let now = endDate
         let currentBucketStart = bucketStart(for: now, range: range, calendar: calendar)
         let firstBucketStart = calendar.date(
             byAdding: range.calendarComponent,
@@ -1333,7 +1452,7 @@ private enum ProductivityStatsBuilder {
         let completionDays = Set(
             tasks
                 .filter { $0.isCompleted }
-                .map { calendar.startOfDay(for: $0.updatedAt) }
+                .map { calendar.startOfDay(for: $0.completionTimestamp) }
         )
         guard !completionDays.isEmpty else {
             return (0, 0)
@@ -1381,10 +1500,10 @@ private enum ProductivityStatsBuilder {
         interval: DateInterval,
         calendar: Calendar
     ) -> [WeekdayPoint] {
-        let completed = tasks.filter { $0.isCompleted && interval.contains($0.updatedAt) }
-        let byWeekday = Dictionary(grouping: completed) { calendar.component(.weekday, from: $0.updatedAt) }
+        let completed = tasks.filter { $0.isCompleted && interval.contains($0.completionTimestamp) }
+        let byWeekday = Dictionary(grouping: completed) { calendar.component(.weekday, from: $0.completionTimestamp) }
 
-        let shortSymbols = calendar.veryShortStandaloneWeekdaySymbols
+        let shortSymbols = calendar.shortStandaloneWeekdaySymbols
         let longSymbols = calendar.standaloneWeekdaySymbols
 
         return (1...7).map { weekday in
@@ -1404,7 +1523,7 @@ private enum ProductivityStatsBuilder {
         for tasks: [StatisticsTaskSnapshot],
         interval: DateInterval
     ) -> (totalMinutes: Int, byCategory: [CategoryShareEntry]) {
-        let completed = tasks.filter { $0.isCompleted && interval.contains($0.updatedAt) }
+        let completed = tasks.filter { $0.isCompleted && interval.contains($0.completionTimestamp) }
         let total = completed.reduce(0) { $0 + $1.scheduledDurationMinutes }
         let byCategory = Dictionary(grouping: completed, by: \.categoryRawValue)
 
@@ -1428,7 +1547,7 @@ private enum ProductivityStatsBuilder {
         for tasks: [StatisticsTaskSnapshot],
         interval: DateInterval
     ) -> [CategoryShareEntry] {
-        let completed = tasks.filter { $0.isCompleted && interval.contains($0.updatedAt) }
+        let completed = tasks.filter { $0.isCompleted && interval.contains($0.completionTimestamp) }
         let byCategory = Dictionary(grouping: completed, by: \.categoryRawValue)
         let totalCount = completed.count
 
@@ -1447,9 +1566,10 @@ private enum ProductivityStatsBuilder {
     nonisolated private static func points(
         for tasks: [StatisticsTaskSnapshot],
         range: StatisticsTimeRange,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        endDate: Date = Date()
     ) -> [ProductivityStatPoint] {
-        let now = Date()
+        let now = endDate
         let currentBucketStart = bucketStart(for: now, range: range, calendar: calendar)
         let firstBucketStart = calendar.date(
             byAdding: range.calendarComponent,
@@ -1467,7 +1587,7 @@ private enum ProductivityStatsBuilder {
             }
 
             let completedCount = activeTasks.filter { task in
-                task.isCompleted && task.updatedAt >= bucketStart && task.updatedAt < bucketEnd
+                task.isCompleted && task.completionTimestamp >= bucketStart && task.completionTimestamp < bucketEnd
             }.count
 
             let overdueCount = activeTasks.filter { task in
@@ -1557,6 +1677,62 @@ private struct StatisticsRangeSelector: View {
     }
 }
 
+private struct StatisticsRangeNavigator: View {
+    let label: String
+    let canStepForward: Bool
+    let isOnCurrentWindow: Bool
+    let onBack: () -> Void
+    let onForward: () -> Void
+    let onJumpToNow: () -> Void
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.small) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .frame(width: 30, height: 30)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.88), in: Circle())
+                    .overlay(Circle().stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8))
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
+            .accessibilityLabel("Previous range")
+
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                .frame(maxWidth: .infinity)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            if !isOnCurrentWindow {
+                Button(action: onJumpToNow) {
+                    Text("Now")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .background(LifeTrackTheme.ColorPalette.accentSoft, in: Capsule())
+                }
+                .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.94))
+                .transition(.opacity)
+            }
+
+            Button(action: onForward) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(canStepForward ? LifeTrackTheme.ColorPalette.primaryText : LifeTrackTheme.ColorPalette.tertiaryText)
+                    .frame(width: 30, height: 30)
+                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.88), in: Circle())
+                    .overlay(Circle().stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.9), lineWidth: 0.8))
+            }
+            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92))
+            .disabled(!canStepForward)
+            .accessibilityLabel("Next range")
+        }
+    }
+}
+
 private struct StatisticsEntranceModifier: ViewModifier {
     let index: Int
     let isVisible: Bool
@@ -1583,6 +1759,15 @@ private extension View {
                 animationsEnabled: animationsEnabled
             )
         )
+    }
+
+    @ViewBuilder
+    func applyPaddedDateDomain(_ domain: ClosedRange<Date>?) -> some View {
+        if let domain {
+            self.chartXScale(domain: domain)
+        } else {
+            self
+        }
     }
 }
 
