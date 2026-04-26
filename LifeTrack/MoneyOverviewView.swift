@@ -14,6 +14,7 @@ struct MoneyOverviewView: View {
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
     @Query(sort: \MoneyEntry.startDate, order: .reverse) private var entries: [MoneyEntry]
     @Query(sort: \LifeTask.dueDate, order: .forward) private var tasks: [LifeTask]
+    @Query private var recurringTemplates: [RecurringMoneyTransaction]
     @AppStorage(LifeTrackSettings.Keys.moneyCurrencyCode) private var appMoneyCurrencyCode = MoneyCurrency.defaultCode
     @AppStorage(LifeTrackSettings.Keys.moneyCurrencyLocked) private var isMoneyCurrencyLocked = false
 
@@ -31,6 +32,7 @@ struct MoneyOverviewView: View {
     @State private var isShowingRecurring = false
     @State private var isShowingScanReceipt = false
     @State private var editingTask: LifeTask?
+    @State private var dismissedSubscriptionFingerprints: Set<String> = MoneySubscriptionDetector.loadDismissals()
 
     private var currencyCode: String {
         MoneyCurrency.normalized(appMoneyCurrencyCode)
@@ -306,9 +308,57 @@ struct MoneyOverviewView: View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
             projectionHeroCard
             cashFlowCard
+            subscriptionSuggestionsCard
             overviewTwoColumn
             moneyInsightBanner
         }
+    }
+
+    private var subscriptionSuggestions: [MoneySubscriptionSuggestion] {
+        MoneySubscriptionDetector.detect(
+            entries: entries,
+            existingTemplates: recurringTemplates,
+            dismissedFingerprints: dismissedSubscriptionFingerprints,
+            currencyCode: currencyCode
+        )
+    }
+
+    @ViewBuilder
+    private var subscriptionSuggestionsCard: some View {
+        let suggestions = Array(subscriptionSuggestions.prefix(3))
+        if !suggestions.isEmpty {
+            SectionCardView {
+                SectionHeaderView(
+                    title: "Possible subscriptions",
+                    subtitle: "We noticed these recurring charges. Confirm to track them, or dismiss."
+                )
+
+                VStack(spacing: 0) {
+                    ForEach(suggestions) { suggestion in
+                        MoneySubscriptionRow(
+                            suggestion: suggestion,
+                            onConfirm: { confirmSubscription(suggestion) },
+                            onDismiss: { dismissSubscription(suggestion) }
+                        )
+                        if suggestion.id != suggestions.last?.id {
+                            Divider().padding(.leading, 46)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func confirmSubscription(_ suggestion: MoneySubscriptionSuggestion) {
+        let template = MoneySubscriptionDetector.recurringTemplate(from: suggestion)
+        modelContext.insert(template)
+        try? modelContext.save()
+        dismissSubscription(suggestion)
+    }
+
+    private func dismissSubscription(_ suggestion: MoneySubscriptionSuggestion) {
+        MoneySubscriptionDetector.dismiss(suggestion.id)
+        dismissedSubscriptionFingerprints.insert(suggestion.id)
     }
 
     private var summaryGrid: some View {
@@ -418,8 +468,51 @@ struct MoneyOverviewView: View {
                         tint: LifeTrackTheme.ColorPalette.accent
                     )
                 }
+
+                spendForecastStrip
             }
         }
+    }
+
+    private var spendForecastStrip: some View {
+        let forecast = spendForecast
+        let tint: Color = forecast.isOverBudget ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.success
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Forecast end of month", systemImage: "scope")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                Spacer(minLength: 4)
+                if forecast.hasEnoughHistory {
+                    Text(MoneyFormatting.currency(forecast.projectedTotal, code: currencyCode))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                } else {
+                    Text("Available after Day 4")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+            }
+
+            if forecast.hasEnoughHistory && forecast.plannedBudget > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: forecast.isOverBudget ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(tint)
+                    Text(MoneyFormatting.signedCurrency(forecast.variance, code: currencyCode) + " vs budget")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(tint)
+                    Spacer(minLength: 4)
+                    Text("\(forecast.daysRemaining) days left")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(tint.opacity(0.10), in: Capsule())
+            }
+        }
+        .padding(.top, 4)
     }
 
     private var cashFlowCard: some View {
@@ -974,6 +1067,15 @@ struct MoneyOverviewView: View {
         MoneyAnalytics.projectionPoints(
             from: Date(),
             days: 30,
+            entries: entries,
+            tasks: tasks,
+            currencyCode: currencyCode
+        )
+    }
+
+    private var spendForecast: MoneySpendForecast {
+        MoneyAnalytics.spendForecast(
+            for: selectedMonth,
             entries: entries,
             tasks: tasks,
             currencyCode: currencyCode

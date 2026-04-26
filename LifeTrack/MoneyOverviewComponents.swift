@@ -393,6 +393,63 @@ struct MoneyEntryRow: View {
     }
 }
 
+struct MoneySubscriptionRow: View {
+    let suggestion: MoneySubscriptionSuggestion
+    let onConfirm: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "repeat.circle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryAccent)
+                .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(suggestion.label)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Text("\(suggestion.cadence.title) · seen \(suggestion.occurrences)×")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(MoneyFormatting.currency(suggestion.averageAmount, code: suggestion.currencyCode))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                HStack(spacing: 8) {
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            .frame(width: 28, height: 28)
+                            .background(LifeTrackTheme.ColorPalette.backgroundTop, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: onConfirm) {
+                        Text("Track")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.vertical, 10)
+    }
+}
+
 struct MoneyBillStatusPill: View {
     let title: String
     let count: Int

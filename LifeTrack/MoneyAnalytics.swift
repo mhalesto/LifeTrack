@@ -98,6 +98,21 @@ struct MoneyProjectionPoint: Identifiable, Equatable {
     var id: Date { date }
 }
 
+struct MoneySpendForecast: Equatable {
+    var currencyCode: String
+    var actualToDate: Double
+    var dailyVariablePace: Double
+    var remainingPlannedBills: Double
+    var projectedTotal: Double
+    var plannedBudget: Double
+    var daysElapsed: Int
+    var daysRemaining: Int
+    var hasEnoughHistory: Bool
+
+    var variance: Double { projectedTotal - plannedBudget }
+    var isOverBudget: Bool { plannedBudget > 0 && variance > 0 }
+}
+
 enum MoneyAnalytics {
     static func availableCurrencies(entries: [MoneyEntry], tasks: [LifeTask]) -> [String] {
         let entryCodes = entries.map { MoneyCurrency.normalized($0.currencyCode) }
@@ -364,6 +379,52 @@ enum MoneyAnalytics {
 
     static func monthTitle(for date: Date) -> String {
         date.formatted(Date.FormatStyle().month(.wide).year())
+    }
+
+    static func spendForecast(
+        for date: Date,
+        entries: [MoneyEntry],
+        tasks: [LifeTask],
+        currencyCode: String,
+        calendar: Calendar = .current
+    ) -> MoneySpendForecast {
+        let normalizedCurrency = MoneyCurrency.normalized(currencyCode)
+        let interval = monthInterval(containing: date, calendar: calendar)
+        let summary = monthlySummary(for: date, entries: entries, tasks: tasks, currencyCode: normalizedCurrency, calendar: calendar)
+        let bills = plannedBills(for: date, tasks: tasks, currencyCode: normalizedCurrency, calendar: calendar)
+
+        let today = calendar.startOfDay(for: date)
+        let monthStart = calendar.startOfDay(for: interval.start)
+        let monthEnd = calendar.startOfDay(for: interval.end)
+        let totalDays = max(calendar.dateComponents([.day], from: monthStart, to: monthEnd).day ?? 30, 1)
+        let daysElapsedRaw = (calendar.dateComponents([.day], from: monthStart, to: today).day ?? 0) + 1
+        let daysElapsed = min(max(daysElapsedRaw, 1), totalDays)
+        let daysRemaining = max(totalDays - daysElapsed, 0)
+
+        let paidBillsToDate = bills
+            .filter { $0.status == .paid }
+            .reduce(0.0) { $0 + ($1.actualAmount ?? $1.plannedAmount) }
+
+        let upcomingBills = bills
+            .filter { $0.status != .paid && $0.dueDate >= today }
+            .reduce(0.0) { $0 + $1.plannedAmount }
+
+        let variableSpentSoFar = max(summary.actualSpending - paidBillsToDate, 0)
+        let dailyVariablePace = variableSpentSoFar / Double(daysElapsed)
+        let projectedVariableTotal = summary.actualSpending + (dailyVariablePace * Double(daysRemaining))
+        let projectedTotal = projectedVariableTotal + upcomingBills
+
+        return MoneySpendForecast(
+            currencyCode: normalizedCurrency,
+            actualToDate: summary.actualSpending,
+            dailyVariablePace: dailyVariablePace,
+            remainingPlannedBills: upcomingBills,
+            projectedTotal: projectedTotal,
+            plannedBudget: summary.plannedSpending,
+            daysElapsed: daysElapsed,
+            daysRemaining: daysRemaining,
+            hasEnoughHistory: daysElapsed >= 4 && summary.actualSpending > 0
+        )
     }
 
     static func projectionPoints(
