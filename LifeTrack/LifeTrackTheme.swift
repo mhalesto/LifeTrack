@@ -270,7 +270,15 @@ enum LifeTrackAppTheme: String, CaseIterable, Identifiable {
     }
 
     static var isDarkModeEnabled: Bool {
-        UserDefaults.standard.object(forKey: LifeTrackSettings.Keys.darkModeEnabled) as? Bool ?? false
+        if let raw = UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.appearanceMode),
+           let mode = AppearanceMode(rawValue: raw) {
+            switch mode {
+            case .light: return false
+            case .dark: return true
+            case .auto: break
+            }
+        }
+        return UserDefaults.standard.object(forKey: LifeTrackSettings.Keys.darkModeEnabled) as? Bool ?? false
     }
 
     var title: String {
