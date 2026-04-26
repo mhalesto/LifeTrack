@@ -162,6 +162,7 @@ nonisolated enum LifeTrackSettings {
         static let calendarSyncedEventMap = "LifeTrack.settings.calendarSyncedEventMap"
         static let voiceTranscriptDisclosureShown = "LifeTrack.settings.voiceTranscriptDisclosureShown"
         static let anonymiseBillNamesInAI = "LifeTrack.settings.anonymiseBillNamesInAI"
+        static let featureTourCompleted = "LifeTrack.settings.featureTourCompleted"
     }
 }
 

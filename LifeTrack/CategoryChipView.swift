@@ -113,6 +113,8 @@ extension TaskRecurrence {
             LifeTrackTheme.ColorPalette.accent
         case .weekly:
             LifeTrackTheme.ColorPalette.secondaryAccent
+        case .biweekly:
+            LifeTrackTheme.ColorPalette.secondaryAccent
         case .monthly:
             LifeTrackTheme.ColorPalette.success
         case .yearly:

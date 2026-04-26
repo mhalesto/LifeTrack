@@ -29,6 +29,7 @@ struct MoneyOverviewView: View {
     @State private var isShowingAIInsights = false
     @State private var isShowingStatementImport = false
     @State private var isShowingRecurring = false
+    @State private var isShowingScanReceipt = false
     @State private var editingTask: LifeTask?
 
     private var currencyCode: String {
@@ -67,6 +68,23 @@ struct MoneyOverviewView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(LifeTrackTheme.ColorPalette.accentGradient, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                    }
+                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
+
+                    Button(action: { isShowingScanReceipt = true }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "doc.viewfinder")
+                            Text("Scan Receipt")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(LifeTrackTheme.ColorPalette.card, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                                .stroke(LifeTrackTheme.ColorPalette.hairline, lineWidth: 1)
+                        )
                     }
                     .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.98))
 
@@ -118,6 +136,11 @@ struct MoneyOverviewView: View {
         }
         .sheet(isPresented: $isShowingStatementImport) {
             BankStatementImportView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingScanReceipt) {
+            ScanReceiptView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }

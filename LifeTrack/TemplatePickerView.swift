@@ -10,6 +10,7 @@ import SwiftUI
 struct TemplatePickerView: View {
     let onSelectBlank: () -> Void
     let onSelectVoice: () -> Void
+    let onSelectLogMoney: () -> Void
     let onSelectTemplate: (TaskTemplate) -> Void
 
     var body: some View {
@@ -29,7 +30,7 @@ struct TemplatePickerView: View {
                             .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                     }
 
-                    HStack(spacing: LifeTrackTheme.Spacing.medium) {
+                    HStack(spacing: LifeTrackTheme.Spacing.small) {
                         Button(action: onSelectBlank) {
                             TemplatePickerCompactCard(
                                 symbolName: "square.and.pencil",
@@ -46,6 +47,16 @@ struct TemplatePickerView: View {
                                 title: "Voice task",
                                 subtitle: "Start recording",
                                 tint: LifeTrackTheme.ColorPalette.secondaryAccent
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: onSelectLogMoney) {
+                            TemplatePickerCompactCard(
+                                symbolName: "creditcard.fill",
+                                title: "Log money",
+                                subtitle: "Income or expense",
+                                tint: TaskCategory.finance.style.tint
                             )
                         }
                         .buttonStyle(.plain)
@@ -166,6 +177,7 @@ private struct TemplatePickerRow: View {
     TemplatePickerView(
         onSelectBlank: {},
         onSelectVoice: {},
+        onSelectLogMoney: {},
         onSelectTemplate: { _ in }
     )
 }

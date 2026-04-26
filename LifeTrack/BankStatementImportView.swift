@@ -21,12 +21,13 @@ struct BankStatementImportView: View {
     @State private var isImporting = false
     @State private var errorMessage: String?
     @State private var isFilePickerPresented = false
+    @State private var unmatchedEntryIDs: Set<UUID> = []
 
     enum Stage: Equatable {
         case pickFile
         case parsing
         case review
-        case done(imported: Int, skipped: Int)
+        case done(imported: Int, skipped: Int, matched: [BillMatchResult])
     }
 
     private var existingKeys: Set<String> {
@@ -53,8 +54,8 @@ struct BankStatementImportView: View {
                         parsingContent
                     case .review:
                         reviewContent
-                    case .done(let imported, let skipped):
-                        doneContent(imported: imported, skipped: skipped)
+                    case .done(let imported, let skipped, let matched):
+                        doneContent(imported: imported, skipped: skipped, matched: matched)
                     }
                 }
             }
@@ -268,29 +269,122 @@ struct BankStatementImportView: View {
         .background(LifeTrackTheme.ColorPalette.cardElevated)
     }
 
-    private func doneContent(imported: Int, skipped: Int) -> some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 64, weight: .semibold))
-                .foregroundStyle(LifeTrackTheme.ColorPalette.success)
+    private func doneContent(imported: Int, skipped: Int, matched: [BillMatchResult]) -> some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 56, weight: .semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.success)
+                    .padding(.top, 24)
 
-            Text("Imported \(imported) transaction\(imported == 1 ? "" : "s")")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                Text("Imported \(imported) transaction\(imported == 1 ? "" : "s")")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-            if skipped > 0 {
-                Text("\(skipped) skipped (duplicates or unchecked)")
-                    .font(.subheadline)
+                if skipped > 0 {
+                    Text("\(skipped) skipped (duplicates or unchecked)")
+                        .font(.subheadline)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+
+                if !matched.isEmpty {
+                    matchedBillsCard(matched: matched)
+                        .padding(.horizontal, 20)
+                }
+
+                Button("Done") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 4)
+                    .padding(.bottom, 24)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func matchedBillsCard(matched: [BillMatchResult]) -> some View {
+        let allEntries = (try? modelContext.fetch(FetchDescriptor<MoneyEntry>())) ?? []
+        let allTasks = (try? modelContext.fetch(FetchDescriptor<LifeTask>())) ?? []
+        let rows: [(result: BillMatchResult, billTitle: String, entryNote: String, amount: Double, currency: String)] = matched.compactMap { result in
+            guard let bill = allTasks.first(where: { $0.id == result.taskID }),
+                  let entry = allEntries.first(where: { $0.id == result.entryID }) else {
+                return nil
+            }
+            return (result, bill.title, entry.notes, entry.amount, entry.currencyCode)
+        }
+
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Matched \(rows.count) bill\(rows.count == 1 ? "" : "s")", systemImage: "link")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+
+                ForEach(rows, id: \.result.entryID) { row in
+                    matchedBillRow(
+                        result: row.result,
+                        billTitle: row.billTitle,
+                        entryNote: row.entryNote,
+                        amount: row.amount,
+                        currency: row.currency
+                    )
+                }
+            }
+            .padding(14)
+            .background(
+                LifeTrackTheme.ColorPalette.cardElevated,
+                in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.7)
+            }
+        }
+    }
+
+    private func matchedBillRow(
+        result: BillMatchResult,
+        billTitle: String,
+        entryNote: String,
+        amount: Double,
+        currency: String
+    ) -> some View {
+        let isUndone = unmatchedEntryIDs.contains(result.entryID)
+        return HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(billTitle)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .strikethrough(isUndone)
+                Text(entryNote)
+                    .font(.caption)
                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .lineLimit(1)
+                Text(MoneyFormatting.currency(amount, code: currency))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+                    .monospacedDigit()
             }
 
-            Button("Done") { dismiss() }
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 8)
+            Spacer(minLength: 8)
 
-            Spacer()
+            Button {
+                unmatchBill(taskID: result.taskID, entryID: result.entryID)
+                unmatchedEntryIDs.insert(result.entryID)
+            } label: {
+                Text(isUndone ? "Undone" : "Unmatch")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        (isUndone ? LifeTrackTheme.ColorPalette.tertiaryText : LifeTrackTheme.ColorPalette.danger).opacity(0.15),
+                        in: Capsule()
+                    )
+                    .foregroundStyle(isUndone ? LifeTrackTheme.ColorPalette.tertiaryText : LifeTrackTheme.ColorPalette.danger)
+            }
+            .buttonStyle(.plain)
+            .disabled(isUndone)
         }
+        .padding(.vertical, 4)
     }
 
     // MARK: Actions
@@ -368,10 +462,31 @@ struct BankStatementImportView: View {
             isImporting = false
             return
         }
+
+        let allEntries = (try? modelContext.fetch(FetchDescriptor<MoneyEntry>())) ?? []
+        let allTasks = (try? modelContext.fetch(FetchDescriptor<LifeTask>())) ?? []
+        let matched = BillAutoMatcher.runMatch(entries: allEntries, tasks: allTasks)
+        if !matched.isEmpty {
+            try? modelContext.save()
+        }
+
         let imported = rowsToCommit.count
         let skipped = staged.count - imported
         isImporting = false
-        stage = .done(imported: imported, skipped: skipped)
+        stage = .done(imported: imported, skipped: skipped, matched: matched)
+    }
+
+    private func unmatchBill(taskID: UUID, entryID: UUID) {
+        let allEntries = (try? modelContext.fetch(FetchDescriptor<MoneyEntry>())) ?? []
+        let allTasks = (try? modelContext.fetch(FetchDescriptor<LifeTask>())) ?? []
+        if let entry = allEntries.first(where: { $0.id == entryID }) {
+            entry.linkedTaskId = nil
+        }
+        if let bill = allTasks.first(where: { $0.id == taskID }) {
+            bill.actualAmount = nil
+            bill.updatedAt = Date()
+        }
+        try? modelContext.save()
     }
 }
 

@@ -148,6 +148,7 @@ enum HabitEngine {
         switch recurrence {
         case .none, .daily: return 91  // 13 columns × 7 rows
         case .weekly: return 52        // 13 columns × 4 rows
+        case .biweekly: return 26      // 13 columns × 2 rows
         case .monthly: return 26       // 13 columns × 2 rows
         case .yearly: return 13        // 13 columns × 1 row
         }
@@ -170,7 +171,7 @@ enum HabitEngine {
     private static func intervalComponent(for recurrence: TaskRecurrence) -> Calendar.Component {
         switch recurrence {
         case .none, .daily: return .day
-        case .weekly: return .weekOfYear
+        case .weekly, .biweekly: return .weekOfYear
         case .monthly: return .month
         case .yearly: return .year
         }

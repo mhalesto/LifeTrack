@@ -184,6 +184,7 @@ struct BetaDashboardHomeView: View {
     @State private var selectedTab: BetaTab = .home
     @State private var isShowingSettings = false
     @State private var isShowingTemplatePicker = false
+    @State private var isShowingLogMoney = false
     @State private var isShowingTaskEditor = false
     @State private var isShowingHabits = false
     @State private var isShowingDailyRitual = false
@@ -256,14 +257,26 @@ struct BetaDashboardHomeView: View {
             TemplatePickerView(
                 onSelectBlank: openBlankTaskFromPicker,
                 onSelectVoice: openVoiceTaskFromPicker,
+                onSelectLogMoney: openLogMoneyFromPicker,
                 onSelectTemplate: openTemplateFromPicker
             )
+        }
+        .sheet(isPresented: $isShowingLogMoney) {
+            LogMoneyView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingTaskEditor, onDismiss: { shouldAutoStartVoice = false }) {
             NewTaskView(template: selectedTemplate, autoStartVoice: shouldAutoStartVoice)
         }
         .sheet(item: $editingTask) { task in
             NewTaskView(task: task)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: TaskSpotlightIndexer.openTaskNotification)) { note in
+            guard let id = note.userInfo?[TaskSpotlightIndexer.openTaskUserInfoKey] as? UUID,
+                  let match = allTasks.first(where: { $0.id == id })
+            else { return }
+            editingTask = match
         }
         .sheet(isPresented: $isShowingHabits) {
             HabitTrackerView(
@@ -423,6 +436,13 @@ struct BetaDashboardHomeView: View {
         isShowingTemplatePicker = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             isShowingTaskEditor = true
+        }
+    }
+
+    private func openLogMoneyFromPicker() {
+        isShowingTemplatePicker = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            isShowingLogMoney = true
         }
     }
 

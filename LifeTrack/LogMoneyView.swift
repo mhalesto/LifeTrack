@@ -26,6 +26,21 @@ struct LogMoneyView: View {
     @State private var includeInMonthlySpending = true
     @State private var distributeAcrossPeriod = false
 
+    private let prefilledDraft: ReceiptDraft?
+
+    init(prefilledDraft: ReceiptDraft? = nil) {
+        self.prefilledDraft = prefilledDraft
+        if let draft = prefilledDraft {
+            _entryType = State(initialValue: .expense)
+            _amountText = State(initialValue: draft.amount > 0 ? String(format: "%.2f", draft.amount) : "")
+            _currencyCode = State(initialValue: MoneyCurrency.normalized(draft.currencyCode))
+            _category = State(initialValue: draft.suggestedCategory ?? "Groceries")
+            _startDate = State(initialValue: draft.date)
+            _endDate = State(initialValue: draft.date)
+            _notes = State(initialValue: draft.merchant)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -63,7 +78,9 @@ struct LogMoneyView: View {
         }
         .tint(LifeTrackTheme.ColorPalette.accent)
         .onAppear {
-            currencyCode = MoneyCurrency.normalized(appMoneyCurrencyCode)
+            if prefilledDraft == nil {
+                currencyCode = MoneyCurrency.normalized(appMoneyCurrencyCode)
+            }
         }
         .onChange(of: entryType) { _, newType in
             if let first = categoryShortcuts(for: newType).first {

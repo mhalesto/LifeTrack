@@ -82,6 +82,7 @@ nonisolated enum TaskRecurrence: String, CaseIterable, Identifiable, Sendable {
     case none
     case daily
     case weekly
+    case biweekly
     case monthly
     case yearly
 
@@ -92,6 +93,7 @@ nonisolated enum TaskRecurrence: String, CaseIterable, Identifiable, Sendable {
         case .none: "None"
         case .daily: "Daily"
         case .weekly: "Weekly"
+        case .biweekly: "Every 2 weeks"
         case .monthly: "Monthly"
         case .yearly: "Yearly"
         }
@@ -102,6 +104,7 @@ nonisolated enum TaskRecurrence: String, CaseIterable, Identifiable, Sendable {
         case .none: "No repeat"
         case .daily: "Daily"
         case .weekly: "Weekly"
+        case .biweekly: "Biweekly"
         case .monthly: "Monthly"
         case .yearly: "Yearly"
         }
@@ -112,6 +115,7 @@ nonisolated enum TaskRecurrence: String, CaseIterable, Identifiable, Sendable {
         case .none: "circle"
         case .daily: "sun.max"
         case .weekly: "calendar.badge.clock"
+        case .biweekly: "calendar.badge.clock"
         case .monthly: "calendar"
         case .yearly: "calendar.badge.exclamationmark"
         }
@@ -129,6 +133,8 @@ nonisolated enum TaskRecurrence: String, CaseIterable, Identifiable, Sendable {
             return calendar.date(byAdding: .day, value: 1, to: date)
         case .weekly:
             return calendar.date(byAdding: .weekOfYear, value: 1, to: date)
+        case .biweekly:
+            return calendar.date(byAdding: .weekOfYear, value: 2, to: date)
         case .monthly:
             return calendar.date(byAdding: .month, value: 1, to: date)
         case .yearly:

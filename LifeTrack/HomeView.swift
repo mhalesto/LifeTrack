@@ -16,6 +16,7 @@ struct HomeView: View {
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
     @State private var isShowingTemplatePicker = false
+    @State private var isShowingLogMoney = false
     @State private var isShowingTaskEditor = false
     @State private var shouldAutoStartVoice = false
     @State private var isShowingSettings = false
@@ -191,8 +192,14 @@ struct HomeView: View {
                 TemplatePickerView(
                     onSelectBlank: openBlankTaskFromPicker,
                     onSelectVoice: openVoiceTaskFromPicker,
+                    onSelectLogMoney: openLogMoneyFromPicker,
                     onSelectTemplate: openTemplateFromPicker
                 )
+            }
+            .sheet(isPresented: $isShowingLogMoney) {
+                LogMoneyView()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()
@@ -266,6 +273,12 @@ struct HomeView: View {
             }
             .sheet(item: $editingTask) { task in
                 NewTaskView(task: task)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: TaskSpotlightIndexer.openTaskNotification)) { note in
+                guard let id = note.userInfo?[TaskSpotlightIndexer.openTaskUserInfoKey] as? UUID,
+                      let match = (openTasks + completedTasks).first(where: { $0.id == id })
+                else { return }
+                editingTask = match
             }
         }
         .tint(selectedTheme.accent)
@@ -1080,6 +1093,13 @@ struct HomeView: View {
         isShowingTemplatePicker = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             isShowingTaskEditor = true
+        }
+    }
+
+    private func openLogMoneyFromPicker() {
+        isShowingTemplatePicker = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            isShowingLogMoney = true
         }
     }
 

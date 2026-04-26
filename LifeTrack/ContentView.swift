@@ -5,6 +5,7 @@
 //  Created by Halalisani Mbanjwa on 2026/04/18.
 //
 
+import CoreSpotlight
 import SwiftData
 import SwiftUI
 import UIKit
@@ -18,6 +19,8 @@ struct ContentView: View {
     @Query private var allTasks: [LifeTask]
 
     @State private var isShowingLaunchSplash = true
+    @State private var isShowingFeatureTour = false
+    @AppStorage(LifeTrackSettings.Keys.featureTourCompleted) private var featureTourCompleted = false
     @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.appearanceMode) private var appearanceModeRaw = AppearanceMode.current.rawValue
     @AppStorage(LifeTrackSettings.Keys.hideStatusBar) private var hideStatusBar = false
@@ -40,11 +43,14 @@ struct ContentView: View {
     }
 
     private var typographyRefreshToken: String {
-        [
+        let resolvedScheme = appearanceMode.resolve(system: systemColorScheme) == .dark ? "dark" : "light"
+        return [
             appFontChoice,
             String(format: "%.2f", titleTextScale),
             String(format: "%.2f", bodyTextScale),
-            String(format: "%.2f", captionTextScale)
+            String(format: "%.2f", captionTextScale),
+            appearanceModeRaw,
+            resolvedScheme
         ]
         .joined(separator: "-")
     }
@@ -74,11 +80,24 @@ struct ContentView: View {
         }
         .statusBarHidden(hideStatusBar)
         .preferredColorScheme(appearanceMode.preferredColorScheme)
+        .sheet(isPresented: $isShowingFeatureTour) {
+            FeatureTourView()
+                .interactiveDismissDisabled()
+        }
         .task {
             await completeInitialSplash()
             runRecurringMoneyExpansion()
+            runRecurringTaskCatchUp()
+            runBillAutoMatch()
             publishMoneyWidgetSnapshot()
             syncMoneyReminders()
+            reindexSpotlight()
+            if !featureTourCompleted {
+                isShowingFeatureTour = true
+            }
+        }
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            handleSpotlightContinuation(activity)
         }
         .onAppear {
             syncEffectiveDarkMode(system: systemColorScheme)
@@ -114,6 +133,30 @@ struct ContentView: View {
             templates: recurringTemplates.filter(\.isActive),
             modelContext: modelContext
         )
+    }
+
+    private func runRecurringTaskCatchUp() {
+        _ = RecurringTaskCatchUp.runCatchUp(tasks: allTasks, modelContext: modelContext)
+    }
+
+    private func reindexSpotlight() {
+        TaskSpotlightIndexer.reindex(allTasks)
+    }
+
+    private func handleSpotlightContinuation(_ activity: NSUserActivity) {
+        guard let taskID = TaskSpotlightIndexer.extractTaskID(from: activity) else { return }
+        NotificationCenter.default.post(
+            name: TaskSpotlightIndexer.openTaskNotification,
+            object: nil,
+            userInfo: [TaskSpotlightIndexer.openTaskUserInfoKey: taskID]
+        )
+    }
+
+    private func runBillAutoMatch() {
+        let matched = BillAutoMatcher.runMatch(entries: moneyEntries, tasks: allTasks)
+        if !matched.isEmpty {
+            try? modelContext.save()
+        }
     }
 
     private func syncMoneyReminders() {
@@ -203,8 +246,11 @@ struct ContentView: View {
             guard !isShowingLaunchSplash else { return }
             AppSnapshotCover.hide(animated: true)
             runRecurringMoneyExpansion()
+            runRecurringTaskCatchUp()
+            runBillAutoMatch()
             publishMoneyWidgetSnapshot()
             syncMoneyReminders()
+            reindexSpotlight()
         case .inactive:
             break
         case .background:
