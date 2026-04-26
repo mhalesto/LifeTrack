@@ -26,13 +26,12 @@ struct TaskFinancialDetailsSection: View {
     var body: some View {
         SectionCardView {
             HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.medium) {
-                VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("Financial Details")
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                    Text("Optional money tracking for this task.")
-                        .font(.subheadline)
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+
+                    InfoTipButton(message: "Optional money tracking for this task.")
                 }
 
                 Spacer(minLength: 0)

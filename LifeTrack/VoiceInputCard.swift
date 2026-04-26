@@ -44,7 +44,7 @@ struct VoiceInputCard: View {
         SectionCardView {
             SectionHeaderView(
                 title: "Voice Capture",
-                subtitle: "Speak naturally. LifeTrack will draft the task details."
+                infoMessage: "Speak naturally. LifeTrack will draft the task details."
             )
 
             HStack(spacing: LifeTrackTheme.Spacing.medium) {

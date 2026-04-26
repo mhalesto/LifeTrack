@@ -47,9 +47,7 @@ struct NewTaskView: View {
     @State private var isScanningDocument = false
     @State private var isAnalyzingDocument = false
     @State private var isShowingCategoryManager = false
-    @State private var isShowingTaskDataExchange = false
     @State private var activeDueDatePicker: DueDatePickerMode?
-    @State private var taskDataMode: TaskDataExchangeEntryMode = .importTasks
     @State private var pendingCategoryOption: TaskCategoryOption?
     @State private var documentError: String?
     @State private var didSave = false
@@ -147,9 +145,8 @@ struct NewTaskView: View {
                         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.large) {
                             header
 
-                            taskDataShortcutCard
-
                             voiceCard
+                                .id(NewTaskViewAnchor.voiceCard)
 
                             taskCard
                                 .id(NewTaskViewAnchor.taskCard)
@@ -180,7 +177,7 @@ struct NewTaskView: View {
                     }
                         .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
                         .padding(.top, LifeTrackTheme.Spacing.medium)
-                        .padding(.bottom, 30)
+                        .padding(.bottom, 112)
                     }
                     .scrollIndicators(.hidden)
                     .onChange(of: documentScrollRequest) { _, newValue in
@@ -189,6 +186,13 @@ struct NewTaskView: View {
                             scrollProxy.scrollTo(NewTaskViewAnchor.taskCard, anchor: .top)
                         }
                         documentScrollRequest = nil
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        VoiceFloatingButton(isRecording: voiceInput.isRecording) {
+                            handleFloatingVoiceButtonTap(scrollProxy: scrollProxy)
+                        }
+                        .padding(.trailing, LifeTrackTheme.Spacing.xLarge)
+                        .padding(.bottom, LifeTrackTheme.Spacing.xxLarge)
                     }
                 }
             }
@@ -230,13 +234,6 @@ struct NewTaskView: View {
                 CategoryManagerView { option in
                     categoryRawValue = option.id
                     pendingCategoryOption = option
-                }
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-            }
-            .sheet(isPresented: $isShowingTaskDataExchange) {
-                NavigationStack {
-                    TaskDataExchangeView(initialMode: taskDataMode, showsCloseButton: true)
                 }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
@@ -439,21 +436,27 @@ struct NewTaskView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(existingTask == nil ? "New Task" : "Edit Task")
                 .font(.lifeTrack(.title, weight: .bold))
                 .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-            Text(existingTask == nil ? "Capture the next step with enough context to act on it." : "Refine the details and keep reminders accurate.")
-                .font(.subheadline)
-                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
+            InfoTipButton(
+                message: existingTask == nil
+                    ? "Capture the next step with enough context to act on it."
+                    : "Refine the details and keep reminders accurate."
+            )
+
+            Spacer(minLength: 0)
         }
     }
 
     private var taskCard: some View {
         SectionCardView {
-            SectionHeaderView(title: "Task Details", subtitle: "Name it clearly and classify it.")
+            SectionHeaderView(
+                title: "Task Details",
+                infoMessage: "Name it clearly and classify it."
+            )
 
             VStack(alignment: .leading, spacing: 7) {
                 Text("Title")
@@ -521,37 +524,6 @@ struct NewTaskView: View {
         }
     }
 
-    private var taskDataShortcutCard: some View {
-        SectionCardView {
-            SectionHeaderView(
-                title: "Task Data",
-                subtitle: "Bring tasks in or send your task list out."
-            )
-
-            HStack(spacing: LifeTrackTheme.Spacing.small) {
-                TaskDataShortcutButton(
-                    title: "Import",
-                    subtitle: "From file",
-                    symbolName: "tray.and.arrow.down",
-                    tint: LifeTrackTheme.ColorPalette.accent
-                ) {
-                    taskDataMode = .importTasks
-                    isShowingTaskDataExchange = true
-                }
-
-                TaskDataShortcutButton(
-                    title: "Export",
-                    subtitle: "Share/AirDrop",
-                    symbolName: "square.and.arrow.up",
-                    tint: LifeTrackTheme.ColorPalette.success
-                ) {
-                    taskDataMode = .exportTasks
-                    isShowingTaskDataExchange = true
-                }
-            }
-        }
-    }
-
     private var voiceCard: some View {
         VoiceInputCard(
             transcript: $voiceTranscript,
@@ -572,7 +544,10 @@ struct NewTaskView: View {
 
     private var planningCard: some View {
         SectionCardView {
-            SectionHeaderView(title: "Planning", subtitle: "Help LifeTrack choose what matters today.")
+            SectionHeaderView(
+                title: "Planning",
+                infoMessage: "Help LifeTrack choose what matters today."
+            )
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Priority")
@@ -616,7 +591,10 @@ struct NewTaskView: View {
 
     private var dateCard: some View {
         SectionCardView {
-            SectionHeaderView(title: "Due Date", subtitle: "LifeTrack will schedule a reminder.")
+            SectionHeaderView(
+                title: "Due Date",
+                infoMessage: "LifeTrack will schedule a reminder."
+            )
 
             VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
                 HStack(spacing: LifeTrackTheme.Spacing.medium) {
@@ -800,7 +778,10 @@ struct NewTaskView: View {
 
     private var notesCard: some View {
         SectionCardView {
-            SectionHeaderView(title: "Notes", subtitle: "Add context, links, or draft text.")
+            SectionHeaderView(
+                title: "Notes",
+                infoMessage: "Add context, links, or draft text."
+            )
 
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $notes)
@@ -832,36 +813,36 @@ struct NewTaskView: View {
         return Group {
             if !fields.isEmpty {
                 SectionCardView {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            isAdvancedExpanded.toggle()
+                    HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.medium) {
+                        Button(action: toggleAdvancedExpansion) {
+                            Text("Advanced")
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
                         }
-                    } label: {
-                        HStack(alignment: .center, spacing: LifeTrackTheme.Spacing.medium) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Advanced")
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                                Text("Extra \(selectedCategory.title.lowercased()) fields — optional.")
-                                    .font(.subheadline)
+                        .buttonStyle(.plain)
+
+                        InfoTipButton(message: "Extra \(selectedCategory.title.lowercased()) fields — optional.")
+
+                        Spacer(minLength: 0)
+
+                        Button(action: toggleAdvancedExpansion) {
+                            HStack(spacing: 10) {
+                                if !advancedFilledKeys.isEmpty {
+                                    Text("\(advancedFilledKeys.count)")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
+                                }
+
+                                Image(systemName: isAdvancedExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 13, weight: .bold))
                                     .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            Spacer(minLength: 0)
-                            if !advancedFilledKeys.isEmpty {
-                                Text("\(advancedFilledKeys.count)")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
-                            }
-                            Image(systemName: isAdvancedExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
 
                     if isAdvancedExpanded {
                         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
@@ -882,6 +863,29 @@ struct NewTaskView: View {
             .filter { key in
                 !(advancedFieldValues[key]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             }
+    }
+
+    private func toggleAdvancedExpansion() {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            isAdvancedExpanded.toggle()
+        }
+    }
+
+    private func handleFloatingVoiceButtonTap(scrollProxy: ScrollViewProxy) {
+        if voiceInput.isRecording {
+            voiceInput.toggleRecording()
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.28)) {
+            scrollProxy.scrollTo(NewTaskViewAnchor.voiceCard, anchor: .top)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            if !voiceInput.isRecording {
+                voiceInput.toggleRecording()
+            }
+        }
     }
 
     @ViewBuilder
@@ -1580,6 +1584,7 @@ struct NewTaskView: View {
 }
 
 private enum NewTaskViewAnchor: Hashable {
+    case voiceCard
     case taskCard
 }
 
@@ -1877,48 +1882,6 @@ private struct DateShortcutChip: View {
                 }
         }
         .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.92))
-    }
-}
-
-private struct TaskDataShortcutButton: View {
-    let title: String
-    let subtitle: String
-    let symbolName: String
-    let tint: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Image(systemName: symbolName)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(tint)
-                    .frame(width: 32, height: 32)
-                    .background(tint.opacity(0.12), in: Circle())
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                        .lineLimit(1)
-
-                    Text(subtitle)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, minHeight: 58)
-            .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.82), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
-                    .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.82), lineWidth: 0.8)
-            }
-        }
-        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97, pressedOpacity: 0.93))
     }
 }
 

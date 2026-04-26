@@ -8,6 +8,9 @@
 import SwiftUI
 
 struct TemplatePickerView: View {
+    @State private var isShowingTaskDataExchange = false
+    @State private var taskDataMode: TaskDataExchangeEntryMode = .importTasks
+
     let onSelectBlank: () -> Void
     let onSelectVoice: () -> Void
     let onSelectLogMoney: () -> Void
@@ -20,14 +23,36 @@ struct TemplatePickerView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Quick Add")
-                            .font(.lifeTrackTitle)
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    HStack(alignment: .top, spacing: LifeTrackTheme.Spacing.medium) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Quick Add")
+                                .font(.lifeTrackTitle)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
 
-                        Text("Start clean or use a smart shortcut.")
-                            .font(.subheadline)
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                            Text("Start clean or use a smart shortcut.")
+                                .font(.subheadline)
+                                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        HStack(spacing: 10) {
+                            TemplatePickerShortcutButton(
+                                symbolName: "tray.and.arrow.down",
+                                tint: LifeTrackTheme.ColorPalette.accent
+                            ) {
+                                taskDataMode = .importTasks
+                                isShowingTaskDataExchange = true
+                            }
+
+                            TemplatePickerShortcutButton(
+                                symbolName: "square.and.arrow.up",
+                                tint: LifeTrackTheme.ColorPalette.success
+                            ) {
+                                taskDataMode = .exportTasks
+                                isShowingTaskDataExchange = true
+                            }
+                        }
                     }
 
                     HStack(spacing: LifeTrackTheme.Spacing.small) {
@@ -93,6 +118,39 @@ struct TemplatePickerView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: $isShowingTaskDataExchange) {
+            NavigationStack {
+                TaskDataExchangeView(initialMode: taskDataMode, showsCloseButton: true)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+private struct TemplatePickerShortcutButton: View {
+    let symbolName: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbolName)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 42, height: 42)
+                .background(
+                    LifeTrackTheme.ColorPalette.cardElevated,
+                    in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                        .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+                }
+                .shadow(color: LifeTrackTheme.ColorPalette.shadow.opacity(0.5), radius: 10, x: 0, y: 6)
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.9))
+        .accessibilityLabel(symbolName == "tray.and.arrow.down" ? "Import tasks" : "Export tasks")
     }
 }
 

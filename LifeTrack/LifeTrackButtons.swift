@@ -103,6 +103,39 @@ struct PrimaryFloatingButton: View {
     }
 }
 
+struct VoiceFloatingButton: View {
+    let isRecording: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 62, height: 62)
+                .background(
+                    isRecording
+                        ? AnyShapeStyle(LifeTrackTheme.ColorPalette.danger)
+                        : AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient),
+                    in: Circle()
+                )
+                .overlay {
+                    Circle()
+                        .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                }
+                .shadow(
+                    color: (isRecording ? LifeTrackTheme.ColorPalette.danger : LifeTrackTheme.ColorPalette.accent).opacity(0.34),
+                    radius: 22,
+                    x: 0,
+                    y: 14
+                )
+                .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92, pressedOpacity: 0.96))
+        .accessibilityLabel(isRecording ? "Stop recording" : "Start recording")
+    }
+}
+
 struct QuickActionButton: View {
     let title: String
     let subtitle: String
