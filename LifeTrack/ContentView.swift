@@ -297,7 +297,6 @@ struct ContentView: View {
             templateAction: .email
         )
     )
-
     return ContentView()
         .modelContainer(container)
 }

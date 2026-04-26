@@ -79,6 +79,7 @@ struct LifeTrackSecondaryButton: View {
 }
 
 struct PrimaryFloatingButton: View {
+    var accessibilityLabel: String = "Add task"
     let action: () -> Void
 
     var body: some View {
@@ -99,7 +100,7 @@ struct PrimaryFloatingButton: View {
                 .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
         }
         .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.92, pressedOpacity: 0.96))
-        .accessibilityLabel("Add task")
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

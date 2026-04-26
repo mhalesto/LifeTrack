@@ -51,14 +51,10 @@ enum SharedInboxImporter {
 
         if attachments.isEmpty {
             guard let note, !note.isEmpty else { return }
-            let task = LifeTask(
-                title: quickTitle(fromNote: note),
-                category: .personal,
-                dueDate: defaultDueDate(),
-                notes: note
+            InboxStore.add(
+                CapturedTaskDraft(source: .shared, rawText: note, createdAt: Date())
+                    .makeInboxItem()
             )
-            context.insert(task)
-            try? context.save()
             return
         }
 
@@ -129,17 +125,5 @@ enum SharedInboxImporter {
             task.updatedAt = Date()
             try? context.save()
         }
-    }
-
-    private static func defaultDueDate() -> Date {
-        let calendar = Calendar.current
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
-    }
-
-    private static func quickTitle(fromNote note: String) -> String {
-        let firstLine = note.split(whereSeparator: { $0.isNewline }).first.map(String.init) ?? note
-        if firstLine.count <= 72 { return firstLine }
-        return String(firstLine.prefix(72)) + "…"
     }
 }

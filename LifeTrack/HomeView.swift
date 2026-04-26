@@ -18,11 +18,15 @@ struct HomeView: View {
     @State private var isShowingTemplatePicker = false
     @State private var isShowingLogMoney = false
     @State private var isShowingTaskEditor = false
+    @State private var isShowingQuickCapture = false
+    @State private var isShowingVoiceCapture = false
+    @State private var isShowingInbox = false
     @State private var shouldAutoStartVoice = false
     @State private var isShowingSettings = false
     @State private var isShowingAvailabilitySheet = false
     @State private var navigationPath: [HomeRoute] = []
     @State private var selectedTemplate: TaskTemplate?
+    @State private var selectedCaptureDraft: CapturedTaskDraft?
     @State private var editingTask: LifeTask?
     @State private var selectedSummary: DashboardSummaryKind?
     @State private var pendingReopenTask: LifeTask?
@@ -44,6 +48,7 @@ struct HomeView: View {
     @State private var cachedFocusGroups: [DailyFocusRecommendationGroup] = []
     @State private var cachedDocumentTasks: [LifeTask] = []
     @State private var cachedDocumentReminders: [LifeTask] = []
+    @State private var inboxItems: [InboxItem] = InboxStore.loadOpenItems()
     @State private var cachedDueTodayCount = 0
     @State private var cachedUpcomingCount = 0
     @State private var cachedOverdueCount = 0
@@ -77,8 +82,8 @@ struct HomeView: View {
                     .scrollIndicators(.hidden)
                 }
 
-                PrimaryFloatingButton {
-                    isShowingTemplatePicker = true
+                PrimaryFloatingButton(accessibilityLabel: "Quick capture") {
+                    openQuickCapture()
                 }
                 .padding(.trailing, LifeTrackTheme.Spacing.xLarge)
                 .padding(.bottom, LifeTrackTheme.Spacing.xLarge)
@@ -224,11 +229,40 @@ struct HomeView: View {
                     onDelete: delete,
                     onCreateTask: openBlankTaskFromSummary
                 )
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isShowingQuickCapture, onDismiss: refreshInboxItems) {
+                QuickCaptureView(
+                    onOpenEditor: openCapturedDraftInEditor,
+                    onOpenVoiceCapture: openVoiceCapture
+                )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
-            .sheet(isPresented: $isShowingTaskEditor, onDismiss: { shouldAutoStartVoice = false }) {
-                NewTaskView(template: selectedTemplate, autoStartVoice: shouldAutoStartVoice)
+            .sheet(isPresented: $isShowingVoiceCapture, onDismiss: refreshInboxItems) {
+                VoiceCaptureView(onOpenEditor: openCapturedDraftInEditor)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isShowingInbox, onDismiss: refreshInboxItems) {
+                InboxView(
+                    onOpenEditor: openCapturedDraftInEditor,
+                    onOpenTextCapture: openQuickCapture,
+                    onOpenVoiceCapture: openVoiceCapture
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isShowingTaskEditor, onDismiss: {
+                shouldAutoStartVoice = false
+                selectedCaptureDraft = nil
+            }) {
+                NewTaskView(
+                    template: selectedTemplate,
+                    captureDraft: selectedCaptureDraft,
+                    autoStartVoice: shouldAutoStartVoice
+                )
             }
             .sheet(isPresented: $isShowingHabits) {
                 HabitTrackerView(
@@ -283,6 +317,7 @@ struct HomeView: View {
         }
         .tint(selectedTheme.accent)
         .onAppear {
+            refreshInboxItems()
             refreshDerivedCaches()
             queueStartupMaintenanceIfNeeded()
             LocationReminderManager.shared.restoreAllRegions(from: activeTasks)
@@ -306,6 +341,7 @@ struct HomeView: View {
             }
 
             refreshDerivedCaches()
+            refreshInboxItems()
             if hasHandledInitialActivePhase {
                 refreshDashboardMessage(rotateSeed: true)
             } else {
@@ -385,6 +421,8 @@ struct HomeView: View {
 
             progressSection
 
+            inboxSection
+
             summaryGrid(metrics: metrics)
 
             quickActions(metrics: metrics)
@@ -436,11 +474,65 @@ struct HomeView: View {
         ProgressTrackerView(metrics: TaskProgressMetrics.build(from: activeTasks))
     }
 
+    private var inboxSection: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Inbox",
+                trailing: inboxItems.isEmpty ? "Clear" : "\(inboxItems.count) open",
+                infoMessage: "Use inbox for rough capture first. Convert items into full tasks only when you are ready to classify or schedule them."
+            )
+
+            if inboxItems.isEmpty {
+                Text("Capture something quickly and let LifeTrack hold the raw thought until you want to structure it.")
+                    .font(.footnote)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    LifeTrackSecondaryButton(title: "Text Capture", systemImage: "square.and.pencil") {
+                        openQuickCapture()
+                    }
+
+                    LifeTrackSecondaryButton(title: "Voice Capture", systemImage: "mic.fill") {
+                        openVoiceCapture()
+                    }
+                }
+            } else {
+                VStack(spacing: LifeTrackTheme.Spacing.small) {
+                    ForEach(Array(inboxItems.prefix(3))) { item in
+                        Button {
+                            isShowingInbox = true
+                        } label: {
+                            InboxDashboardPreviewRow(item: item)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if inboxItems.count > 3 {
+                    Text("\(inboxItems.count - 3) more item\(inboxItems.count - 3 == 1 ? "" : "s") waiting in inbox.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                }
+
+                HStack(spacing: 10) {
+                    LifeTrackSecondaryButton(title: "Open Inbox", systemImage: "tray.full") {
+                        isShowingInbox = true
+                    }
+
+                    LifeTrackSecondaryButton(title: "Capture More", systemImage: "plus") {
+                        openQuickCapture()
+                    }
+                }
+            }
+        }
+    }
+
     private func quickActions(metrics: HomeLayoutMetrics) -> some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
             SectionHeaderView(
                 title: "Quick Actions",
-                infoMessage: "Move fast without losing structure. Start a task, use a template, or open productivity trends from here."
+                infoMessage: "Move fast without losing structure. Capture to inbox, jump into a full task, or open your planning tools from here."
             )
 
             ScrollView(.horizontal) {
@@ -505,14 +597,36 @@ struct HomeView: View {
                     }
 
                     QuickActionButton(
-                        title: "New task",
-                        subtitle: "Start fresh",
+                        title: "Quick add",
+                        subtitle: "Tasks & templates",
                         symbolName: "plus",
                         tint: LifeTrackTheme.ColorPalette.accent,
                         width: metrics.quickActionWidth,
                         height: metrics.quickActionHeight,
                         iconSize: metrics.quickActionIconSize,
-                        action: openBlankTask
+                        action: { isShowingTemplatePicker = true }
+                    )
+
+                    QuickActionButton(
+                        title: "Inbox",
+                        subtitle: inboxItems.isEmpty ? "Capture first" : "\(inboxItems.count) waiting",
+                        symbolName: "tray.full",
+                        tint: LifeTrackTheme.ColorPalette.secondaryAccent,
+                        width: metrics.quickActionWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: { isShowingInbox = true }
+                    )
+
+                    QuickActionButton(
+                        title: "Voice capture",
+                        subtitle: "Save or create",
+                        symbolName: "mic.fill",
+                        tint: Color(red: 0.95, green: 0.62, blue: 0.18),
+                        width: metrics.quickActionWideWidth,
+                        height: metrics.quickActionHeight,
+                        iconSize: metrics.quickActionIconSize,
+                        action: openVoiceCapture
                     )
 
                     QuickActionButton(
@@ -1078,16 +1192,21 @@ struct HomeView: View {
     }
 
     private func openBlankTask() {
+        selectedCaptureDraft = nil
         selectedTemplate = nil
+        shouldAutoStartVoice = false
         isShowingTaskEditor = true
     }
 
     private func openTemplateShortcut(id: String) {
+        selectedCaptureDraft = nil
         selectedTemplate = TaskTemplate.common.first { $0.id == id }
+        shouldAutoStartVoice = false
         isShowingTaskEditor = true
     }
 
     private func openBlankTaskFromPicker() {
+        selectedCaptureDraft = nil
         selectedTemplate = nil
         shouldAutoStartVoice = false
         isShowingTemplatePicker = false
@@ -1104,12 +1223,39 @@ struct HomeView: View {
     }
 
     private func openVoiceTaskFromPicker() {
-        selectedTemplate = nil
-        shouldAutoStartVoice = true
         isShowingTemplatePicker = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            isShowingTaskEditor = true
+            openVoiceCapture()
         }
+    }
+
+    private func openQuickCapture() {
+        selectedTemplate = nil
+        selectedCaptureDraft = nil
+        shouldAutoStartVoice = false
+        isShowingInbox = false
+        isShowingVoiceCapture = false
+        isShowingTemplatePicker = false
+        isShowingQuickCapture = true
+    }
+
+    private func openVoiceCapture() {
+        selectedTemplate = nil
+        isShowingInbox = false
+        isShowingQuickCapture = false
+        selectedCaptureDraft = nil
+        shouldAutoStartVoice = false
+        isShowingVoiceCapture = true
+    }
+
+    private func openCapturedDraftInEditor(_ draft: CapturedTaskDraft) {
+        selectedTemplate = nil
+        selectedCaptureDraft = draft
+        shouldAutoStartVoice = false
+        isShowingQuickCapture = false
+        isShowingVoiceCapture = false
+        isShowingInbox = false
+        isShowingTaskEditor = true
     }
 
     private func toggleCompletionWithStreak(for task: LifeTask) {
@@ -1132,20 +1278,16 @@ struct HomeView: View {
 
         if defaults?.bool(forKey: "pendingVoiceTaskLaunch") == true {
             defaults?.set(false, forKey: "pendingVoiceTaskLaunch")
-            selectedTemplate = nil
-            shouldAutoStartVoice = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                isShowingTaskEditor = true
+                openVoiceCapture()
             }
             return
         }
 
         if defaults?.bool(forKey: "pendingBlankTaskLaunch") == true {
             defaults?.set(false, forKey: "pendingBlankTaskLaunch")
-            selectedTemplate = nil
-            shouldAutoStartVoice = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                isShowingTaskEditor = true
+                openBlankTask()
             }
             return
         }
@@ -1166,6 +1308,7 @@ struct HomeView: View {
     }
 
     private func openTemplateFromPicker(_ template: TaskTemplate) {
+        selectedCaptureDraft = nil
         selectedTemplate = template
         shouldAutoStartVoice = false
         isShowingTemplatePicker = false
@@ -1176,7 +1319,9 @@ struct HomeView: View {
 
     private func openBlankTaskFromSummary() {
         selectedSummary = nil
+        selectedCaptureDraft = nil
         selectedTemplate = nil
+        shouldAutoStartVoice = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             isShowingTaskEditor = true
         }
@@ -1184,12 +1329,14 @@ struct HomeView: View {
 
     private func openTaskFromSummary(_ task: LifeTask) {
         selectedSummary = nil
+        selectedCaptureDraft = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             editingTask = task
         }
     }
 
     private func openTaskFromCalendar(_ task: LifeTask) {
+        selectedCaptureDraft = nil
         editingTask = task
     }
 
@@ -1201,6 +1348,7 @@ struct HomeView: View {
         selectedSummary = nil
         isShowingTemplatePicker = false
         isShowingTaskEditor = false
+        selectedCaptureDraft = nil
         editingTask = task
     }
 
@@ -1505,7 +1653,12 @@ struct HomeView: View {
         let context = modelContext
         Task { @MainActor in
             await SharedInboxImporter.drain(context: context)
+            refreshInboxItems()
         }
+    }
+
+    private func refreshInboxItems() {
+        inboxItems = InboxStore.loadOpenItems()
     }
 }
 
@@ -1542,6 +1695,63 @@ private struct StreakCelebrationBanner: View {
         )
         .padding(.horizontal, LifeTrackTheme.Spacing.xLarge)
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+    }
+}
+
+private struct InboxDashboardPreviewRow: View {
+    let item: InboxItem
+
+    private var draft: CapturedTaskDraft {
+        item.captureDraft
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: item.source.symbolName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(sourceTint)
+                .frame(width: 34, height: 34)
+                .background(sourceTint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.previewTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    Text(draft.resolvedDueDate.dayMonthString)
+                    Text("•")
+                    Text(item.source.title)
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(LifeTrackTheme.ColorPalette.cardElevated.opacity(0.82), in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.75), lineWidth: 0.7)
+        }
+    }
+
+    private var sourceTint: Color {
+        switch item.source {
+        case .typed:
+            LifeTrackTheme.ColorPalette.accent
+        case .voice:
+            LifeTrackTheme.ColorPalette.secondaryAccent
+        case .shared:
+            LifeTrackTheme.ColorPalette.success
+        }
     }
 }
 
@@ -3318,7 +3528,6 @@ private struct DocumentReminderRow: View {
             dueDate: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
         )
     )
-
     return HomeView()
         .modelContainer(container)
 }

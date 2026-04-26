@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct VoiceTaskDraft: Equatable {
+struct VoiceTaskDraft: Equatable, Codable {
     var title: String?
     var notes: String?
     var category: TaskCategory?

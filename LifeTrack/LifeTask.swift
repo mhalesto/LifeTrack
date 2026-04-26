@@ -8,7 +8,7 @@
 import Foundation
 import SwiftData
 
-nonisolated enum TaskCategory: String, CaseIterable, Identifiable, Sendable {
+nonisolated enum TaskCategory: String, CaseIterable, Identifiable, Sendable, Codable {
     case health
     case finance
     case work
@@ -46,7 +46,7 @@ nonisolated enum TaskTemplateAction: String, Sendable {
     case email
 }
 
-nonisolated enum TaskPriority: String, CaseIterable, Identifiable, Sendable {
+nonisolated enum TaskPriority: String, CaseIterable, Identifiable, Sendable, Codable {
     case low
     case normal
     case high

@@ -85,20 +85,35 @@ struct NewTaskView: View {
         MoneyCurrency.normalized(UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.moneyCurrencyCode) ?? MoneyCurrency.defaultCode)
     }
 
-    init(task: LifeTask? = nil, template: TaskTemplate? = nil, autoStartVoice: Bool = false) {
+    init(task: LifeTask? = nil, template: TaskTemplate? = nil, captureDraft: CapturedTaskDraft? = nil, autoStartVoice: Bool = false) {
         existingTask = task
         originalDocumentStorageName = task?.documentStorageName
         self.autoStartVoice = autoStartVoice
-        self.isFreshNewTask = (task == nil && template == nil)
+        self.isFreshNewTask = (task == nil && template == nil && captureDraft == nil)
+
+        let captureDraft = captureDraft
+        let structuredCaptureDraft = captureDraft?.structuredDraft
+        let captureCategoryRawValue = structuredCaptureDraft?.category?.rawValue ?? captureDraft?.resolvedCategory.rawValue
+        let captureDueDate = structuredCaptureDraft?.dueDate ?? captureDraft?.resolvedDueDate
+        let capturePriority = structuredCaptureDraft?.priority ?? captureDraft?.resolvedPriority
+        let captureAdvancedFields = structuredCaptureDraft?.advancedFields ?? [:]
+        let captureFinancialEnabled =
+            structuredCaptureDraft?.financialEnabled == true ||
+            structuredCaptureDraft?.financialType != nil ||
+            structuredCaptureDraft?.plannedAmount != nil ||
+            structuredCaptureDraft?.actualAmount != nil ||
+            structuredCaptureDraft?.budgetCategory != nil ||
+            structuredCaptureDraft?.paymentDate != nil
+        let templateWantsFinance = template?.id == "bill"
 
         let template = template
-        _title = State(initialValue: task?.title ?? template?.title ?? "")
-        _categoryRawValue = State(initialValue: task?.categoryRawValue ?? template?.category.rawValue ?? TaskCategory.personal.rawValue)
-        _dueDate = State(initialValue: task?.dueDate ?? template?.dueDate ?? Date())
+        _title = State(initialValue: task?.title ?? captureDraft?.resolvedTitle ?? template?.title ?? "")
+        _categoryRawValue = State(initialValue: task?.categoryRawValue ?? captureCategoryRawValue ?? template?.category.rawValue ?? TaskCategory.personal.rawValue)
+        _dueDate = State(initialValue: task?.dueDate ?? captureDueDate ?? template?.dueDate ?? Date())
         _isCompleted = State(initialValue: task?.isCompleted ?? false)
-        _notes = State(initialValue: task?.notes ?? template?.notes ?? "")
+        _notes = State(initialValue: task?.notes ?? captureDraft?.resolvedNotes ?? template?.notes ?? "")
         _templateAction = State(initialValue: task?.templateAction ?? template?.action ?? .none)
-        _priority = State(initialValue: task?.priority ?? template?.priority ?? .normal)
+        _priority = State(initialValue: task?.priority ?? capturePriority ?? template?.priority ?? .normal)
         _recurrence = State(initialValue: task?.recurrence ?? template?.recurrence ?? .none)
         _durationMinutes = State(initialValue: task?.scheduledDurationMinutes ?? template?.estimatedDurationMinutes ?? 30)
         _documentStorageName = State(initialValue: task?.documentStorageName)
@@ -117,21 +132,24 @@ struct NewTaskView: View {
                 onArrival: task?.locationReminderOnArrival ?? true
             ))
         }
-        _advancedFieldValues = State(initialValue: task?.advancedFields ?? [:])
-        _isAdvancedExpanded = State(initialValue: !(task?.advancedFields.isEmpty ?? true))
-        let templateWantsFinance = template?.id == "bill"
-        _financialEnabled = State(initialValue: task?.financialEnabled ?? templateWantsFinance)
-        _financialType = State(initialValue: task?.financialType ?? .expense)
-        _plannedAmountText = State(initialValue: Self.amountInputString(task?.plannedAmount))
-        _actualAmountText = State(initialValue: Self.amountInputString(task?.actualAmount))
-        _currencyCode = State(initialValue: task?.currencyCode ?? Self.currentMoneyCurrencyCode)
-        _budgetCategory = State(initialValue: task?.budgetCategory ?? (templateWantsFinance ? "Bills" : ""))
-        _hasPaymentDate = State(initialValue: task?.paymentDate != nil)
-        _paymentDate = State(initialValue: task?.paymentDate ?? task?.dueDate ?? template?.dueDate ?? Date())
-        _financialLinkOption = State(initialValue: MoneyLinkOption.resolved(budgetId: task?.linkedBudgetId, goalId: task?.linkedGoalId))
-        _financialNotes = State(initialValue: task?.financialNotes ?? "")
-        _includeInMonthlySpending = State(initialValue: task?.includeInMonthlySpending ?? true)
-        _markPlannedOnCreate = State(initialValue: task?.markPlannedOnCreate ?? templateWantsFinance)
+        _advancedFieldValues = State(initialValue: task?.advancedFields ?? captureAdvancedFields)
+        _isAdvancedExpanded = State(initialValue: !(task?.advancedFields.isEmpty ?? captureAdvancedFields.isEmpty))
+        _financialEnabled = State(initialValue: task?.financialEnabled ?? (captureFinancialEnabled || templateWantsFinance))
+        _financialType = State(initialValue: task?.financialType ?? structuredCaptureDraft?.financialType ?? .expense)
+        _plannedAmountText = State(initialValue: Self.amountInputString(task?.plannedAmount ?? structuredCaptureDraft?.plannedAmount))
+        _actualAmountText = State(initialValue: Self.amountInputString(task?.actualAmount ?? structuredCaptureDraft?.actualAmount))
+        _currencyCode = State(initialValue: task?.currencyCode ?? structuredCaptureDraft?.currencyCode ?? Self.currentMoneyCurrencyCode)
+        _budgetCategory = State(initialValue: task?.budgetCategory ?? structuredCaptureDraft?.budgetCategory ?? (templateWantsFinance ? "Bills" : ""))
+        _hasPaymentDate = State(initialValue: task?.paymentDate != nil || structuredCaptureDraft?.paymentDate != nil)
+        _paymentDate = State(initialValue: task?.paymentDate ?? structuredCaptureDraft?.paymentDate ?? task?.dueDate ?? captureDueDate ?? template?.dueDate ?? Date())
+        _financialLinkOption = State(initialValue: MoneyLinkOption.resolved(
+            budgetId: task?.linkedBudgetId ?? structuredCaptureDraft?.linkedBudgetId,
+            goalId: task?.linkedGoalId ?? structuredCaptureDraft?.linkedGoalId
+        ))
+        _financialNotes = State(initialValue: task?.financialNotes ?? structuredCaptureDraft?.financialNotes ?? "")
+        _includeInMonthlySpending = State(initialValue: task?.includeInMonthlySpending ?? structuredCaptureDraft?.includeInMonthlySpending ?? true)
+        _markPlannedOnCreate = State(initialValue: task?.markPlannedOnCreate ?? structuredCaptureDraft?.markPlannedOnCreate ?? templateWantsFinance)
+        _voiceTranscript = State(initialValue: captureDraft?.rawText ?? "")
     }
 
     var body: some View {
