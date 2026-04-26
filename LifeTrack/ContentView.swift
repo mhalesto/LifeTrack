@@ -56,6 +56,7 @@ struct ContentView: View {
     }
 
     var body: some View {
+        let _ = syncEffectiveDarkMode(system: systemColorScheme)
         ZStack {
             LifeTrackTheme.appBackground
                 .ignoresSafeArea()
