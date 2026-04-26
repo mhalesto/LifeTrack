@@ -13,6 +13,7 @@ import UIKit
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var systemColorScheme
     @Query(sort: \LifeTask.updatedAt, order: .reverse) private var tasks: [LifeTask]
 
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
@@ -109,6 +110,13 @@ struct SettingsView: View {
             .onChange(of: completedArchiveRawValue) { _, _ in
                 archiveOldCompletedTasks()
             }
+            .onChange(of: appearanceModeRaw) { _, _ in
+                syncDarkModeFlagSynchronously()
+            }
+            .onChange(of: systemColorScheme) { _, _ in
+                syncDarkModeFlagSynchronously()
+            }
+            .id("settings-\(appearanceModeRaw)-\(systemColorScheme == .dark ? "d" : "l")")
             .sheet(isPresented: isShowingAvatarCropper) {
                 if let pendingAvatarImage {
                     AvatarCropView(
@@ -1160,6 +1168,12 @@ struct SettingsView: View {
         AvatarImageStore.deleteAvatar()
         avatarVersion += 1
         avatarError = nil
+    }
+
+    private func syncDarkModeFlagSynchronously() {
+        let mode = AppearanceMode(rawValue: appearanceModeRaw) ?? .auto
+        let resolved = mode.resolve(system: systemColorScheme)
+        UserDefaults.standard.set(resolved == .dark, forKey: LifeTrackSettings.Keys.darkModeEnabled)
     }
 
     private func purgeExpiredBinItems() {
