@@ -192,6 +192,11 @@ final class MoneyEntry {
     var includeInMonthlySpending: Bool
     var distributeAcrossPeriod: Bool
     var sourceRawValue: String
+    var detailText: String?
+    var balanceAfter: Double?
+    var sourceStatementName: String?
+    var sourceStatementPeriodStart: Date?
+    var sourceStatementPeriodEnd: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -209,6 +214,11 @@ final class MoneyEntry {
         includeInMonthlySpending: Bool = true,
         distributeAcrossPeriod: Bool = false,
         source: MoneyEntrySource = .manual,
+        detailText: String? = nil,
+        balanceAfter: Double? = nil,
+        sourceStatementName: String? = nil,
+        sourceStatementPeriodStart: Date? = nil,
+        sourceStatementPeriodEnd: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -225,6 +235,11 @@ final class MoneyEntry {
         self.includeInMonthlySpending = includeInMonthlySpending
         self.distributeAcrossPeriod = distributeAcrossPeriod
         self.sourceRawValue = source.rawValue
+        self.detailText = detailText
+        self.balanceAfter = balanceAfter
+        self.sourceStatementName = sourceStatementName
+        self.sourceStatementPeriodStart = sourceStatementPeriodStart
+        self.sourceStatementPeriodEnd = sourceStatementPeriodEnd
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

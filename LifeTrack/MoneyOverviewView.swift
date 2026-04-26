@@ -32,6 +32,7 @@ struct MoneyOverviewView: View {
     @State private var isShowingRecurring = false
     @State private var isShowingScanReceipt = false
     @State private var editingTask: LifeTask?
+    @State private var editingEntry: MoneyEntry?
     @State private var dismissedSubscriptionFingerprints: Set<String> = MoneySubscriptionDetector.loadDismissals()
 
     private var currencyCode: String {
@@ -163,6 +164,11 @@ struct MoneyOverviewView: View {
         }
         .sheet(item: $editingTask) { task in
             NewTaskView(task: task)
+        }
+        .sheet(item: $editingEntry) { entry in
+            MoneyEntryDetailView(entry: entry)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingBudgetPlanReview) {
             BudgetPlanReviewView(
@@ -818,7 +824,13 @@ struct MoneyOverviewView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(rows, id: \.id) { entry in
-                        MoneyEntryRow(entry: entry)
+                        Button {
+                            editingEntry = entry
+                        } label: {
+                            MoneyEntryRow(entry: entry)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                         if entry.id != rows.last?.id {
                             Divider().padding(.leading, 46)
                         }

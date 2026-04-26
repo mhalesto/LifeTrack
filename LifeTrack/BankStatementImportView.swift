@@ -17,6 +17,7 @@ struct BankStatementImportView: View {
 
     @State private var stage: Stage = .pickFile
     @State private var statement: ParsedStatement?
+    @State private var sourceFileName: String?
     @State private var staged: [StagedRow] = []
     @State private var isImporting = false
     @State private var errorMessage: String?
@@ -31,14 +32,25 @@ struct BankStatementImportView: View {
     }
 
     private var existingKeys: Set<String> {
-        Set(existingEntries.compactMap { entry in
-            guard entry.source == .imported else { return nil }
-            return StagedRow.duplicateKey(
+        var keys: Set<String> = []
+        for entry in existingEntries where entry.source == .imported {
+            let signedAmount = entry.typeRawValue == MoneyTransactionType.income.rawValue ? entry.amount : -entry.amount
+            keys.insert(StagedRow.duplicateKey(
                 date: entry.startDate,
-                amount: entry.typeRawValue == MoneyTransactionType.income.rawValue ? entry.amount : -entry.amount,
+                amount: signedAmount,
                 description: entry.notes
-            )
-        })
+            ))
+            // Legacy entries concatenated detailText into notes; for new entries
+            // detailText is stored separately, so also fingerprint description-only.
+            if let detail = entry.detailText, !detail.isEmpty {
+                keys.insert(StagedRow.duplicateKey(
+                    date: entry.startDate,
+                    amount: signedAmount,
+                    description: "\(entry.notes) — \(detail)"
+                ))
+            }
+        }
+        return keys
     }
 
     var body: some View {
@@ -396,11 +408,13 @@ struct BankStatementImportView: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             stage = .parsing
+            let fileName = url.lastPathComponent
             Task.detached(priority: .userInitiated) {
                 do {
                     let text = try BankStatementReader.readText(from: url)
                     let parsed = try BankStatementImporter.parse(text)
                     await MainActor.run {
+                        sourceFileName = fileName
                         applyParsed(parsed)
                     }
                 } catch {
@@ -443,6 +457,7 @@ struct BankStatementImportView: View {
         let currencyCode = statement.currencyCode
         let rowsToCommit = staged.filter(\.isSelected)
         for row in rowsToCommit {
+            let detail = row.detailText?.trimmingCharacters(in: .whitespacesAndNewlines)
             let entry = MoneyEntry(
                 type: row.amount >= 0 ? .income : .expense,
                 amount: abs(row.amount),
@@ -450,8 +465,13 @@ struct BankStatementImportView: View {
                 category: row.category,
                 dateScope: .day,
                 startDate: row.date,
-                notes: row.notesText,
-                source: .imported
+                notes: row.descriptionText,
+                source: .imported,
+                detailText: (detail?.isEmpty ?? true) ? nil : detail,
+                balanceAfter: row.source.balanceAfter,
+                sourceStatementName: sourceFileName,
+                sourceStatementPeriodStart: statement.periodStart,
+                sourceStatementPeriodEnd: statement.periodEnd
             )
             modelContext.insert(entry)
         }
