@@ -29,8 +29,6 @@ struct SettingsView: View {
     @AppStorage(LifeTrackSettings.Keys.completedArchivePeriod) private var completedArchiveRawValue = CompletedArchivePeriod.fallback.rawValue
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
     @State private var isShowingPaywall = false
-    @State private var claudeAPIKey = ClaudeAPIKeyStore.current
-    @AppStorage(LifeTrackSettings.Keys.anonymiseBillNamesInAI) private var anonymiseBillNamesInAI = false
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarImage: UIImage?
@@ -50,10 +48,8 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
                         header
                         profileCard
-                        proCard
-                        if subscriptionManager.tier >= .ultimate {
-                            aiCard
-                        }
+                        SubscriptionSettingsCard()
+                        AISettingsCard()
                         themeCard
                         typographyCard
                         MotionSettingsCard()
@@ -112,6 +108,10 @@ struct SettingsView: View {
                 syncDarkModeFlagSynchronously()
             }
             .id("settings-\(appearanceModeRaw)-\(systemColorScheme == .dark ? "d" : "l")")
+            .sheet(isPresented: $isShowingPaywall) {
+                PaywallView()
+                    .environmentObject(subscriptionManager)
+            }
             .sheet(isPresented: isShowingAvatarCropper) {
                 if let pendingAvatarImage {
                     AvatarCropView(
@@ -419,130 +419,6 @@ struct SettingsView: View {
                 }
                 .padding(.top, 2)
                 .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-    }
-
-    private var proCard: some View {
-        SectionCardView {
-            SectionHeaderView(title: "Subscription", subtitle: "Manage your LifeTrack plan.")
-
-            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
-                HStack(spacing: LifeTrackTheme.Spacing.medium) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(subscriptionManager.tier.accentColor.opacity(0.18))
-                            .frame(width: 40, height: 40)
-                        Image(systemName: subscriptionManager.tier == .free ? "lock.fill" : "checkmark.seal.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(subscriptionManager.tier.accentColor)
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(subscriptionManager.tier.displayName) Plan")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                        Text(subscriptionManager.tier.tagline)
-                            .font(.caption)
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                    }
-
-                    Spacer(minLength: LifeTrackTheme.Spacing.small)
-
-                    Button(subscriptionManager.tier == .free ? "Upgrade" : "Manage") {
-                        isShowingPaywall = true
-                    }
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(subscriptionManager.tier == .free ? Color.white : LifeTrackTheme.ColorPalette.accent)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(
-                        subscriptionManager.tier == .free
-                            ? LifeTrackTheme.ColorPalette.accent
-                            : LifeTrackTheme.ColorPalette.accentSoft,
-                        in: Capsule()
-                    )
-                }
-
-                if subscriptionManager.tier > .free {
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(subscriptionManager.tier.features) { feature in
-                            ProFeatureRow(symbol: feature.icon, label: feature.title, color: feature.color)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
-            .animation(.snappy(duration: 0.28), value: subscriptionManager.tier)
-        }
-        .sheet(isPresented: $isShowingPaywall) {
-            PaywallView()
-                .environmentObject(subscriptionManager)
-        }
-    }
-
-    private var aiCard: some View {
-        SectionCardView {
-            SectionHeaderView(title: "AI Settings", subtitle: "Required for AI Task Suggestions.")
-
-            VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.small) {
-                HStack(spacing: LifeTrackTheme.Spacing.medium) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color(red: 0.95, green: 0.72, blue: 0.1).opacity(0.15))
-                            .frame(width: 40, height: 40)
-                        Image(systemName: "key.fill")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.95, green: 0.72, blue: 0.1))
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Claude API Key")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                        Text("Get yours at console.anthropic.com")
-                            .font(.caption)
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                    }
-                }
-
-                SecureField("sk-ant-...", text: $claudeAPIKey)
-                    .font(.system(.caption, design: .monospaced))
-                    .padding(10)
-                    .background(LifeTrackTheme.ColorPalette.backgroundTop.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(LifeTrackTheme.ColorPalette.hairline, lineWidth: 0.8)
-                    }
-                    .onChange(of: claudeAPIKey) { _, newValue in
-                        ClaudeAPIKeyStore.set(newValue)
-                    }
-
-                if !claudeAPIKey.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Text("Stored securely in Keychain")
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                    }
-                    .font(.caption)
-                }
-
-                Toggle(isOn: $anonymiseBillNamesInAI) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Anonymise bill names in AI prompts")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                        Text("Replace category and bill titles with placeholders before sending to Claude.")
-                            .font(.caption)
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding(.top, 4)
             }
         }
     }
@@ -1193,24 +1069,6 @@ private struct ThemeSwatches: View {
         .overlay {
             Capsule()
                 .stroke(Color.white.opacity(0.7), lineWidth: 1)
-        }
-    }
-}
-
-private struct ProFeatureRow: View {
-    let symbol: String
-    let label: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 20)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
         }
     }
 }
