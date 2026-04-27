@@ -154,7 +154,6 @@ nonisolated enum LifeTrackSettings {
         static let isProEnabled = "LifeTrack.settings.isProEnabled"
         static let claudeAPIKey = "LifeTrack.settings.claudeAPIKey"
         static let lastBackupDate = "LifeTrack.settings.lastBackupDate"
-        static let dashboardExperience = "LifeTrack.settings.dashboardExperience"
         static let betaShapesOpacity = "LifeTrack.settings.betaShapesOpacity"
         static let hideStatusBar = "LifeTrack.settings.hideStatusBar"
         static let moneyCurrencyCode = "LifeTrack.settings.moneyCurrencyCode"
@@ -163,29 +162,6 @@ nonisolated enum LifeTrackSettings {
         static let voiceTranscriptDisclosureShown = "LifeTrack.settings.voiceTranscriptDisclosureShown"
         static let anonymiseBillNamesInAI = "LifeTrack.settings.anonymiseBillNamesInAI"
         static let featureTourCompleted = "LifeTrack.settings.featureTourCompleted"
-    }
-}
-
-enum DashboardExperience: String, CaseIterable, Identifiable {
-    case `default` = "default"
-    case beta = "beta"
-
-    var id: String { rawValue }
-
-    static let fallback: DashboardExperience = .beta
-
-    var title: String {
-        switch self {
-        case .default: "Default Dashboard"
-        case .beta: "Beta Dashboard"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .default: "The stable, full-featured home screen."
-        case .beta: "New layout with streaks, metrics, and quick actions."
-        }
     }
 }
 

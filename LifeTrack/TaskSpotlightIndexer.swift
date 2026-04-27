@@ -17,7 +17,7 @@ enum TaskSpotlightIndexer {
     static let domainIdentifier = "com.currenttech.LifeTrack.tasks"
 
     /// Fired by ContentView's `.onContinueUserActivity(CSSearchableItemActionType)`
-    /// with userInfo `["taskID": UUID]`. HomeView/BetaDashboardView observe and open the editor.
+    /// with userInfo `["taskID": UUID]`. BetaDashboardView observes and opens the editor.
     static let openTaskNotification = Notification.Name("LifeTrack.spotlight.openTask")
     static let openTaskUserInfoKey = "taskID"
 

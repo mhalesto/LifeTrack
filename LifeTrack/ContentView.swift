@@ -21,17 +21,12 @@ struct ContentView: View {
     @State private var isShowingLaunchSplash = true
     @State private var isShowingFeatureTour = false
     @AppStorage(LifeTrackSettings.Keys.featureTourCompleted) private var featureTourCompleted = false
-    @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.appearanceMode) private var appearanceModeRaw = AppearanceMode.current.rawValue
     @AppStorage(LifeTrackSettings.Keys.hideStatusBar) private var hideStatusBar = false
     @AppStorage(LifeTrackSettings.Keys.appFontChoice) private var appFontChoice = LifeTrackFontChoice.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.titleTextScale) private var titleTextScale = LifeTrackTypography.defaultScale
     @AppStorage(LifeTrackSettings.Keys.bodyTextScale) private var bodyTextScale = LifeTrackTypography.defaultScale
     @AppStorage(LifeTrackSettings.Keys.captionTextScale) private var captionTextScale = LifeTrackTypography.defaultScale
-
-    private var dashboardExperience: DashboardExperience {
-        DashboardExperience(rawValue: dashboardExperienceRaw) ?? .default
-    }
 
     private var appearanceMode: AppearanceMode {
         AppearanceMode(rawValue: appearanceModeRaw) ?? .auto
@@ -61,15 +56,9 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             if !isShowingLaunchSplash {
-                Group {
-                    if dashboardExperience == .beta {
-                        BetaDashboardHomeView()
-                    } else {
-                        HomeView()
-                    }
-                }
-                .id(typographyRefreshToken)
-                .transition(.opacity)
+                BetaDashboardHomeView()
+                    .id(typographyRefreshToken)
+                    .transition(.opacity)
             }
 
             if isShowingLaunchSplash {

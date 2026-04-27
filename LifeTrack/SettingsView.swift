@@ -32,7 +32,6 @@ struct SettingsView: View {
     @State private var isShowingPaywall = false
     @State private var claudeAPIKey = ClaudeAPIKeyStore.current
     @AppStorage(LifeTrackSettings.Keys.anonymiseBillNamesInAI) private var anonymiseBillNamesInAI = false
-    @AppStorage(LifeTrackSettings.Keys.dashboardExperience) private var dashboardExperienceRaw = DashboardExperience.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.hideStatusBar) private var hideStatusBar = false
     @AppStorage(LifeTrackSettings.Keys.moneyCurrencyCode) private var moneyCurrencyCode = MoneyCurrency.defaultCode
     @AppStorage(LifeTrackSettings.Keys.moneyCurrencyLocked) private var isMoneyCurrencyLocked = false
@@ -62,7 +61,7 @@ struct SettingsView: View {
                         themeCard
                         typographyCard
                         motionCard
-                        dashboardExperienceCard
+                        backgroundPatternCard
                         displayCard
                         moneyCard
                         taskDataCard
@@ -465,81 +464,12 @@ struct SettingsView: View {
         }
     }
 
-    private var dashboardExperienceCard: some View {
+    private var backgroundPatternCard: some View {
         SectionCardView {
             SectionHeaderView(
-                title: "Dashboard Experience",
-                subtitle: "Choose which home screen appears after launch. Restart the app to switch."
+                title: "Background Pattern",
+                subtitle: "Adjust the decorative shapes behind the home screen."
             )
-
-            LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
-                spacing: 10
-            ) {
-                ForEach(DashboardExperience.allCases) { experience in
-                    Button {
-                        withAnimation(.snappy) {
-                            dashboardExperienceRaw = experience.rawValue
-                        }
-                    } label: {
-                        DashboardExperienceChip(
-                            experience: experience,
-                            isSelected: dashboardExperienceRaw == experience.rawValue
-                        )
-                    }
-                    .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.95, pressedOpacity: 0.92))
-                }
-            }
-
-            NavigationLink {
-                BetaDashboardView()
-                    .navigationTitle("Beta Dashboard")
-                    .navigationBarTitleDisplayMode(.inline)
-            } label: {
-                HStack(spacing: LifeTrackTheme.Spacing.medium) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(LifeTrackTheme.ColorPalette.accent.opacity(0.18))
-                            .frame(width: 42, height: 42)
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
-                    }
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text("Preview Beta Dashboard")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
-                            Text("BETA")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(LifeTrackTheme.ColorPalette.accent, in: Capsule())
-                        }
-                        Text("Streak, metrics, quick actions, and today's focus.")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: LifeTrackTheme.Spacing.small)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LifeTrackTheme.ColorPalette.tertiaryText)
-                        .frame(width: 32, height: 32)
-                        .background(LifeTrackTheme.ColorPalette.controlSurfaceStrong, in: Circle())
-                }
-                .padding(12)
-                .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
-                        .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
-                }
-            }
-            .buttonStyle(.plain)
 
             betaShapesControl
         }
@@ -1735,43 +1665,6 @@ private struct ProFeatureRow: View {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
-        }
-    }
-}
-
-private struct DashboardExperienceChip: View {
-    let experience: DashboardExperience
-    let isSelected: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: experience == .beta ? "sparkles" : "house.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isSelected ? .white : LifeTrackTheme.ColorPalette.accent)
-                Text(experience.title)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(isSelected ? .white : LifeTrackTheme.ColorPalette.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            Text(experience.subtitle)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(isSelected ? Color.white.opacity(0.82) : LifeTrackTheme.ColorPalette.secondaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.88)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            isSelected ? AnyShapeStyle(LifeTrackTheme.ColorPalette.accentGradient) : AnyShapeStyle(LifeTrackTheme.ColorPalette.controlSurfaceStrong),
-            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.control, style: .continuous)
-                .stroke(isSelected ? Color.white.opacity(0.24) : LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
     }
 }
