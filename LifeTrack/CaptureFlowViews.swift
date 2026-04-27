@@ -10,12 +10,16 @@ struct QuickCaptureView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var rawText = ""
+    @State private var captureDraft = CapturedTaskDraft(source: .typed, rawText: "")
+    @State private var parseTask: Task<Void, Never>?
+    @FocusState private var isEditorFocused: Bool
 
     let onOpenEditor: (CapturedTaskDraft) -> Void
     let onOpenVoiceCapture: () -> Void
+    let onOpenQuickAdd: (() -> Void)?
 
-    private var captureDraft: CapturedTaskDraft {
-        CapturedTaskDraft(source: .typed, rawText: rawText)
+    private var canPersist: Bool {
+        !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -60,6 +64,7 @@ struct QuickCaptureView: View {
                                     .frame(minHeight: 180)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 8)
+                                    .focused($isEditorFocused)
                             }
                             .background(
                                 LifeTrackTheme.ColorPalette.cardElevated.opacity(0.94),
@@ -71,7 +76,7 @@ struct QuickCaptureView: View {
                             }
                         }
 
-                        if captureDraft.canPersist {
+                        if canPersist {
                             CaptureSuggestionsCard(
                                 draft: captureDraft,
                                 title: "Ready for Inbox",
@@ -90,7 +95,7 @@ struct QuickCaptureView: View {
                     LifeTrackPrimaryButton(
                         title: "Save to Inbox",
                         systemImage: "tray.and.arrow.down",
-                        isDisabled: !captureDraft.canPersist,
+                        isDisabled: !canPersist,
                         action: saveToInbox
                     )
 
@@ -100,8 +105,8 @@ struct QuickCaptureView: View {
                         }
 
                         LifeTrackSecondaryButton(title: "Open Full Task", systemImage: "square.and.pencil") {
-                            guard captureDraft.canPersist else { return }
-                            let draft = captureDraft
+                            guard canPersist else { return }
+                            let draft = currentDraft()
                             dismissAndRun { onOpenEditor(draft) }
                         }
                     }
@@ -114,22 +119,56 @@ struct QuickCaptureView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        isEditorFocused = false
                         dismiss()
                     }
                 }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    if let onOpenQuickAdd {
+                        Button {
+                            dismissAndRun(onOpenQuickAdd)
+                        } label: {
+                            Image(systemName: "square.grid.2x2")
+                        }
+                        .accessibilityLabel("Open Quick Add")
+                    }
+                }
+            }
+            .onChange(of: rawText) { _, newValue in
+                parseTask?.cancel()
+                parseTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    guard !Task.isCancelled else { return }
+                    captureDraft = CapturedTaskDraft(source: .typed, rawText: newValue)
+                }
+            }
+            .onDisappear {
+                parseTask?.cancel()
             }
         }
     }
 
+    private func currentDraft() -> CapturedTaskDraft {
+        if captureDraft.rawText == rawText {
+            return captureDraft
+        }
+        return CapturedTaskDraft(source: .typed, rawText: rawText)
+    }
+
     private func saveToInbox() {
-        guard captureDraft.canPersist else { return }
-        InboxStore.add(captureDraft.makeInboxItem())
+        guard canPersist else { return }
+        InboxStore.add(currentDraft().makeInboxItem())
+        isEditorFocused = false
         dismiss()
     }
 
     private func dismissAndRun(_ action: @escaping () -> Void) {
-        dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: action)
+        isEditorFocused = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: action)
+        }
     }
 }
 
@@ -147,6 +186,7 @@ struct VoiceCaptureView: View {
     @State private var isShowingVoiceTranscriptDisclosure = false
     @State private var isAIEnhancing = false
     @State private var lastEnhancedTranscript = ""
+    @FocusState private var isTranscriptFocused: Bool
 
     let onOpenEditor: (CapturedTaskDraft) -> Void
 
@@ -244,6 +284,7 @@ struct VoiceCaptureView: View {
                                     .frame(minHeight: 170)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 8)
+                                    .focused($isTranscriptFocused)
                             }
                             .background(
                                 LifeTrackTheme.ColorPalette.cardElevated.opacity(0.94),
@@ -310,6 +351,7 @@ struct VoiceCaptureView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        isTranscriptFocused = false
                         dismiss()
                     }
                 }
@@ -368,6 +410,7 @@ struct VoiceCaptureView: View {
     private func saveToInbox() {
         guard canPersist else { return }
         InboxStore.add(captureDraft.makeInboxItem())
+        isTranscriptFocused = false
         dismiss()
     }
 
@@ -375,12 +418,16 @@ struct VoiceCaptureView: View {
         guard canPersist else { return }
         modelContext.insert(captureDraft.makeTask())
         try? modelContext.save()
+        isTranscriptFocused = false
         dismiss()
     }
 
     private func dismissAndRun(_ action: @escaping () -> Void) {
-        dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: action)
+        isTranscriptFocused = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: action)
+        }
     }
 
     private func enhanceCurrentDraft(forceDisclosureBypass: Bool = false) async {

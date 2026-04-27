@@ -235,7 +235,8 @@ struct HomeView: View {
             .sheet(isPresented: $isShowingQuickCapture, onDismiss: refreshInboxItems) {
                 QuickCaptureView(
                     onOpenEditor: openCapturedDraftInEditor,
-                    onOpenVoiceCapture: openVoiceCapture
+                    onOpenVoiceCapture: openVoiceCapture,
+                    onOpenQuickAdd: openQuickAdd
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -1196,6 +1197,16 @@ struct HomeView: View {
         selectedTemplate = nil
         shouldAutoStartVoice = false
         isShowingTaskEditor = true
+    }
+
+    private func openQuickAdd() {
+        selectedCaptureDraft = nil
+        selectedTemplate = nil
+        shouldAutoStartVoice = false
+        isShowingInbox = false
+        isShowingVoiceCapture = false
+        isShowingQuickCapture = false
+        isShowingTemplatePicker = true
     }
 
     private func openTemplateShortcut(id: String) {

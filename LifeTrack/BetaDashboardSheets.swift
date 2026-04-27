@@ -489,6 +489,8 @@ struct QuickActionsCustomizeSheet: View {
     @Binding var showReview: Bool
     @Binding var showFocusTimer: Bool
     @Binding var showNewTask: Bool
+    @Binding var showVoiceCapture: Bool
+    @Binding var showInbox: Bool
     @Binding var showTemplates: Bool
     @Binding var showAvailability: Bool
     @Binding var showCalendar: Bool
@@ -529,9 +531,15 @@ struct QuickActionsCustomizeSheet: View {
                 }
 
                 Section("Capture") {
-                    actionRow(title: "New Task", subtitle: "Start fresh",
-                              icon: "plus", iconBg: BetaPalette.qaAccentBg, iconTint: BetaPalette.qaAccentTint,
+                    actionRow(title: "Text Capture", subtitle: "Inbox first",
+                              icon: "square.and.pencil", iconBg: BetaPalette.qaAccentBg, iconTint: BetaPalette.qaAccentTint,
                               isOn: $showNewTask)
+                    actionRow(title: "Voice Capture", subtitle: "Start recording",
+                              icon: "mic.fill", iconBg: BetaPalette.qaPlanBg, iconTint: BetaPalette.qaPlanTint,
+                              isOn: $showVoiceCapture)
+                    actionRow(title: "Inbox", subtitle: "Triage captures",
+                              icon: "tray.full", iconBg: BetaPalette.qaInfoBg, iconTint: BetaPalette.qaInfoTint,
+                              isOn: $showInbox)
                     actionRow(title: "Templates", subtitle: "Smart shortcuts",
                               icon: "sparkles", iconBg: BetaPalette.qaInfoBg, iconTint: BetaPalette.qaInfoTint,
                               isOn: $showTemplates)

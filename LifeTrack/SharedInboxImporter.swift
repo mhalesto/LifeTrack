@@ -102,7 +102,7 @@ enum SharedInboxImporter {
         let task = LifeTask(
             title: "Review \(displayName)",
             category: .personal,
-            dueDate: defaultDueDate(),
+            dueDate: CapturedTaskDraft.defaultDueDate(),
             notes: combinedNotes,
             documentStorageName: storedDocument?.storageName,
             documentDisplayName: storedDocument?.displayName

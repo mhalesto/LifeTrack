@@ -186,10 +186,14 @@ struct BetaDashboardHomeView: View {
     @State private var isShowingTemplatePicker = false
     @State private var isShowingLogMoney = false
     @State private var isShowingTaskEditor = false
+    @State private var isShowingQuickCapture = false
+    @State private var isShowingVoiceCapture = false
+    @State private var isShowingInbox = false
     @State private var isShowingHabits = false
     @State private var isShowingDailyRitual = false
     @State private var isShowingWeeklyReview = false
     @State private var selectedTemplate: TaskTemplate? = nil
+    @State private var selectedCaptureDraft: CapturedTaskDraft? = nil
     @State private var shouldAutoStartVoice = false
     @State private var editingTask: LifeTask? = nil
     @State private var isShowingAISuggestions = false
@@ -197,6 +201,7 @@ struct BetaDashboardHomeView: View {
     @State private var isShowingAvailability = false
     @State private var isShowingPaywall = false
     @State private var availabilityShareRange: AvailabilityShareRange = .today
+    @State private var inboxItems: [InboxItem] = InboxStore.loadOpenItems()
     @AppStorage(LifeTrackSettings.Keys.betaShapesOpacity) private var shapesOpacity: Double = 0.35
 
     var body: some View {
@@ -209,6 +214,7 @@ struct BetaDashboardHomeView: View {
                     BetaDashboardView(
                         onOpenStatistics: { navigationPath.append(.statistics) },
                         onOpenSettings: { isShowingSettings = true },
+                        inboxItems: inboxItems,
                         onPresentSheet: handleSheetRequest,
                         onNavigate: { navigationPath.append($0) }
                     )
@@ -261,13 +267,43 @@ struct BetaDashboardHomeView: View {
                 onSelectTemplate: openTemplateFromPicker
             )
         }
+        .sheet(isPresented: $isShowingQuickCapture, onDismiss: refreshInboxItems) {
+            QuickCaptureView(
+                onOpenEditor: openCapturedDraftInEditor,
+                onOpenVoiceCapture: openVoiceCapture,
+                onOpenQuickAdd: openQuickAdd
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingVoiceCapture, onDismiss: refreshInboxItems) {
+            VoiceCaptureView(onOpenEditor: openCapturedDraftInEditor)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingInbox, onDismiss: refreshInboxItems) {
+            InboxView(
+                onOpenEditor: openCapturedDraftInEditor,
+                onOpenTextCapture: openQuickCapture,
+                onOpenVoiceCapture: openVoiceCapture
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $isShowingLogMoney) {
             LogMoneyView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $isShowingTaskEditor, onDismiss: { shouldAutoStartVoice = false }) {
-            NewTaskView(template: selectedTemplate, autoStartVoice: shouldAutoStartVoice)
+        .sheet(isPresented: $isShowingTaskEditor, onDismiss: {
+            shouldAutoStartVoice = false
+            selectedCaptureDraft = nil
+        }) {
+            NewTaskView(
+                template: selectedTemplate,
+                captureDraft: selectedCaptureDraft,
+                autoStartVoice: shouldAutoStartVoice
+            )
         }
         .sheet(item: $editingTask) { task in
             NewTaskView(task: task)
@@ -329,8 +365,10 @@ struct BetaDashboardHomeView: View {
             PaywallView()
         }
         .onAppear {
+            refreshInboxItems()
             if scenePhase == .active {
                 openPendingNotificationTaskIfNeeded()
+                drainSharedInbox()
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -338,13 +376,15 @@ struct BetaDashboardHomeView: View {
                 return
             }
 
+            refreshInboxItems()
             openPendingNotificationTaskIfNeeded()
+            drainSharedInbox()
         }
     }
 
     private var fabOverlay: some View {
         Button {
-            isShowingTemplatePicker = true
+            openQuickCapture()
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 24, weight: .semibold))
@@ -361,7 +401,7 @@ struct BetaDashboardHomeView: View {
         .buttonStyle(.plain)
         .padding(.trailing, 22)
         .padding(.bottom, 16)
-        .accessibilityLabel("Create task")
+        .accessibilityLabel("Capture to inbox")
     }
 
     private var tabBarOverlay: some View {
@@ -401,11 +441,15 @@ struct BetaDashboardHomeView: View {
         case .planMyDay: isShowingDailyRitual = true
         case .review: isShowingWeeklyReview = true
         case .newTask:
-            selectedTemplate = nil
-            shouldAutoStartVoice = false
-            isShowingTaskEditor = true
+            openQuickCapture()
+        case .quickCapture:
+            openQuickCapture()
+        case .voiceCapture:
+            openVoiceCapture()
+        case .inbox:
+            openInbox()
         case .templates:
-            isShowingTemplatePicker = true
+            openQuickAdd()
         case .availability:
             isShowingAvailability = true
         case .aiSuggestions:
@@ -421,7 +465,25 @@ struct BetaDashboardHomeView: View {
         }
     }
 
+    private func openBlankTask() {
+        selectedCaptureDraft = nil
+        selectedTemplate = nil
+        shouldAutoStartVoice = false
+        isShowingTaskEditor = true
+    }
+
+    private func openQuickAdd() {
+        selectedCaptureDraft = nil
+        selectedTemplate = nil
+        shouldAutoStartVoice = false
+        isShowingQuickCapture = false
+        isShowingVoiceCapture = false
+        isShowingInbox = false
+        isShowingTemplatePicker = true
+    }
+
     private func openBlankTaskFromPicker() {
+        selectedCaptureDraft = nil
         selectedTemplate = nil
         shouldAutoStartVoice = false
         isShowingTemplatePicker = false
@@ -431,11 +493,9 @@ struct BetaDashboardHomeView: View {
     }
 
     private func openVoiceTaskFromPicker() {
-        selectedTemplate = nil
-        shouldAutoStartVoice = true
         isShowingTemplatePicker = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            isShowingTaskEditor = true
+            openVoiceCapture()
         }
     }
 
@@ -452,6 +512,7 @@ struct BetaDashboardHomeView: View {
         }
 
         selectedTab = .home
+        selectedCaptureDraft = nil
         selectedTemplate = nil
         shouldAutoStartVoice = false
         isShowingTemplatePicker = false
@@ -460,12 +521,66 @@ struct BetaDashboardHomeView: View {
     }
 
     private func openTemplateFromPicker(_ template: TaskTemplate) {
+        selectedCaptureDraft = nil
         selectedTemplate = template
         shouldAutoStartVoice = false
         isShowingTemplatePicker = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             isShowingTaskEditor = true
         }
+    }
+
+    private func openQuickCapture() {
+        selectedCaptureDraft = nil
+        selectedTemplate = nil
+        shouldAutoStartVoice = false
+        isShowingInbox = false
+        isShowingVoiceCapture = false
+        isShowingTemplatePicker = false
+        isShowingQuickCapture = true
+    }
+
+    private func openVoiceCapture() {
+        selectedCaptureDraft = nil
+        selectedTemplate = nil
+        shouldAutoStartVoice = false
+        isShowingInbox = false
+        isShowingQuickCapture = false
+        isShowingTemplatePicker = false
+        isShowingVoiceCapture = true
+    }
+
+    private func openInbox() {
+        selectedCaptureDraft = nil
+        selectedTemplate = nil
+        shouldAutoStartVoice = false
+        isShowingQuickCapture = false
+        isShowingVoiceCapture = false
+        isShowingTemplatePicker = false
+        refreshInboxItems()
+        isShowingInbox = true
+    }
+
+    private func openCapturedDraftInEditor(_ draft: CapturedTaskDraft) {
+        selectedTemplate = nil
+        selectedCaptureDraft = draft
+        shouldAutoStartVoice = false
+        isShowingQuickCapture = false
+        isShowingVoiceCapture = false
+        isShowingInbox = false
+        isShowingTaskEditor = true
+    }
+
+    private func drainSharedInbox() {
+        let context = modelContext
+        Task { @MainActor in
+            await SharedInboxImporter.drain(context: context)
+            refreshInboxItems()
+        }
+    }
+
+    private func refreshInboxItems() {
+        inboxItems = InboxStore.loadOpenItems()
     }
 
     private func toggleCompletion(_ task: LifeTask) {
@@ -482,13 +597,14 @@ struct BetaDashboardHomeView: View {
 struct BetaDashboardView: View {
     enum Sheet {
         case streaks, planMyDay, review
-        case newTask, templates, availability, aiSuggestions, smartScheduling
+        case newTask, quickCapture, voiceCapture, inbox, templates, availability, aiSuggestions, smartScheduling
         case template(id: String)
         case paywall
     }
 
     var onOpenStatistics: (() -> Void)? = nil
     var onOpenSettings: (() -> Void)? = nil
+    var inboxItems: [InboxItem] = []
     var onPresentSheet: ((Sheet) -> Void)? = nil
     fileprivate var onNavigate: ((BetaHomeRoute) -> Void)? = nil
 
@@ -507,6 +623,8 @@ struct BetaDashboardView: View {
     @AppStorage("qa.review") private var showReview = true
     @AppStorage("qa.focusTimer") private var showFocusTimer = true
     @AppStorage("qa.newTask") private var showNewTask = true
+    @AppStorage("qa.voiceCapture") private var showVoiceCaptureAction = true
+    @AppStorage("qa.inbox") private var showInboxAction = true
     @AppStorage("qa.templates") private var showTemplates = true
     @AppStorage("qa.availability") private var showAvailability = false
     @AppStorage("qa.calendar") private var showCalendar = true
@@ -872,6 +990,7 @@ struct BetaDashboardView: View {
                     .padding(.bottom, -4)
                 quickActionsSection
                 dailyFocusSection
+                inboxSection
                 recentDocumentsSection
             }
             .padding(.horizontal, 20)
@@ -900,6 +1019,8 @@ struct BetaDashboardView: View {
                 showReview: $showReview,
                 showFocusTimer: $showFocusTimer,
                 showNewTask: $showNewTask,
+                showVoiceCapture: $showVoiceCaptureAction,
+                showInbox: $showInboxAction,
                 showTemplates: $showTemplates,
                 showAvailability: $showAvailability,
                 showCalendar: $showCalendar,
@@ -1799,9 +1920,22 @@ struct BetaDashboardView: View {
             })
         }
         if showNewTask {
-            items.append(.init(id: "newTask", title: "New Task", subtitle: "Start fresh",
-                               icon: "plus", iconBg: BetaPalette.qaAccentBg, iconTint: BetaPalette.qaAccentTint) {
+            items.append(.init(id: "newTask", title: "Text Capture", subtitle: "Inbox first",
+                               icon: "square.and.pencil", iconBg: BetaPalette.qaAccentBg, iconTint: BetaPalette.qaAccentTint) {
                 onPresentSheet?(.newTask)
+            })
+        }
+        if showVoiceCaptureAction {
+            items.append(.init(id: "voiceCapture", title: "Voice Capture", subtitle: "Start recording",
+                               icon: "mic.fill", iconBg: BetaPalette.qaPlanBg, iconTint: BetaPalette.qaPlanTint) {
+                onPresentSheet?(.voiceCapture)
+            })
+        }
+        if showInboxAction {
+            let subtitle = inboxItems.isEmpty ? "Capture first" : "\(inboxItems.count) waiting"
+            items.append(.init(id: "inbox", title: "Inbox", subtitle: subtitle,
+                               icon: "tray.full", iconBg: BetaPalette.qaInfoBg, iconTint: BetaPalette.qaInfoTint) {
+                onPresentSheet?(.inbox)
             })
         }
         if showTemplates {
@@ -2071,6 +2205,154 @@ struct BetaDashboardView: View {
         }
     }
 
+    private var inboxSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("Inbox")
+                    .font(.betaSection)
+                    .foregroundStyle(BetaPalette.primaryText)
+
+                Image(systemName: "tray.full")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(BetaPalette.accent)
+
+                Spacer(minLength: 0)
+
+                Text(inboxItems.isEmpty ? "Clear" : "\(inboxItems.count) open")
+                    .font(.betaCaption(12, weight: .semibold))
+                    .foregroundStyle(BetaPalette.lightChromeText)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+                    .background(BetaPalette.lightCardFill, in: Capsule())
+            }
+
+            if inboxItems.isEmpty {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(BetaPalette.accent.opacity(0.12))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "tray.badge.plus")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(BetaPalette.accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Nothing waiting in inbox")
+                            .font(.lifeTrack(.subheadline, weight: .semibold))
+                            .foregroundStyle(BetaPalette.lightCardPrimaryText)
+                        Text("Capture rough notes first, then turn them into structured tasks when you are ready.")
+                            .font(.lifeTrack(.footnote, weight: .regular))
+                            .foregroundStyle(BetaPalette.lightCardSecondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(BetaPalette.lightCardFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(BetaPalette.lightCardBorder, lineWidth: 0.8)
+                }
+
+                HStack(spacing: 10) {
+                    inboxActionButton(
+                        title: "Text Capture",
+                        icon: "square.and.pencil",
+                        iconBg: BetaPalette.qaAccentBg,
+                        iconTint: BetaPalette.qaAccentTint
+                    ) {
+                        onPresentSheet?(.quickCapture)
+                    }
+
+                    inboxActionButton(
+                        title: "Voice Capture",
+                        icon: "mic.fill",
+                        iconBg: BetaPalette.qaPlanBg,
+                        iconTint: BetaPalette.qaPlanTint
+                    ) {
+                        onPresentSheet?(.voiceCapture)
+                    }
+                }
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(Array(inboxItems.prefix(3))) { item in
+                        Button {
+                            onPresentSheet?(.inbox)
+                        } label: {
+                            BetaInboxPreviewRow(item: item)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if inboxItems.count > 3 {
+                    Text("\(inboxItems.count - 3) more item\(inboxItems.count - 3 == 1 ? "" : "s") waiting in inbox.")
+                        .font(.betaCaption(12, weight: .medium))
+                        .foregroundStyle(BetaPalette.secondaryText)
+                }
+
+                HStack(spacing: 10) {
+                    inboxActionButton(
+                        title: "Open Inbox",
+                        icon: "tray.full",
+                        iconBg: BetaPalette.qaInfoBg,
+                        iconTint: BetaPalette.qaInfoTint
+                    ) {
+                        onPresentSheet?(.inbox)
+                    }
+
+                    inboxActionButton(
+                        title: "Capture More",
+                        icon: "plus",
+                        iconBg: BetaPalette.qaAccentBg,
+                        iconTint: BetaPalette.qaAccentTint
+                    ) {
+                        onPresentSheet?(.quickCapture)
+                    }
+                }
+            }
+        }
+    }
+
+    private func inboxActionButton(
+        title: String,
+        icon: String,
+        iconBg: Color,
+        iconTint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(iconBg)
+                        .frame(width: 30, height: 30)
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(iconTint)
+                }
+
+                Text(title)
+                    .font(.betaBody(13, weight: .semibold))
+                    .foregroundStyle(BetaPalette.lightCardPrimaryText)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(BetaPalette.lightCardFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(BetaPalette.lightCardBorder, lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     private var recentDocumentsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 8) {
@@ -2173,3 +2455,59 @@ struct BetaDashboardView: View {
     }
 }
 
+private struct BetaInboxPreviewRow: View {
+    let item: InboxItem
+
+    private var draft: CapturedTaskDraft {
+        item.captureDraft
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: item.source.symbolName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(sourceTint)
+                .frame(width: 34, height: 34)
+                .background(sourceTint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.previewTitle)
+                    .font(.lifeTrack(.subheadline, weight: .semibold))
+                    .foregroundStyle(BetaPalette.lightCardPrimaryText)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    Text(draft.resolvedDueDate.dayMonthString)
+                    Text("•")
+                    Text(item.source.title)
+                }
+                .font(.lifeTrack(.caption, weight: .medium))
+                .foregroundStyle(BetaPalette.lightCardSecondaryText)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(BetaPalette.tertiaryText)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(BetaPalette.lightCardFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(BetaPalette.lightCardBorder, lineWidth: 0.8)
+        }
+    }
+
+    private var sourceTint: Color {
+        switch item.source {
+        case .typed:
+            BetaPalette.qaAccentTint
+        case .voice:
+            BetaPalette.qaPlanTint
+        case .shared:
+            BetaPalette.qaSuccessTint
+        }
+    }
+}
