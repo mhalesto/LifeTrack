@@ -94,8 +94,7 @@ struct BetaFocusedDashboardHomeView: View {
     @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && !$0.isCompleted }, sort: \LifeTask.dueDate, order: .forward)
     private var openTasks: [LifeTask]
 
-    @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && $0.isCompleted }, sort: \LifeTask.updatedAt, order: .reverse)
-    private var completedTasks: [LifeTask]
+    @Query private var todayCompletedTasks: [LifeTask]
 
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
@@ -114,52 +113,25 @@ struct BetaFocusedDashboardHomeView: View {
     @State private var selectedCaptureDraft: CapturedTaskDraft? = nil
     @State private var editingTask: LifeTask? = nil
     @State private var inboxItems: [InboxItem] = InboxStore.loadOpenItems()
+    @State private var totalCompletedCount: Int = 0
+    @State private var dueTodayTasks: [LifeTask] = []
+    @State private var overdueTasks: [LifeTask] = []
+    @State private var focusTasks: [LifeTask] = []
 
-    private var allTasks: [LifeTask] {
-        openTasks + completedTasks
-    }
-
-    private var dueTodayTasks: [LifeTask] {
-        let calendar = Calendar.current
-        return openTasks.filter { calendar.isDateInToday($0.dueDate) }
-    }
-
-    private var overdueTasks: [LifeTask] {
-        openTasks.filter(\.isOverdue)
-    }
-
-    private var completedVisibleCount: Int {
-        completedTasks.count
-    }
-
-    private var completedTodayTasks: [LifeTask] {
-        let calendar = Calendar.current
-        return completedTasks
-            .filter { calendar.isDateInToday($0.completedAt ?? $0.updatedAt) }
-            .sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
-    }
-
-    private var focusTasks: [LifeTask] {
-        let todayOpen = dueTodayTasks.sorted { $0.dueDate < $1.dueDate }
-        let todayCompleted = completedTodayTasks
-
-        var items: [LifeTask] = []
-        var seenIDs = Set<UUID>()
-
-        for task in todayOpen where seenIDs.insert(task.id).inserted {
-            items.append(task)
-        }
-
-        for task in todayCompleted where seenIDs.insert(task.id).inserted {
-            items.append(task)
-        }
-
-        return items
+    init() {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        _todayCompletedTasks = Query(
+            filter: #Predicate<LifeTask> { task in
+                task.deletedAt == nil && task.isCompleted && task.updatedAt >= startOfDay
+            },
+            sort: \LifeTask.updatedAt,
+            order: .reverse
+        )
     }
 
     private var todayProgressLabel: String {
-        let total = dueTodayTasks.count + completedTodayTasks.count
-        let completed = completedTodayTasks.count
+        let total = dueTodayTasks.count + todayCompletedTasks.count
+        let completed = todayCompletedTasks.count
 
         if total > 0 {
             return "\(completed)/\(total) completed today"
@@ -169,9 +141,26 @@ struct BetaFocusedDashboardHomeView: View {
     }
 
     private var todayProgressValue: Double {
-        let total = dueTodayTasks.count + completedTodayTasks.count
+        let total = dueTodayTasks.count + todayCompletedTasks.count
         guard total > 0 else { return 0 }
-        return min(max(Double(completedTodayTasks.count) / Double(total), 0), 1)
+        return min(max(Double(todayCompletedTasks.count) / Double(total), 0), 1)
+    }
+
+    private func recomputeDerivedTasks() {
+        let calendar = Calendar.current
+        let dueToday = openTasks.filter { calendar.isDateInToday($0.dueDate) }
+        let sortedDueToday = dueToday.sorted { $0.dueDate < $1.dueDate }
+
+        dueTodayTasks = sortedDueToday
+        overdueTasks = openTasks.filter(\.isOverdue)
+        focusTasks = sortedDueToday + todayCompletedTasks
+    }
+
+    private func refreshTotalCompletedCount() {
+        let descriptor = FetchDescriptor<LifeTask>(
+            predicate: #Predicate { $0.deletedAt == nil && $0.isCompleted }
+        )
+        totalCompletedCount = (try? modelContext.fetchCount(descriptor)) ?? 0
     }
 
     private var greeting: String {
@@ -223,7 +212,7 @@ struct BetaFocusedDashboardHomeView: View {
             .navigationDestination(for: BetaFocusedDashboardRoute.self) { route in
                 switch route {
                 case .statistics:
-                    StatisticsView(tasks: allTasks)
+                    StatisticsView(tasks: fetchAllTasksForLookup())
                 case .calendar:
                     TaskCalendarView(
                         tasks: openTasks,
@@ -301,7 +290,7 @@ struct BetaFocusedDashboardHomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: TaskSpotlightIndexer.openTaskNotification)) { note in
             guard let id = note.userInfo?[TaskSpotlightIndexer.openTaskUserInfoKey] as? UUID,
-                  let match = allTasks.first(where: { $0.id == id })
+                  let match = fetchTaskByID(id)
             else {
                 return
             }
@@ -310,6 +299,8 @@ struct BetaFocusedDashboardHomeView: View {
         }
         .onAppear {
             refreshInboxItems()
+            recomputeDerivedTasks()
+            refreshTotalCompletedCount()
             if scenePhase == .active {
                 openPendingNotificationTaskIfNeeded()
                 drainSharedInbox()
@@ -321,8 +312,17 @@ struct BetaFocusedDashboardHomeView: View {
             }
 
             refreshInboxItems()
+            recomputeDerivedTasks()
+            refreshTotalCompletedCount()
             openPendingNotificationTaskIfNeeded()
             drainSharedInbox()
+        }
+        .onChange(of: openTasks) { _, _ in
+            recomputeDerivedTasks()
+        }
+        .onChange(of: todayCompletedTasks) { _, _ in
+            recomputeDerivedTasks()
+            refreshTotalCompletedCount()
         }
     }
 
@@ -423,7 +423,7 @@ struct BetaFocusedDashboardHomeView: View {
                         BetaFocusedDashboardMetricColumn(
                             symbolName: "checkmark.circle",
                             tint: BetaFocusedDashboardPalette.completedTint,
-                            value: completedVisibleCount,
+                            value: totalCompletedCount,
                             label: "Completed"
                         )
                     }
@@ -731,7 +731,7 @@ struct BetaFocusedDashboardHomeView: View {
     }
 
     private func openPendingNotificationTaskIfNeeded() {
-        guard let task = LifeTrackNotificationActionHandler.consumePendingOpenTask(in: allTasks) else {
+        guard let task = LifeTrackNotificationActionHandler.consumePendingOpenTask(in: fetchAllTasksForLookup()) else {
             return
         }
 
@@ -740,6 +740,21 @@ struct BetaFocusedDashboardHomeView: View {
         isShowingVoiceCapture = false
         isShowingTaskEditor = false
         editingTask = task
+    }
+
+    private func fetchAllTasksForLookup() -> [LifeTask] {
+        let descriptor = FetchDescriptor<LifeTask>(
+            predicate: #Predicate { $0.deletedAt == nil }
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func fetchTaskByID(_ id: UUID) -> LifeTask? {
+        var descriptor = FetchDescriptor<LifeTask>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
     }
 
     private func refreshInboxItems() {
