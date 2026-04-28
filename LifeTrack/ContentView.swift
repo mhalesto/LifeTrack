@@ -27,9 +27,14 @@ struct ContentView: View {
     @AppStorage(LifeTrackSettings.Keys.titleTextScale) private var titleTextScale = LifeTrackTypography.defaultScale
     @AppStorage(LifeTrackSettings.Keys.bodyTextScale) private var bodyTextScale = LifeTrackTypography.defaultScale
     @AppStorage(LifeTrackSettings.Keys.captionTextScale) private var captionTextScale = LifeTrackTypography.defaultScale
+    @AppStorage(LifeTrackSettings.Keys.dashboardStyle) private var dashboardStyleRaw = DashboardStyle.fallback.rawValue
 
     private var appearanceMode: AppearanceMode {
         AppearanceMode(rawValue: appearanceModeRaw) ?? .auto
+    }
+
+    private var dashboardStyle: DashboardStyle {
+        DashboardStyle(rawValue: dashboardStyleRaw) ?? .fallback
     }
 
     private func syncEffectiveDarkMode(system: ColorScheme) {
@@ -56,8 +61,8 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             if !isShowingLaunchSplash {
-                BetaDashboardHomeView()
-                    .id(typographyRefreshToken)
+                activeDashboardView
+                    .id("\(dashboardStyle.rawValue)-\(typographyRefreshToken)")
                     .transition(.opacity)
             }
 
@@ -94,6 +99,16 @@ struct ContentView: View {
         }
         .onChange(of: appearanceModeRaw) { _, _ in
             syncEffectiveDarkMode(system: systemColorScheme)
+        }
+    }
+
+    @ViewBuilder
+    private var activeDashboardView: some View {
+        switch dashboardStyle {
+        case .current:
+            CurrentDashboardHomeView()
+        case .beta:
+            BetaFocusedDashboardHomeView()
         }
     }
 

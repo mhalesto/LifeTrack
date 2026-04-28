@@ -39,6 +39,7 @@ struct SettingsView: View {
                         )
                         SubscriptionSettingsCard()
                         AISettingsCard()
+                        DashboardSettingsCard()
                         ThemeSettingsCard()
                         TypographySettingsCard()
                         MotionSettingsCard()

@@ -170,6 +170,43 @@ nonisolated enum LifeTrackSettings {
         static let voiceTranscriptDisclosureShown = "LifeTrack.settings.voiceTranscriptDisclosureShown"
         static let anonymiseBillNamesInAI = "LifeTrack.settings.anonymiseBillNamesInAI"
         static let featureTourCompleted = "LifeTrack.settings.featureTourCompleted"
+        static let dashboardStyle = "LifeTrack.settings.dashboardStyle"
+    }
+}
+
+enum DashboardStyle: String, CaseIterable, Identifiable {
+    case current
+    case beta
+
+    var id: String { rawValue }
+
+    static let fallback: DashboardStyle = .current
+
+    var title: String {
+        switch self {
+        case .current:
+            "Current"
+        case .beta:
+            "Beta"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .current:
+            "Keep the existing dashboard and full quick-action home."
+        case .beta:
+            "Use the focused today layout with faster capture and tools."
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .current:
+            "square.grid.2x2"
+        case .beta:
+            "sun.max"
+        }
     }
 }
 

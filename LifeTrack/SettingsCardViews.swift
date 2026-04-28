@@ -256,6 +256,137 @@ struct ProfileSettingsCard: View {
 
 
 
+// MARK: - Dashboard
+
+struct DashboardSettingsCard: View {
+    @AppStorage(LifeTrackSettings.Keys.dashboardStyle) private var dashboardStyleRaw = DashboardStyle.fallback.rawValue
+    @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
+
+    private var theme: LifeTrackAppTheme {
+        LifeTrackAppTheme(rawValue: selectedThemeID) ?? .fallback
+    }
+
+    private var selectedStyle: DashboardStyle {
+        DashboardStyle(rawValue: dashboardStyleRaw) ?? .fallback
+    }
+
+    var body: some View {
+        SectionCardView {
+            SectionHeaderView(
+                title: "Dashboard",
+                subtitle: "Choose which home experience opens after launch and when you return to the app."
+            )
+
+            VStack(spacing: LifeTrackTheme.Spacing.small) {
+                ForEach(DashboardStyle.allCases) { style in
+                    Button {
+                        withAnimation(.snappy(duration: 0.22)) {
+                            dashboardStyleRaw = style.rawValue
+                        }
+                    } label: {
+                        DashboardStyleOptionRow(
+                            style: style,
+                            isSelected: selectedStyle == style,
+                            theme: theme
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+}
+
+private struct DashboardStyleOptionRow: View {
+    let style: DashboardStyle
+    let isSelected: Bool
+    let theme: LifeTrackAppTheme
+
+    var body: some View {
+        HStack(spacing: LifeTrackTheme.Spacing.medium) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(style == .beta ? betaPreviewGradient : AnyShapeStyle(theme.accentSoft))
+                    .frame(width: 54, height: 54)
+
+                Image(systemName: style.symbolName)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(style == .beta ? Color.white : theme.accent)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(style.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    if style == .beta {
+                        Text("New")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(betaAccent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(betaAccent.opacity(0.12), in: Capsule())
+                    }
+                }
+
+                Text(style.subtitle)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: LifeTrackTheme.Spacing.small)
+
+            ThemeSelectionIndicator(theme: theme, isSelected: isSelected)
+        }
+        .padding(12)
+        .background(
+            isSelected ? selectedBackground : LifeTrackTheme.ColorPalette.controlSurface,
+            in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(isSelected ? selectedBorder : LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
+        }
+    }
+
+    private var selectedBackground: Color {
+        if style == .beta {
+            return betaAccent.opacity(LifeTrackTheme.ColorPalette.isDarkTheme ? 0.18 : 0.12)
+                .mixed(with: LifeTrackTheme.ColorPalette.cardElevated, amount: 0.62)
+        }
+
+        if LifeTrackTheme.ColorPalette.isDarkTheme {
+            return theme.accentSoft.mixed(with: LifeTrackTheme.ColorPalette.cardElevated, amount: 0.34)
+        }
+
+        return theme.accentSoft.opacity(0.65)
+    }
+
+    private var selectedBorder: Color {
+        if style == .beta {
+            return betaAccent.opacity(LifeTrackTheme.ColorPalette.isDarkTheme ? 0.44 : 0.28)
+        }
+
+        return LifeTrackTheme.ColorPalette.isDarkTheme ? theme.accent.opacity(0.42) : theme.accent.opacity(0.28)
+    }
+
+    private var betaAccent: Color {
+        theme.accent.mixed(with: Color(hex: 0xEF6A4B), amount: 0.44)
+    }
+
+    private var betaPreviewGradient: AnyShapeStyle {
+        AnyShapeStyle(
+            LinearGradient(
+                colors: [betaAccent, betaAccent.mixed(with: Color(hex: 0xFFB36C), amount: 0.42)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+    }
+}
+
 // MARK: - Motion
 
 struct MotionSettingsCard: View {
@@ -705,6 +836,7 @@ struct TaskDataSettingsCard: View {
 // MARK: - Theme
 
 struct ThemeSettingsCard: View {
+    @AppStorage(LifeTrackSettings.Keys.dashboardStyle) private var dashboardStyleRaw = DashboardStyle.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.appearanceMode) private var appearanceModeRaw = AppearanceMode.current.rawValue
     @AppStorage(LifeTrackSettings.Keys.colorStrength) private var colorStrength = 1.0
@@ -713,9 +845,25 @@ struct ThemeSettingsCard: View {
         LifeTrackAppTheme(rawValue: selectedThemeID) ?? .fallback
     }
 
+    private var isLockedForBeta: Bool {
+        DashboardStyle(rawValue: dashboardStyleRaw) == .beta
+    }
+
     var body: some View {
         SectionCardView {
-            SectionHeaderView(title: "Theme", subtitle: "Choose the mood.")
+            SectionHeaderView(
+                title: "Theme",
+                subtitle: isLockedForBeta
+                    ? "Beta uses the approved mockup palette and light styling, so theme controls are locked."
+                    : "Choose the mood."
+            )
+
+            if isLockedForBeta {
+                BetaLockedSettingsNotice(
+                    title: "Locked for Beta",
+                    message: "Switch the dashboard back to Current if you want to change app theme, appearance, or color strength."
+                )
+            }
 
             VStack(spacing: LifeTrackTheme.Spacing.small) {
                 ForEach(LifeTrackAppTheme.allCases) { theme in
@@ -737,6 +885,8 @@ struct ThemeSettingsCard: View {
                 ThemeStrengthControl(strength: $colorStrength)
                     .padding(.top, LifeTrackTheme.Spacing.small)
             }
+            .disabled(isLockedForBeta)
+            .opacity(isLockedForBeta ? 0.42 : 1)
         }
     }
 }
@@ -1046,6 +1196,7 @@ private struct ThemeSwatches: View {
 // MARK: - Typography
 
 struct TypographySettingsCard: View {
+    @AppStorage(LifeTrackSettings.Keys.dashboardStyle) private var dashboardStyleRaw = DashboardStyle.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.themeID) private var selectedThemeID = LifeTrackAppTheme.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.appFontChoice) private var appFontChoice = LifeTrackFontChoice.fallback.rawValue
     @AppStorage(LifeTrackSettings.Keys.titleTextScale) private var titleTextScale = LifeTrackTypography.defaultScale
@@ -1059,6 +1210,10 @@ struct TypographySettingsCard: View {
 
     private var selectedFontChoice: LifeTrackFontChoice {
         LifeTrackFontChoice(rawValue: appFontChoice) ?? .fallback
+    }
+
+    private var isLockedForBeta: Bool {
+        DashboardStyle(rawValue: dashboardStyleRaw) == .beta
     }
 
     private var clampedTitleScale: Double {
@@ -1109,7 +1264,15 @@ struct TypographySettingsCard: View {
 
     var body: some View {
         SectionCardView {
+            if isLockedForBeta {
+                BetaLockedSettingsNotice(
+                    title: "Typography Locked for Beta",
+                    message: "Beta uses fixed serif and system fonts from the approved dashboard design. Switch back to Current to edit app fonts and text scale."
+                )
+            }
+
             Button {
+                guard !isLockedForBeta else { return }
                 withAnimation(.snappy(duration: 0.24)) {
                     isExpanded.toggle()
                 }
@@ -1156,6 +1319,8 @@ struct TypographySettingsCard: View {
                 }
             }
             .buttonStyle(.plain)
+            .disabled(isLockedForBeta)
+            .opacity(isLockedForBeta ? 0.42 : 1)
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.medium) {
@@ -1545,10 +1710,10 @@ struct AISettingsCard: View {
                     }
                 }
                 .padding(.top, 4)
+                }
             }
         }
     }
-}
 
 // MARK: - Pro Feature Row
 
@@ -1566,6 +1731,38 @@ struct ProFeatureRow: View {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+        }
+    }
+}
+
+private struct BetaLockedSettingsNotice: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(LifeTrackTheme.ColorPalette.accent)
+                .frame(width: 32, height: 32)
+                .background(LifeTrackTheme.ColorPalette.accentSoft, in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text(message)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(LifeTrackTheme.ColorPalette.controlSurface, in: RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: LifeTrackTheme.Radius.card, style: .continuous)
+                .stroke(LifeTrackTheme.ColorPalette.hairline.opacity(0.8), lineWidth: 0.8)
         }
     }
 }
