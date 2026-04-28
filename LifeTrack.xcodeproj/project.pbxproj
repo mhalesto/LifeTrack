@@ -103,6 +103,16 @@
 		E20C197A37A04E7482CE77B7 /* LifeTrackReminderNotificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeTrackReminderNotificationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5BFB83CA2F952014003B1E0C /* Exceptions for "LifeTrackControlWidget" folder in "LifeTrackControlWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5BBB83C22F952014003B1E0B /* LifeTrackControlWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5BA3D3882F938ABF00929A9A /* LifeTrack */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -122,22 +132,12 @@
 		5BBB83C92F952014003B1E0B /* LifeTrackControlWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				5BFB83CA2F952014003B1E0C /* Exception set */,
+				5BFB83CA2F952014003B1E0C /* Exceptions for "LifeTrackControlWidget" folder in "LifeTrackControlWidgetExtension" target */,
 			);
 			path = LifeTrackControlWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		5BFB83CA2F952014003B1E0C /* Exception set */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 5BBB83C22F952014003B1E0B /* LifeTrackControlWidgetExtension */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		5BA3D3832F938ABF00929A9A /* Frameworks */ = {

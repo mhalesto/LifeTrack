@@ -3,6 +3,7 @@ build/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+**/xcschememanagement.plist
 
 # Swift Package Manager
 .build/
