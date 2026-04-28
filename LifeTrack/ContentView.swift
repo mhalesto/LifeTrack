@@ -75,12 +75,7 @@ struct ContentView: View {
         }
         .task {
             await completeInitialSplash()
-            runRecurringMoneyExpansion()
-            runRecurringTaskCatchUp()
-            runBillAutoMatch()
-            publishMoneyWidgetSnapshot()
-            syncMoneyReminders()
-            reindexSpotlight()
+            runAppMaintenance(trigger: .initialLaunch)
             if !featureTourCompleted {
                 isShowingFeatureTour = true
             }
@@ -116,22 +111,6 @@ struct ContentView: View {
         }
     }
 
-    private func runRecurringMoneyExpansion() {
-        guard !recurringTemplates.isEmpty else { return }
-        _ = RecurringMoneyExpander.runPendingExpansions(
-            templates: recurringTemplates.filter(\.isActive),
-            modelContext: modelContext
-        )
-    }
-
-    private func runRecurringTaskCatchUp() {
-        _ = RecurringTaskCatchUp.runCatchUp(tasks: allTasks, modelContext: modelContext)
-    }
-
-    private func reindexSpotlight() {
-        TaskSpotlightIndexer.reindex(allTasks)
-    }
-
     private func handleSpotlightContinuation(_ activity: NSUserActivity) {
         guard let taskID = TaskSpotlightIndexer.extractTaskID(from: activity) else { return }
         NotificationCenter.default.post(
@@ -141,91 +120,13 @@ struct ContentView: View {
         )
     }
 
-    private func runBillAutoMatch() {
-        let matched = BillAutoMatcher.runMatch(entries: moneyEntries, tasks: allTasks)
-        if !matched.isEmpty {
-            try? modelContext.save()
-        }
-    }
-
-    private func syncMoneyReminders() {
-        let now = Date()
-        let currency = UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.moneyCurrencyCode)
-            ?? MoneyCurrency.primaryCurrencyCode(entries: moneyEntries, tasks: allTasks)
-
-        let bills = MoneyAnalytics.plannedBills(
-            for: now,
-            tasks: allTasks,
-            currencyCode: currency
-        )
-        let summary = MoneyAnalytics.monthlySummary(
-            for: now,
-            entries: moneyEntries,
-            tasks: allTasks,
-            currencyCode: currency
-        )
-        let rollovers = BudgetRollover.carryOver(
-            intoMonth: now,
-            entries: moneyEntries,
-            tasks: allTasks,
-            currencyCode: currency
-        )
-        let rolloverTotal = rollovers.filter { $0.carryOver > 0 }.reduce(0) { $0 + $1.carryOver }
-        let adjustedPlanned = max(summary.plannedSpending + rolloverTotal, 0)
-
-        MoneyReminderScheduler.synchronize(
-            bills: bills,
-            monthlyActualSpending: summary.actualSpending,
-            monthlyAdjustedPlannedSpending: adjustedPlanned,
-            currencyCode: currency,
-            now: now
-        )
-    }
-
-    private func publishMoneyWidgetSnapshot() {
-        let calendar = Calendar.current
-        let now = Date()
-        let currency = UserDefaults.standard.string(forKey: LifeTrackSettings.Keys.moneyCurrencyCode)
-            ?? MoneyCurrency.primaryCurrencyCode(entries: moneyEntries, tasks: allTasks)
-
-        let day = calendar.dateInterval(of: .day, for: now)
-            ?? DateInterval(start: now, duration: 86_400)
-        var spentToday: Double = 0
-        for entry in moneyEntries {
-            guard MoneyCurrency.normalized(entry.currencyCode) == MoneyCurrency.normalized(currency) else { continue }
-            guard entry.includeInMonthlySpending else { continue }
-            switch entry.type {
-            case .expense, .debtPayment:
-                spentToday += MoneyAnalytics.amount(for: entry, in: day, calendar: calendar)
-            case .income, .savings, .transfer:
-                continue
-            }
-        }
-
-        let summary = MoneyAnalytics.monthlySummary(
-            for: now,
-            entries: moneyEntries,
-            tasks: allTasks,
-            currencyCode: currency
-        )
-        let categoryTotals = MoneyAnalytics.categoryTotals(
-            for: now,
-            entries: moneyEntries,
-            tasks: allTasks,
-            currencyCode: currency
-        )
-        let topExpense = categoryTotals
-            .filter { $0.kind == .expense }
-            .max(by: { $0.actual < $1.actual })
-
-        MoneyWidgetSnapshotPublisher.publish(
-            spentToday: spentToday,
-            spentThisMonth: summary.actualSpending,
-            plannedThisMonth: summary.plannedSpending,
-            topCategoryName: topExpense?.category,
-            topCategoryAmount: topExpense?.actual ?? 0,
-            currencyCode: currency,
-            referenceDate: now
+    private func runAppMaintenance(trigger: AppMaintenanceTrigger) {
+        AppMaintenanceCoordinator.shared.run(
+            trigger: trigger,
+            modelContext: modelContext,
+            recurringTemplates: recurringTemplates,
+            moneyEntries: moneyEntries,
+            tasks: allTasks
         )
     }
 
@@ -234,12 +135,7 @@ struct ContentView: View {
         case .active:
             guard !isShowingLaunchSplash else { return }
             AppSnapshotCover.hide(animated: true)
-            runRecurringMoneyExpansion()
-            runRecurringTaskCatchUp()
-            runBillAutoMatch()
-            publishMoneyWidgetSnapshot()
-            syncMoneyReminders()
-            reindexSpotlight()
+            runAppMaintenance(trigger: .sceneBecameActive)
         case .inactive:
             break
         case .background:

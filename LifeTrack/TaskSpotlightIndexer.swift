@@ -15,6 +15,7 @@ import UniformTypeIdentifiers
 
 enum TaskSpotlightIndexer {
     static let domainIdentifier = "com.currenttech.LifeTrack.tasks"
+    private static var lastIndexedSignature: Int?
 
     /// Fired by ContentView's `.onContinueUserActivity(CSSearchableItemActionType)`
     /// with userInfo `["taskID": UUID]`. BetaDashboardView observes and opens the editor.
@@ -22,6 +23,12 @@ enum TaskSpotlightIndexer {
     static let openTaskUserInfoKey = "taskID"
 
     static func reindex(_ tasks: [LifeTask]) {
+        let signature = spotlightSignature(for: tasks)
+        guard signature != lastIndexedSignature else {
+            return
+        }
+        lastIndexedSignature = signature
+
         let index = CSSearchableIndex.default()
         let items: [CSSearchableItem] = tasks.compactMap(makeItem)
 
@@ -73,5 +80,19 @@ enum TaskSpotlightIndexer {
             words.append(contentsOf: ["bill", "money"])
         }
         return words
+    }
+
+    private static func spotlightSignature(for tasks: [LifeTask]) -> Int {
+        var hasher = Hasher()
+        for task in tasks.sorted(by: { $0.id.uuidString < $1.id.uuidString }) where task.deletedAt == nil {
+            hasher.combine(task.id)
+            hasher.combine(task.title)
+            hasher.combine(String(task.notes.prefix(140)))
+            hasher.combine(task.categoryRawValue)
+            hasher.combine(task.recurrenceRawValue)
+            hasher.combine(task.financialEnabled)
+            hasher.combine(task.dueDate.timeIntervalSinceReferenceDate)
+        }
+        return hasher.finalize()
     }
 }

@@ -73,6 +73,10 @@ enum MoneyWidgetSnapshotPublisher {
             return
         }
 
+        if defaults.data(forKey: MoneyWidgetSnapshot.userDefaultsKey) == data {
+            return
+        }
+
         defaults.set(data, forKey: MoneyWidgetSnapshot.userDefaultsKey)
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -109,6 +113,10 @@ enum FocusWidgetSnapshotPublisher {
         guard let defaults = LifeTrackSharedGroup.defaults,
               let data = try? JSONEncoder.snapshotEncoder.encode(snapshot)
         else {
+            return
+        }
+
+        if defaults.data(forKey: FocusWidgetSnapshot.userDefaultsKey) == data {
             return
         }
 
