@@ -117,6 +117,8 @@ struct BetaFocusedDashboardHomeView: View {
     @State private var dueTodayTasks: [LifeTask] = []
     @State private var overdueTasks: [LifeTask] = []
     @State private var focusTasks: [LifeTask] = []
+    @State private var dayCompleteSummary: DayCompleteSummary?
+    @AppStorage("beta.dashboard.lastDayCompleteCelebration") private var lastCelebrationDayKey: String = ""
 
     init() {
         let startOfDay = Calendar.current.startOfDay(for: Date())
@@ -287,6 +289,13 @@ struct BetaFocusedDashboardHomeView: View {
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView(requiredTier: .standard, featureName: "Plan My Day")
                 .environmentObject(subscriptionManager)
+        }
+        .fullScreenCover(item: $dayCompleteSummary) { summary in
+            DayCompleteCelebrationView(
+                summary: summary,
+                nickname: nickname,
+                onDismiss: { dayCompleteSummary = nil }
+            )
         }
         .onReceive(NotificationCenter.default.publisher(for: TaskSpotlightIndexer.openTaskNotification)) { note in
             guard let id = note.userInfo?[TaskSpotlightIndexer.openTaskUserInfoKey] as? UUID,
@@ -770,6 +779,7 @@ struct BetaFocusedDashboardHomeView: View {
     }
 
     private func toggleCompletion(_ task: LifeTask) {
+        let wasCompleted = task.isCompleted
         let pending = withAnimation(.snappy(duration: 0.24)) {
             TaskLifecycleManager.beginToggleCompletion(for: task)
         }
@@ -778,7 +788,36 @@ struct BetaFocusedDashboardHomeView: View {
             try? await Task.sleep(nanoseconds: 16_000_000)
             TaskLifecycleManager.finishToggleCompletion(pending, in: modelContext, customCategories: customCategories)
             FocusActivityController.shared.update(for: task)
+
+            if !wasCompleted {
+                try? await Task.sleep(nanoseconds: 320_000_000)
+                presentDayCompleteCelebrationIfNeeded()
+            }
         }
+    }
+
+    private func presentDayCompleteCelebrationIfNeeded() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let todayKey = ISO8601DateFormatter.string(from: today, timeZone: .current, formatOptions: [.withFullDate])
+
+        guard lastCelebrationDayKey != todayKey else { return }
+        guard !todayCompletedTasks.isEmpty else { return }
+        guard openTasks.allSatisfy({ !calendar.isDateInToday($0.dueDate) }) else { return }
+
+        let entries = todayCompletedTasks
+            .map { task in
+                DayCompleteSummary.Entry(
+                    id: task.id,
+                    title: task.title,
+                    completedAt: task.completedAt ?? task.updatedAt,
+                    category: task.categoryOption(customCategories: customCategories)
+                )
+            }
+            .sorted { $0.completedAt < $1.completedAt }
+
+        lastCelebrationDayKey = todayKey
+        dayCompleteSummary = DayCompleteSummary(date: today, entries: entries)
     }
 
     private func categoryVisuals(for option: TaskCategoryOption) -> BetaFocusedDashboardCategoryVisuals {
