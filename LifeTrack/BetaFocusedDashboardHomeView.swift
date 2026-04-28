@@ -931,26 +931,75 @@ private struct BetaFocusedDashboardVerticalRule: View {
 }
 
 private struct BetaFocusedDashboardSunBackdrop: View {
+    private var phase: TimeOfDayPhase {
+        TimeOfDayPhase.current
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Circle()
-                .fill(Color(hex: 0xFFE2A2).opacity(0.18))
-                .frame(width: 56, height: 56)
-                .blur(radius: 3)
-                .offset(x: 8, y: -8)
+                .fill(phase.glowColor.opacity(0.22))
+                .frame(width: 64, height: 64)
+                .blur(radius: 8)
+                .offset(x: 6, y: -6)
 
-            Circle()
-                .fill(Color(hex: 0xFFD88A).opacity(0.70))
-                .frame(width: 26, height: 26)
-                .offset(x: 0, y: 0)
-
-            Capsule()
-                .fill(Color.white.opacity(0.55))
-                .frame(width: 46, height: 12)
-                .offset(x: -22, y: 14)
-                .blur(radius: 1.5)
+            Image(systemName: phase.symbolName)
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: phase.symbolGradient,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .offset(x: -2, y: 0)
         }
-        .frame(width: 80, height: 40, alignment: .topTrailing)
+        .frame(width: 80, height: 44, alignment: .topTrailing)
+        .accessibilityHidden(true)
+    }
+}
+
+private enum TimeOfDayPhase {
+    case morning
+    case day
+    case evening
+    case night
+
+    static var current: TimeOfDayPhase {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<10: return .morning
+        case 10..<17: return .day
+        case 17..<21: return .evening
+        default: return .night
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .morning: return "sunrise.fill"
+        case .day: return "sun.max.fill"
+        case .evening: return "sunset.fill"
+        case .night: return "moon.stars.fill"
+        }
+    }
+
+    var symbolGradient: [Color] {
+        switch self {
+        case .morning: return [Color(hex: 0xF7C26B), Color(hex: 0xF4A45C)]
+        case .day: return [Color(hex: 0xFFD27A), Color(hex: 0xF6A148)]
+        case .evening: return [Color(hex: 0xE5896A), Color(hex: 0xCB6E78)]
+        case .night: return [Color(hex: 0x9DA4D8), Color(hex: 0x6F77B6)]
+        }
+    }
+
+    var glowColor: Color {
+        switch self {
+        case .morning: return Color(hex: 0xFFD78C)
+        case .day: return Color(hex: 0xFFC76A)
+        case .evening: return Color(hex: 0xE5896A)
+        case .night: return Color(hex: 0xB6BDE7)
+        }
     }
 }
 
