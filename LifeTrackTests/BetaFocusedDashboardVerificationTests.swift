@@ -103,6 +103,31 @@ struct BetaFocusedDashboardVerificationTests {
         #expect(record.category == .work)
     }
 
+    @Test func focusSessionSummaryCalculatesTodayWeekAndStreak() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let reference = Self.makeDate(year: 2026, month: 4, day: 30, hour: 12, calendar: calendar)
+        let today = Self.makeDate(year: 2026, month: 4, day: 30, hour: 10, calendar: calendar)
+        let yesterday = Self.makeDate(year: 2026, month: 4, day: 29, hour: 15, calendar: calendar)
+        let lastWeek = Self.makeDate(year: 2026, month: 4, day: 20, hour: 15, calendar: calendar)
+
+        let summary = FocusSessionSummary(
+            records: [
+                Self.makeFocusRecord(endedAt: today, durationSeconds: 25 * 60, completedBlock: true),
+                Self.makeFocusRecord(endedAt: yesterday, durationSeconds: 13 * 60, completedBlock: false),
+                Self.makeFocusRecord(endedAt: lastWeek, durationSeconds: 8 * 60, completedBlock: true)
+            ],
+            referenceDate: reference,
+            calendar: calendar
+        )
+
+        #expect(summary.todayMinutes == 25)
+        #expect(summary.weekMinutes == 38)
+        #expect(summary.todayCompletedBlocks == 1)
+        #expect(summary.totalCompletedBlocks == 2)
+        #expect(summary.activeDayStreak == 2)
+    }
+
     @Test func focusSessionPauseSurvivesLeavingScreen() throws {
         let defaults = try Self.makeDefaults()
         let taskID = UUID()
@@ -192,5 +217,31 @@ struct BetaFocusedDashboardVerificationTests {
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
+    }
+
+    private static func makeDate(
+        year: Int,
+        month: Int,
+        day: Int,
+        hour: Int,
+        calendar: Calendar
+    ) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    }
+
+    private static func makeFocusRecord(
+        endedAt: Date,
+        durationSeconds: Int,
+        completedBlock: Bool
+    ) -> FocusSessionRecord {
+        FocusSessionRecord(
+            taskID: nil,
+            taskTitle: "Focus",
+            categoryRawValue: TaskCategory.work.rawValue,
+            startedAt: endedAt.addingTimeInterval(-TimeInterval(durationSeconds)),
+            endedAt: endedAt,
+            durationSeconds: durationSeconds,
+            completedBlock: completedBlock
+        )
     }
 }

@@ -8,25 +8,8 @@ import SwiftUI
 struct BetaFocusedDashboardFocusHistoryView: View {
     let records: [FocusSessionRecord]
 
-    private var todayRecords: [FocusSessionRecord] {
-        records.filter { Calendar.current.isDateInToday($0.endedAt) }
-    }
-
-    private var weekRecords: [FocusSessionRecord] {
-        let calendar = Calendar.current
-        return records.filter { calendar.isDate($0.endedAt, equalTo: Date(), toGranularity: .weekOfYear) }
-    }
-
-    private var todayMinutes: Int {
-        todayRecords.reduce(0) { $0 + $1.durationMinutes }
-    }
-
-    private var weekMinutes: Int {
-        weekRecords.reduce(0) { $0 + $1.durationMinutes }
-    }
-
-    private var todayCompletedBlocks: Int {
-        todayRecords.filter(\.completedBlock).count
+    private var summary: FocusSessionSummary {
+        FocusSessionSummary(records: records)
     }
 
     var body: some View {
@@ -39,28 +22,28 @@ struct BetaFocusedDashboardFocusHistoryView: View {
 
                     Spacer(minLength: 0)
 
-                    Text(records.isEmpty ? "No sessions" : "\(BetaFocusedDashboardFormat.count(records.count)) total")
+                    Text(headerDetail)
                         .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
                         .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
                 }
 
                 HStack(spacing: 8) {
                     FocusHistoryMetric(
-                        value: "\(todayMinutes)",
+                        value: "\(summary.todayMinutes)",
                         title: "Min Today",
                         systemImage: "timer",
                         tint: BetaFocusedDashboardPalette.heroAccent
                     )
 
                     FocusHistoryMetric(
-                        value: "\(weekMinutes)",
+                        value: "\(summary.weekMinutes)",
                         title: "Min Week",
                         systemImage: "calendar.badge.clock",
                         tint: BetaFocusedDashboardPalette.completedTint
                     )
 
                     FocusHistoryMetric(
-                        value: "\(todayCompletedBlocks)",
+                        value: "\(summary.todayCompletedBlocks)",
                         title: "Blocks",
                         systemImage: "checkmark.seal",
                         tint: BetaFocusedDashboardPalette.captureTint
@@ -87,6 +70,14 @@ struct BetaFocusedDashboardFocusHistoryView: View {
                 }
             }
         }
+    }
+
+    private var headerDetail: String {
+        guard !records.isEmpty else { return "No sessions" }
+        if summary.activeDayStreak > 1 {
+            return "\(summary.activeDayStreak)-day streak"
+        }
+        return "\(BetaFocusedDashboardFormat.count(records.count)) total"
     }
 }
 

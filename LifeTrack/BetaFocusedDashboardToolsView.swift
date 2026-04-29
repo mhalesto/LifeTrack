@@ -3,11 +3,13 @@
 //  LifeTrack
 //
 
+import SwiftData
 import SwiftUI
 
 struct BetaFocusedDashboardToolsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var aiAdvisor = AITaskAdvisor.shared
+    @Query(sort: \FocusSessionRecord.endedAt, order: .reverse) private var focusSessionRecords: [FocusSessionRecord]
     @AppStorage(LifeTrackSettings.Keys.lastBackupDate) private var lastBackupTimestamp: Double = 0
     @AppStorage(LifeTrackSettings.Keys.lastWeeklyReviewDate) private var lastWeeklyReviewTimestamp: Double = 0
 
@@ -121,7 +123,7 @@ struct BetaFocusedDashboardToolsView: View {
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Focus",
-                subtitle: focusQueueCount == 0 ? "Queue clear" : "\(BetaFocusedDashboardFormat.count(focusQueueCount)) queued",
+                subtitle: focusSubtitle,
                 systemImage: "scope",
                 tint: BetaFocusedDashboardPalette.completedTint,
                 action: { onNavigate(.focus) }
@@ -281,6 +283,18 @@ struct BetaFocusedDashboardToolsView: View {
             )
         }
 
+        if focusQueueCount > 0 && focusSummary.todayMinutes == 0 {
+            items.append(
+                BetaFocusedDashboardToolsSuggestion(
+                    title: "Start focus block",
+                    detail: "\(BetaFocusedDashboardFormat.count(focusQueueCount)) queued • 0 min today",
+                    systemImage: "scope",
+                    tint: BetaFocusedDashboardPalette.completedTint,
+                    action: { onNavigate(.focus) }
+                )
+            )
+        }
+
         if lastBackupTimestamp == 0 {
             items.append(
                 BetaFocusedDashboardToolsSuggestion(
@@ -329,6 +343,29 @@ struct BetaFocusedDashboardToolsView: View {
         }
 
         return items
+    }
+
+    private var focusSummary: FocusSessionSummary {
+        FocusSessionSummary(records: focusSessionRecords)
+    }
+
+    private var focusSubtitle: String {
+        if focusSummary.todayMinutes > 0 {
+            if focusSummary.todayCompletedBlocks > 0 {
+                return "\(focusMinutesLabel(focusSummary.todayMinutes)) today • \(BetaFocusedDashboardFormat.count(focusSummary.todayCompletedBlocks)) blocks"
+            }
+            return "\(focusMinutesLabel(focusSummary.todayMinutes)) today"
+        }
+
+        if focusSummary.activeDayStreak > 1 {
+            return "\(BetaFocusedDashboardFormat.count(focusSummary.activeDayStreak)) day streak"
+        }
+
+        return focusQueueCount == 0 ? "Queue clear" : "\(BetaFocusedDashboardFormat.count(focusQueueCount)) queued"
+    }
+
+    private func focusMinutesLabel(_ minutes: Int) -> String {
+        minutes > 999 ? "999+ min" : "\(minutes)m"
     }
 
     private var backupSubtitle: String {
