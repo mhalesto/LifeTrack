@@ -469,6 +469,11 @@ struct InboxView: View {
     let onOpenTextCapture: () -> Void
     let onOpenVoiceCapture: () -> Void
 
+    private var staleInboxItems: [InboxItem] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+        return inboxItems.filter { $0.createdAt < cutoff }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -505,6 +510,13 @@ struct InboxView: View {
                                 action: { dismissAndRun(onOpenTextCapture) }
                             )
                         } else {
+                            InboxBatchProcessingCard(
+                                itemCount: inboxItems.count,
+                                staleCount: staleInboxItems.count,
+                                onCreateAll: createAllTasks,
+                                onArchiveAll: archiveAll
+                            )
+
                             VStack(spacing: LifeTrackTheme.Spacing.medium) {
                                 ForEach(inboxItems) { item in
                                     InboxItemCard(
@@ -536,6 +548,36 @@ struct InboxView: View {
         }
     }
 
+    private func createAllTasks() {
+        let items = inboxItems
+        guard !items.isEmpty else { return }
+
+        let now = Date()
+        for item in items {
+            modelContext.insert(item.captureDraft.makeTask())
+            var updated = item
+            updated.markConverted(at: now)
+            InboxStore.update(updated)
+        }
+
+        try? modelContext.save()
+        refreshInbox()
+    }
+
+    private func archiveAll() {
+        let items = inboxItems
+        guard !items.isEmpty else { return }
+
+        let now = Date()
+        for item in items {
+            var updated = item
+            updated.markArchived(at: now)
+            InboxStore.update(updated)
+        }
+
+        refreshInbox()
+    }
+
     private func createTask(from item: InboxItem) {
         modelContext.insert(item.captureDraft.makeTask())
         var updated = item
@@ -564,6 +606,65 @@ struct InboxView: View {
 
     private func refreshInbox() {
         inboxItems = InboxStore.loadOpenItems()
+    }
+}
+
+private struct InboxBatchProcessingCard: View {
+    let itemCount: Int
+    let staleCount: Int
+    let onCreateAll: () -> Void
+    let onArchiveAll: () -> Void
+
+    var body: some View {
+        SectionCardView {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: staleCount > 0 ? "clock.badge.exclamationmark" : "checklist")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(staleCount > 0 ? LifeTrackTheme.ColorPalette.warning : LifeTrackTheme.ColorPalette.accent)
+                    .frame(width: 38, height: 38)
+                    .background(
+                        (staleCount > 0 ? LifeTrackTheme.ColorPalette.warning : LifeTrackTheme.ColorPalette.accent).opacity(0.12),
+                        in: Circle()
+                    )
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Process inbox")
+                        .font(.lifeTrackHeadline)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                    Text(summary)
+                        .font(.footnote)
+                        .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 10) {
+                InlineActionPillButton(
+                    title: "Create All",
+                    systemImage: "checkmark.circle.fill",
+                    tint: LifeTrackTheme.ColorPalette.success,
+                    action: onCreateAll
+                )
+
+                InlineActionPillButton(
+                    title: "Archive All",
+                    systemImage: "archivebox",
+                    tint: LifeTrackTheme.ColorPalette.secondaryText,
+                    action: onArchiveAll
+                )
+            }
+        }
+    }
+
+    private var summary: String {
+        if staleCount > 0 {
+            return "\(itemCount) waiting, including \(staleCount) older than a day."
+        }
+
+        return "\(itemCount) waiting. Convert the parsed drafts into tasks or archive the noise."
     }
 }
 

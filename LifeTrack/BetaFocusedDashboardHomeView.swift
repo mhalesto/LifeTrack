@@ -24,7 +24,11 @@ private enum BetaFocusedDashboardTab: Hashable {
     case home
     case capture
     case focus
-    case more
+    case tools
+}
+
+private enum BetaFocusedDashboardScrollTarget: Hashable {
+    case tools
 }
 
 private enum BetaFocusedDashboardTypography {
@@ -79,6 +83,10 @@ private enum BetaFocusedDashboardPalette {
     static let personalBackground = Color(hex: 0xF0EBFA)
     static let otherTint = Color(hex: 0x80766F)
     static let otherBackground = Color(hex: 0xF2ECE6)
+
+    static let warningTint = Color(hex: 0xBF7A2F)
+    static let warningBackground = Color(hex: 0xFBF0DA)
+    static let dangerBackground = Color(hex: 0xFAE6DF)
 }
 
 private struct BetaFocusedDashboardCategoryVisuals {
@@ -86,10 +94,114 @@ private struct BetaFocusedDashboardCategoryVisuals {
     let background: Color
 }
 
+private struct BetaFocusedDashboardPlanPreviewModel {
+    let summary: String
+    let detail: String
+    let rescueCount: Int
+    let busyBlockCount: Int
+}
+
+private enum BetaFocusedDashboardTaskHealthState {
+    case recurringMissed
+    case blocked
+    case stale
+    case needsDate
+
+    var title: String {
+        switch self {
+        case .recurringMissed: "Recurring missed"
+        case .blocked: "Blocked"
+        case .stale: "Stale"
+        case .needsDate: "Needs date"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .recurringMissed: "repeat.circle"
+        case .blocked: "hand.raised.fill"
+        case .stale: "clock.badge.exclamationmark"
+        case .needsDate: "calendar.badge.exclamationmark"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .recurringMissed:
+            BetaFocusedDashboardPalette.overdueTint
+        case .blocked:
+            BetaFocusedDashboardPalette.warningTint
+        case .stale:
+            BetaFocusedDashboardPalette.secondaryText
+        case .needsDate:
+            BetaFocusedDashboardPalette.captureTint
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .recurringMissed:
+            BetaFocusedDashboardPalette.dangerBackground
+        case .blocked:
+            BetaFocusedDashboardPalette.warningBackground
+        case .stale:
+            BetaFocusedDashboardPalette.otherBackground
+        case .needsDate:
+            BetaFocusedDashboardPalette.financeBackground
+        }
+    }
+}
+
+private extension LifeTask {
+    func betaFocusedHealthState(referenceDate: Date = Date(), calendar: Calendar = .current) -> BetaFocusedDashboardTaskHealthState? {
+        guard !isDeleted, !isCompleted else { return nil }
+
+        if isOverdue, recurrence != .none {
+            return .recurringMissed
+        }
+
+        let blockerText = ([notes] + Array(advancedFields.values))
+            .joined(separator: " ")
+            .lowercased()
+
+        if blockerText.contains("blocked") ||
+            blockerText.contains("waiting") ||
+            blockerText.contains("on hold") ||
+            blockerText.contains("stuck") ||
+            blockerText.contains("depends") {
+            return .blocked
+        }
+
+        let staleCutoff = calendar.date(byAdding: .day, value: -14, to: referenceDate) ?? referenceDate
+        if updatedAt < staleCutoff || dueDate < staleCutoff {
+            return .stale
+        }
+
+        let dueComponents = calendar.dateComponents([.hour, .minute], from: dueDate)
+        let daysFromCreateToDue = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: createdAt),
+            to: calendar.startOfDay(for: dueDate)
+        ).day
+
+        if daysFromCreateToDue == 1,
+           dueComponents.hour == 9,
+           dueComponents.minute == 0,
+           priority == .normal,
+           recurrence == .none {
+            return .needsDate
+        }
+
+        return nil
+    }
+}
+
 struct BetaFocusedDashboardHomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var subscriptionManager: SubscriptionManager
+    @ObservedObject private var calendarManager = CalendarIntegrationManager.shared
+    @ObservedObject private var energyReader = HealthKitEnergyReader.shared
 
     @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && !$0.isCompleted }, sort: \LifeTask.dueDate, order: .forward)
     private var openTasks: [LifeTask]
@@ -103,11 +215,13 @@ struct BetaFocusedDashboardHomeView: View {
 
     @State private var navigationPath: [BetaFocusedDashboardRoute] = []
     @State private var selectedTab: BetaFocusedDashboardTab = .home
+    @State private var toolsScrollRequest = 0
     @State private var isShowingSettings = false
     @State private var isShowingQuickCapture = false
     @State private var isShowingVoiceCapture = false
     @State private var isShowingInbox = false
     @State private var isShowingDailyRitual = false
+    @State private var isShowingOverdueRescue = false
     @State private var isShowingTaskEditor = false
     @State private var isShowingPaywall = false
     @State private var selectedCaptureDraft: CapturedTaskDraft? = nil
@@ -146,6 +260,112 @@ struct BetaFocusedDashboardHomeView: View {
         let total = dueTodayTasks.count + todayCompletedTasks.count
         guard total > 0 else { return 0 }
         return min(max(Double(todayCompletedTasks.count) / Double(total), 0), 1)
+    }
+
+    private var dashboardPlanningInterval: DateInterval {
+        CalendarAwareScheduleEngine.dayLoadInterval(for: Date())
+    }
+
+    private var dashboardBusyBlocks: [CalendarBusyBlock] {
+        calendarManager.busyBlocks(overlapping: dashboardPlanningInterval)
+    }
+
+    private var focusRecommendations: [DailyFocusRecommendation] {
+        DailyFocusPlanner.recommendations(from: openTasks, energyLevel: energyReader.energyLevel)
+    }
+
+    private var nextBestRecommendation: DailyFocusRecommendation? {
+        focusRecommendations.first
+    }
+
+    private var focusListTasks: [LifeTask] {
+        let nextBestID = nextBestRecommendation?.task.id
+        var seen = Set<UUID>()
+        var candidates = focusTasks.filter { task in
+            guard task.id != nextBestID else { return false }
+            return seen.insert(task.id).inserted
+        }
+
+        for recommendation in focusRecommendations {
+            let task = recommendation.task
+            guard task.id != nextBestID else { continue }
+            guard seen.insert(task.id).inserted else { continue }
+            candidates.append(task)
+        }
+
+        return candidates
+    }
+
+    private var hiddenFocusTaskCount: Int {
+        max(focusListTasks.count - 3, 0)
+    }
+
+    private var focusListHeight: CGFloat {
+        guard !focusListTasks.isEmpty else { return 0 }
+        let visibleRows = min(max(focusListTasks.count, 1), 3)
+        return CGFloat(visibleRows) * 65
+    }
+
+    private var nextBestScheduledBlock: ScheduledBlock? {
+        guard let task = nextBestRecommendation?.task else { return nil }
+        return CalendarAwareScheduleEngine.sequentialPlan(
+            for: [task],
+            busyBlocks: dashboardBusyBlocks,
+            referenceDate: Date(),
+            energyLevel: energyReader.energyLevel
+        ).blocks.first
+    }
+
+    private var planPreview: BetaFocusedDashboardPlanPreviewModel {
+        let candidates = Array(focusRecommendations.prefix(5).map(\.task))
+        guard !candidates.isEmpty else {
+            return BetaFocusedDashboardPlanPreviewModel(
+                summary: "Nothing needs planning",
+                detail: "Inbox capture is ready when something comes up.",
+                rescueCount: overdueTasks.count,
+                busyBlockCount: dashboardBusyBlocks.count
+            )
+        }
+
+        let plan = CalendarAwareScheduleEngine.sequentialPlan(
+            for: candidates,
+            busyBlocks: dashboardBusyBlocks,
+            referenceDate: Date(),
+            energyLevel: energyReader.energyLevel
+        )
+        let fitCount = plan.blocks.count
+        let moveCount = plan.unscheduledTitles.count
+        let fitLabel = "\(fitCount) task\(fitCount == 1 ? "" : "s") fit today"
+        let moveLabel = moveCount == 0 ? "calendar-aware" : "\(moveCount) should move"
+        let rescueLabel = overdueTasks.isEmpty ? nil : "\(overdueTasks.count) overdue"
+        let detail = [moveLabel, rescueLabel].compactMap(\.self).joined(separator: " • ")
+
+        return BetaFocusedDashboardPlanPreviewModel(
+            summary: fitLabel,
+            detail: detail,
+            rescueCount: overdueTasks.count,
+            busyBlockCount: dashboardBusyBlocks.count
+        )
+    }
+
+    private var staleInboxItems: [InboxItem] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+        return inboxItems.filter { $0.createdAt < cutoff }
+    }
+
+    private var oldestInboxLine: String? {
+        guard let oldest = inboxItems.min(by: { $0.createdAt < $1.createdAt }) else {
+            return nil
+        }
+
+        let ageDays = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: oldest.createdAt),
+            to: Calendar.current.startOfDay(for: Date())
+        ).day ?? 0
+
+        guard ageDays >= 1 else { return nil }
+        return ageDays == 1 ? "Oldest capture is 1 day old" : "Oldest capture is \(ageDays) days old"
     }
 
     private func recomputeDerivedTasks() {
@@ -192,17 +412,27 @@ struct BetaFocusedDashboardHomeView: View {
                 BetaFocusedDashboardBackground()
                     .ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 11) {
-                    header
-                    todaySummaryCard
-                    dailyFocusSection
-                        .frame(maxHeight: .infinity)
-                    inboxSection
-                    toolsSection
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 13) {
+                            header
+                            todaySummaryCard
+                            dailyFocusSection
+                            inboxSection
+                            toolsSection
+                                .id(BetaFocusedDashboardScrollTarget.tools)
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.top, 4)
+                        .padding(.bottom, 20)
+                    }
+                    .scrollIndicators(.hidden)
+                    .onChange(of: toolsScrollRequest) { _, _ in
+                        withAnimation(.snappy(duration: 0.34)) {
+                            proxy.scrollTo(BetaFocusedDashboardScrollTarget.tools, anchor: .bottom)
+                        }
+                    }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 4)
-                .padding(.bottom, 2)
             }
             .safeAreaInset(edge: .bottom) {
                 BetaFocusedDashboardTabBar(selectedTab: $selectedTab)
@@ -278,6 +508,23 @@ struct BetaFocusedDashboardHomeView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $isShowingOverdueRescue, onDismiss: {
+            recomputeDerivedTasks()
+            refreshTotalCompletedCount()
+        }) {
+            BetaFocusedDashboardOverdueRescueSheet(
+                tasks: overdueTasks,
+                customCategories: customCategories,
+                onOpenTask: openTaskFromRescue,
+                onReschedule: { rescueReschedule($0, daysFromNow: 1, hour: 10) },
+                onSnooze: { rescueReschedule($0, daysFromNow: 3, hour: 14) },
+                onSomeday: rescueMoveToSomeday,
+                onComplete: toggleCompletion,
+                onDelete: rescueDelete
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $isShowingTaskEditor, onDismiss: {
             selectedCaptureDraft = nil
         }) {
@@ -310,6 +557,7 @@ struct BetaFocusedDashboardHomeView: View {
             refreshInboxItems()
             recomputeDerivedTasks()
             refreshTotalCompletedCount()
+            loadDashboardPlanningContext()
             if scenePhase == .active {
                 openPendingNotificationTaskIfNeeded()
                 drainSharedInbox()
@@ -323,11 +571,13 @@ struct BetaFocusedDashboardHomeView: View {
             refreshInboxItems()
             recomputeDerivedTasks()
             refreshTotalCompletedCount()
+            loadDashboardPlanningContext()
             openPendingNotificationTaskIfNeeded()
             drainSharedInbox()
         }
         .onChange(of: openTasks) { _, _ in
             recomputeDerivedTasks()
+            loadDashboardPlanningContext()
         }
         .onChange(of: todayCompletedTasks) { _, _ in
             recomputeDerivedTasks()
@@ -420,12 +670,21 @@ struct BetaFocusedDashboardHomeView: View {
 
                         BetaFocusedDashboardVerticalRule()
 
-                        BetaFocusedDashboardMetricColumn(
-                            symbolName: "exclamationmark.circle",
-                            tint: BetaFocusedDashboardPalette.overdueTint,
-                            value: overdueTasks.count,
-                            label: "Overdue"
-                        )
+                        Button {
+                            guard !overdueTasks.isEmpty else { return }
+                            isShowingOverdueRescue = true
+                        } label: {
+                            BetaFocusedDashboardMetricColumn(
+                                symbolName: "exclamationmark.circle",
+                                tint: BetaFocusedDashboardPalette.overdueTint,
+                                value: overdueTasks.count,
+                                label: "Overdue"
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(overdueTasks.isEmpty)
+                        .accessibilityHint(overdueTasks.isEmpty ? "No overdue tasks" : "Open overdue rescue")
 
                         BetaFocusedDashboardVerticalRule()
 
@@ -436,6 +695,11 @@ struct BetaFocusedDashboardHomeView: View {
                             label: "Completed"
                         )
                     }
+
+                    BetaFocusedDashboardPlanPreview(
+                        preview: planPreview,
+                        onRescue: overdueTasks.isEmpty ? nil : { isShowingOverdueRescue = true }
+                    )
 
                     Button {
                         presentDailyRitual()
@@ -529,49 +793,65 @@ struct BetaFocusedDashboardHomeView: View {
                         }
                     }
                 } else {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(Array(focusTasks.enumerated()), id: \.element.id) { index, task in
-                                let option = task.categoryOption(customCategories: customCategories)
-                                BetaFocusedDashboardTaskRow(
-                                    task: task,
-                                    categoryOption: option,
-                                    visuals: categoryVisuals(for: option),
-                                    onOpen: { editingTask = task },
-                                    onToggleCompletion: { toggleCompletion(task) }
-                                )
-
-                                if index < focusTasks.count - 1 {
-                                    Divider()
-                                        .overlay(BetaFocusedDashboardPalette.border)
-                                        .padding(.leading, 56)
-                                }
-                            }
-                            .padding(.bottom, 12)
+                    VStack(spacing: 8) {
+                        if let nextBestRecommendation {
+                            let option = nextBestRecommendation.task.categoryOption(customCategories: customCategories)
+                            BetaFocusedDashboardStartHereBand(
+                                recommendation: nextBestRecommendation,
+                                categoryOption: option,
+                                visuals: categoryVisuals(for: option),
+                                scheduledBlock: nextBestScheduledBlock,
+                                healthState: nextBestRecommendation.task.betaFocusedHealthState(),
+                                onOpen: { editingTask = nextBestRecommendation.task },
+                                onComplete: { toggleCompletion(nextBestRecommendation.task) }
+                            )
                         }
-                    }
-                    .scrollIndicators(.hidden)
-                    .frame(maxHeight: .infinity)
-                    .mask {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .black, location: 0),
-                                .init(color: .black, location: 0.88),
-                                .init(color: .clear, location: 1)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                ForEach(Array(focusListTasks.enumerated()), id: \.element.id) { index, task in
+                                    let option = task.categoryOption(customCategories: customCategories)
+                                    BetaFocusedDashboardTaskRow(
+                                        task: task,
+                                        categoryOption: option,
+                                        visuals: categoryVisuals(for: option),
+                                        healthState: task.betaFocusedHealthState(),
+                                        onOpen: { editingTask = task },
+                                        onToggleCompletion: { toggleCompletion(task) }
+                                    )
+
+                                    if index < focusListTasks.count - 1 {
+                                        Divider()
+                                            .overlay(BetaFocusedDashboardPalette.border)
+                                            .padding(.leading, 56)
+                                    }
+                                }
+                                .padding(.bottom, 2)
+                            }
+                        }
+                        .scrollIndicators(hiddenFocusTaskCount > 0 ? .visible : .hidden)
+                        .frame(height: focusListHeight)
+
+                        if hiddenFocusTaskCount > 0 {
+                            HStack(spacing: 6) {
+                                Text("Scroll for \(hiddenFocusTaskCount) more")
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                            .foregroundStyle(BetaFocusedDashboardPalette.heroAccent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 2)
+                        }
                     }
                 }
             }
-            .frame(maxHeight: .infinity)
         }
     }
 
     private var inboxSection: some View {
         BetaFocusedDashboardCard(background: BetaFocusedDashboardPalette.cardSecondary) {
-            HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 Button {
                     openInbox()
                 } label: {
@@ -586,39 +866,82 @@ struct BetaFocusedDashboardHomeView: View {
                             }
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Inbox")
-                                .font(.system(size: 16, weight: .semibold, design: .serif))
-                                .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                            HStack(spacing: 7) {
+                                Text("Inbox")
+                                    .font(.system(size: 16, weight: .semibold, design: .serif))
+                                    .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                                    .lineLimit(1)
+
+                                if !staleInboxItems.isEmpty {
+                                    BetaFocusedDashboardTinyBadge(
+                                        title: "\(staleInboxItems.count) old",
+                                        tint: BetaFocusedDashboardPalette.warningTint,
+                                        background: BetaFocusedDashboardPalette.warningBackground
+                                    )
+                                }
+                            }
 
                             Text(inboxItems.isEmpty ? "Nothing waiting" : "\(inboxItems.count) waiting")
                                 .font(BetaFocusedDashboardTypography.body)
                                 .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
                         }
+
+                        Spacer(minLength: 0)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
 
                 HStack(spacing: 8) {
-                    BetaFocusedDashboardActionChip(
-                        title: "Text Capture",
-                        systemImage: "bubble.left.and.text.bubble.right",
-                        tint: BetaFocusedDashboardPalette.captureTint,
-                        isCompact: true
-                    ) {
-                        openQuickCapture()
-                    }
+                    if inboxItems.isEmpty {
+                        BetaFocusedDashboardActionChip(
+                            title: "Text Capture",
+                            systemImage: "bubble.left.and.text.bubble.right",
+                            tint: BetaFocusedDashboardPalette.captureTint,
+                            isCompact: true
+                        ) {
+                            openQuickCapture()
+                        }
 
-                    BetaFocusedDashboardActionChip(
-                        title: "Voice Capture",
-                        systemImage: "waveform",
-                        tint: BetaFocusedDashboardPalette.captureTint,
-                        isCompact: true
-                    ) {
-                        openVoiceCapture()
+                        BetaFocusedDashboardActionChip(
+                            title: "Voice Capture",
+                            systemImage: "waveform",
+                            tint: BetaFocusedDashboardPalette.captureTint,
+                            isCompact: true
+                        ) {
+                            openVoiceCapture()
+                        }
+                    } else {
+                        BetaFocusedDashboardActionChip(
+                            title: "Review Newest",
+                            systemImage: "arrow.up.doc",
+                            tint: BetaFocusedDashboardPalette.captureTint,
+                            isCompact: true
+                        ) {
+                            reviewNewestInboxItem()
+                        }
+
+                        BetaFocusedDashboardActionChip(
+                            title: "Process All",
+                            systemImage: "checklist",
+                            tint: BetaFocusedDashboardPalette.completedTint,
+                            isCompact: true
+                        ) {
+                            openInbox()
+                        }
                     }
                 }
-                .fixedSize()
+
+                if let oldestInboxLine {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.badge.exclamationmark")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(oldestInboxLine)
+                            .font(BetaFocusedDashboardTypography.bodySmall)
+                    }
+                    .foregroundStyle(BetaFocusedDashboardPalette.warningTint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }
@@ -688,9 +1011,8 @@ struct BetaFocusedDashboardHomeView: View {
         case .focus:
             presentDailyRitual()
             resetTabSelection()
-        case .more:
-            isShowingSettings = true
-            resetTabSelection()
+        case .tools:
+            toolsScrollRequest += 1
         }
     }
 
@@ -707,6 +1029,13 @@ struct BetaFocusedDashboardHomeView: View {
         }
 
         isShowingDailyRitual = true
+    }
+
+    private func loadDashboardPlanningContext() {
+        let interval = dashboardPlanningInterval
+        Task { @MainActor in
+            await calendarManager.loadBusyBlocks(in: interval)
+        }
     }
 
     private func openQuickCapture() {
@@ -729,6 +1058,15 @@ struct BetaFocusedDashboardHomeView: View {
         isShowingVoiceCapture = false
         refreshInboxItems()
         isShowingInbox = true
+    }
+
+    private func reviewNewestInboxItem() {
+        guard let newest = inboxItems.sorted(by: { $0.createdAt > $1.createdAt }).first else {
+            openInbox()
+            return
+        }
+
+        openCapturedDraftInEditor(newest.captureDraft)
     }
 
     private func openCapturedDraftInEditor(_ draft: CapturedTaskDraft) {
@@ -794,6 +1132,41 @@ struct BetaFocusedDashboardHomeView: View {
                 presentDayCompleteCelebrationIfNeeded()
             }
         }
+    }
+
+    private func openTaskFromRescue(_ task: LifeTask) {
+        isShowingOverdueRescue = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            editingTask = task
+        }
+    }
+
+    private func rescueReschedule(_ task: LifeTask, daysFromNow: Int, hour: Int) {
+        let calendar = Calendar.current
+        let targetDay = calendar.date(byAdding: .day, value: daysFromNow, to: Date()) ?? Date()
+        let targetDate = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: targetDay) ?? targetDay
+        task.dueDate = targetDate
+        task.updatedAt = Date()
+        try? modelContext.save()
+        TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        recomputeDerivedTasks()
+    }
+
+    private func rescueMoveToSomeday(_ task: LifeTask) {
+        let calendar = Calendar.current
+        let targetDay = calendar.date(byAdding: .day, value: 30, to: Date()) ?? Date()
+        let targetDate = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: targetDay) ?? targetDay
+        task.dueDate = targetDate
+        task.priority = .low
+        task.updatedAt = Date()
+        try? modelContext.save()
+        TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        recomputeDerivedTasks()
+    }
+
+    private func rescueDelete(_ task: LifeTask) {
+        TaskLifecycleManager.delete(task, in: modelContext)
+        recomputeDerivedTasks()
     }
 
     private func presentDayCompleteCelebrationIfNeeded() {
@@ -886,6 +1259,56 @@ private struct BetaFocusedDashboardCard<Content: View>: View {
                 .stroke(BetaFocusedDashboardPalette.border, lineWidth: 0.8)
         }
         .shadow(color: BetaFocusedDashboardPalette.softShadow, radius: 18, x: 0, y: 8)
+    }
+}
+
+private struct BetaFocusedDashboardPlanPreview: View {
+    let preview: BetaFocusedDashboardPlanPreviewModel
+    let onRescue: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(BetaFocusedDashboardPalette.heroAccent)
+                .frame(width: 28, height: 28)
+                .background(BetaFocusedDashboardPalette.dangerBackground.opacity(0.9), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preview.summary)
+                    .font(BetaFocusedDashboardTypography.body.weight(.semibold))
+                    .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Text(preview.detail)
+                    .font(BetaFocusedDashboardTypography.bodySmall)
+                    .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+
+            Spacer(minLength: 0)
+
+            if let onRescue {
+                Button(action: onRescue) {
+                    Text("Rescue")
+                        .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                        .foregroundStyle(BetaFocusedDashboardPalette.overdueTint)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .background(BetaFocusedDashboardPalette.dangerBackground, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(BetaFocusedDashboardPalette.border.opacity(0.85), lineWidth: 0.8)
+        }
     }
 }
 
@@ -1003,10 +1426,116 @@ private enum TimeOfDayPhase {
     }
 }
 
+private struct BetaFocusedDashboardStartHereBand: View {
+    let recommendation: DailyFocusRecommendation
+    let categoryOption: TaskCategoryOption
+    let visuals: BetaFocusedDashboardCategoryVisuals
+    let scheduledBlock: ScheduledBlock?
+    let healthState: BetaFocusedDashboardTaskHealthState?
+    let onOpen: () -> Void
+    let onComplete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Label("Start here", systemImage: "sparkles")
+                    .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                    .foregroundStyle(BetaFocusedDashboardPalette.heroAccent)
+
+                Spacer(minLength: 0)
+
+                Text(scheduleHint)
+                    .font(BetaFocusedDashboardTypography.bodySmall)
+                    .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                    .lineLimit(1)
+            }
+
+            HStack(alignment: .center, spacing: 10) {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(visuals.background)
+                    .frame(width: 36, height: 36)
+                    .overlay {
+                        Image(systemName: categoryOption.symbolName)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(visuals.tint)
+                    }
+
+                Button(action: onOpen) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(recommendation.task.title)
+                            .font(BetaFocusedDashboardTypography.taskTitle.weight(.semibold))
+                            .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
+                        HStack(spacing: 6) {
+                            Text(recommendation.reason.title)
+                                .font(BetaFocusedDashboardTypography.bodySmall)
+                                .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+
+                            BetaFocusedDashboardCategoryChip(
+                                title: categoryOption.title,
+                                tint: visuals.tint,
+                                background: visuals.background
+                            )
+
+                            if let healthState {
+                                BetaFocusedDashboardHealthChip(state: healthState)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onComplete) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 26, height: 26)
+                        .background(BetaFocusedDashboardPalette.completedTint, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Complete start here task")
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .background(
+            LinearGradient(
+                colors: [
+                    BetaFocusedDashboardPalette.dangerBackground.opacity(0.78),
+                    Color.white.opacity(0.74)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(BetaFocusedDashboardPalette.heroAccent.opacity(0.18), lineWidth: 0.8)
+        }
+    }
+
+    private var scheduleHint: String {
+        if let scheduledBlock {
+            return "Fits \(BetaFocusedDashboardTimeFormatter.timeOnly.string(from: scheduledBlock.startDate))"
+        }
+
+        if recommendation.task.isOverdue {
+            return "Rescue candidate"
+        }
+
+        return "Next best action"
+    }
+}
+
 private struct BetaFocusedDashboardTaskRow: View {
     let task: LifeTask
     let categoryOption: TaskCategoryOption
     let visuals: BetaFocusedDashboardCategoryVisuals
+    let healthState: BetaFocusedDashboardTaskHealthState?
     let onOpen: () -> Void
     let onToggleCompletion: () -> Void
 
@@ -1040,6 +1569,10 @@ private struct BetaFocusedDashboardTaskRow: View {
                             .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
                             .lineLimit(1)
                             .truncationMode(.tail)
+
+                        if let healthState {
+                            BetaFocusedDashboardHealthChip(state: healthState)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1134,6 +1667,47 @@ private struct BetaFocusedDashboardCategoryChip: View {
     }
 }
 
+private struct BetaFocusedDashboardHealthChip: View {
+    let state: BetaFocusedDashboardTaskHealthState
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: state.symbolName)
+                .font(.system(size: 8.5, weight: .bold))
+            Text(state.title)
+                .lineLimit(1)
+        }
+        .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+        .foregroundStyle(state.tint)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(state.background, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(state.tint.opacity(0.16), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct BetaFocusedDashboardTinyBadge: View {
+    let title: String
+    let tint: Color
+    let background: Color
+
+    var body: some View {
+        Text(title)
+            .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(background, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(tint.opacity(0.16), lineWidth: 0.7)
+            }
+    }
+}
+
 private struct BetaFocusedDashboardActionChip: View {
     let title: String
     let systemImage: String
@@ -1149,6 +1723,7 @@ private struct BetaFocusedDashboardActionChip: View {
                 Text(title)
                     .font((isCompact ? BetaFocusedDashboardTypography.bodySmall : BetaFocusedDashboardTypography.body).weight(.semibold))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.78)
             }
             .foregroundStyle(tint)
             .padding(.horizontal, isCompact ? 7 : 11)
@@ -1202,6 +1777,384 @@ private struct BetaFocusedDashboardToolTile: View {
     }
 }
 
+private enum BetaFocusedDashboardOverdueBucket: CaseIterable {
+    case reschedule
+    case snooze
+    case someday
+    case markDone
+    case delete
+
+    var title: String {
+        switch self {
+        case .reschedule: "Reschedule"
+        case .snooze: "Snooze"
+        case .someday: "Someday"
+        case .markDone: "Mark Done"
+        case .delete: "Delete"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .reschedule: "Recent or important tasks worth putting back on the calendar."
+        case .snooze: "Tasks that can wait a few days without being forgotten."
+        case .someday: "Older tasks that still matter, but do not belong in today."
+        case .markDone: "Recurring items that were probably handled outside LifeTrack."
+        case .delete: "Very old, low-priority tasks likely safe to move to the bin."
+        }
+    }
+
+    var primaryActionTitle: String {
+        switch self {
+        case .reschedule: "Tomorrow"
+        case .snooze: "Snooze"
+        case .someday: "Someday"
+        case .markDone: "Done"
+        case .delete: "Delete"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .reschedule: "calendar.badge.clock"
+        case .snooze: "moon.zzz.fill"
+        case .someday: "tray"
+        case .markDone: "checkmark.circle.fill"
+        case .delete: "trash"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .reschedule:
+            BetaFocusedDashboardPalette.captureTint
+        case .snooze:
+            BetaFocusedDashboardPalette.warningTint
+        case .someday:
+            BetaFocusedDashboardPalette.importExportTint
+        case .markDone:
+            BetaFocusedDashboardPalette.completedTint
+        case .delete:
+            BetaFocusedDashboardPalette.overdueTint
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .reschedule:
+            BetaFocusedDashboardPalette.financeBackground
+        case .snooze:
+            BetaFocusedDashboardPalette.warningBackground
+        case .someday:
+            BetaFocusedDashboardPalette.personalBackground
+        case .markDone:
+            BetaFocusedDashboardPalette.workBackground
+        case .delete:
+            BetaFocusedDashboardPalette.dangerBackground
+        }
+    }
+
+    static func recommended(for task: LifeTask, referenceDate: Date = Date(), calendar: Calendar = .current) -> BetaFocusedDashboardOverdueBucket {
+        let overdueDays = max(
+            calendar.dateComponents(
+                [.day],
+                from: calendar.startOfDay(for: task.dueDate),
+                to: calendar.startOfDay(for: referenceDate)
+            ).day ?? 0,
+            0
+        )
+
+        if task.recurrence != .none && overdueDays <= 7 {
+            return .markDone
+        }
+
+        if overdueDays >= 45 && task.priority == .low {
+            return .delete
+        }
+
+        if overdueDays >= 14 {
+            return .someday
+        }
+
+        if overdueDays >= 3 {
+            return .snooze
+        }
+
+        return .reschedule
+    }
+}
+
+private struct BetaFocusedDashboardOverdueRescueSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let tasks: [LifeTask]
+    let customCategories: [CustomTaskCategory]
+    let onOpenTask: (LifeTask) -> Void
+    let onReschedule: (LifeTask) -> Void
+    let onSnooze: (LifeTask) -> Void
+    let onSomeday: (LifeTask) -> Void
+    let onComplete: (LifeTask) -> Void
+    let onDelete: (LifeTask) -> Void
+
+    private var sortedTasks: [LifeTask] {
+        tasks
+            .filter { !$0.isDeleted && !$0.isCompleted }
+            .sorted { first, second in
+                if first.priority.focusScore != second.priority.focusScore {
+                    return first.priority.focusScore > second.priority.focusScore
+                }
+
+                return first.dueDate < second.dueDate
+            }
+    }
+
+    private var groupedTasks: [(bucket: BetaFocusedDashboardOverdueBucket, tasks: [LifeTask])] {
+        BetaFocusedDashboardOverdueBucket.allCases.compactMap { bucket in
+            let matches = sortedTasks.filter { BetaFocusedDashboardOverdueBucket.recommended(for: $0) == bucket }
+            guard !matches.isEmpty else { return nil }
+            return (bucket, matches)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                BetaFocusedDashboardBackground()
+                    .ignoresSafeArea()
+
+                if sortedTasks.isEmpty {
+                    emptyState
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            header
+
+                            ForEach(groupedTasks, id: \.bucket) { group in
+                                rescueSection(bucket: group.bucket, tasks: group.tasks)
+                            }
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.top, 16)
+                        .padding(.bottom, 28)
+                    }
+                    .scrollIndicators(.hidden)
+                }
+            }
+            .navigationTitle("Overdue Rescue")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(sortedTasks.count) overdue task\(sortedTasks.count == 1 ? "" : "s")")
+                .font(.system(size: 24, weight: .semibold, design: .serif))
+                .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+
+            Text("LifeTrack grouped the backlog by the fastest useful action. Clear a section at a time or triage one task.")
+                .font(BetaFocusedDashboardTypography.body)
+                .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 48, weight: .semibold))
+                .foregroundStyle(BetaFocusedDashboardPalette.completedTint)
+
+            Text("Backlog rescued")
+                .font(.system(size: 24, weight: .semibold, design: .serif))
+                .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+
+            Text("No overdue tasks need cleanup right now.")
+                .font(BetaFocusedDashboardTypography.body)
+                .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 28)
+    }
+
+    private func rescueSection(bucket: BetaFocusedDashboardOverdueBucket, tasks: [LifeTask]) -> some View {
+        BetaFocusedDashboardCard(background: BetaFocusedDashboardPalette.cardSecondary) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: bucket.symbolName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(bucket.tint)
+                        .frame(width: 30, height: 30)
+                        .background(bucket.background, in: Circle())
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(bucket.title) · \(tasks.count)")
+                            .font(BetaFocusedDashboardTypography.section)
+                            .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+
+                        Text(bucket.subtitle)
+                            .font(BetaFocusedDashboardTypography.bodySmall)
+                            .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            tasks.forEach { apply(bucket, to: $0) }
+                        }
+                    } label: {
+                        Text("Apply")
+                            .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                            .foregroundStyle(bucket.tint)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(bucket.background, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                VStack(spacing: 0) {
+                    ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+                        BetaFocusedDashboardRescueTaskRow(
+                            task: task,
+                            categoryOption: task.categoryOption(customCategories: customCategories),
+                            bucket: bucket,
+                            onOpen: { onOpenTask(task) },
+                            onPrimaryAction: { apply(bucket, to: task) },
+                            onReschedule: { onReschedule(task) },
+                            onSnooze: { onSnooze(task) },
+                            onSomeday: { onSomeday(task) },
+                            onComplete: { onComplete(task) },
+                            onDelete: { onDelete(task) }
+                        )
+
+                        if index < tasks.count - 1 {
+                            Divider()
+                                .overlay(BetaFocusedDashboardPalette.border)
+                                .padding(.leading, 48)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func apply(_ bucket: BetaFocusedDashboardOverdueBucket, to task: LifeTask) {
+        switch bucket {
+        case .reschedule:
+            onReschedule(task)
+        case .snooze:
+            onSnooze(task)
+        case .someday:
+            onSomeday(task)
+        case .markDone:
+            onComplete(task)
+        case .delete:
+            onDelete(task)
+        }
+    }
+}
+
+private struct BetaFocusedDashboardRescueTaskRow: View {
+    let task: LifeTask
+    let categoryOption: TaskCategoryOption
+    let bucket: BetaFocusedDashboardOverdueBucket
+    let onOpen: () -> Void
+    let onPrimaryAction: () -> Void
+    let onReschedule: () -> Void
+    let onSnooze: () -> Void
+    let onSomeday: () -> Void
+    let onComplete: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(categoryOption.background)
+                .frame(width: 36, height: 36)
+                .overlay {
+                    Image(systemName: categoryOption.symbolName)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(categoryOption.tint)
+                }
+
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.title)
+                        .font(BetaFocusedDashboardTypography.taskTitle)
+                        .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    HStack(spacing: 6) {
+                        Text(overdueLabel)
+                            .font(BetaFocusedDashboardTypography.bodySmall)
+                            .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+
+                        BetaFocusedDashboardCategoryChip(
+                            title: categoryOption.title,
+                            tint: categoryOption.tint,
+                            background: categoryOption.background
+                        )
+
+                        if let healthState = task.betaFocusedHealthState() {
+                            BetaFocusedDashboardHealthChip(state: healthState)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onPrimaryAction) {
+                Text(bucket.primaryActionTitle)
+                    .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                    .foregroundStyle(bucket.tint)
+                    .lineLimit(1)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .background(bucket.background, in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Button("Reschedule tomorrow", systemImage: "calendar.badge.clock", action: onReschedule)
+                Button("Snooze 3 days", systemImage: "moon.zzz.fill", action: onSnooze)
+                Button("Move to someday", systemImage: "tray", action: onSomeday)
+                Button("Mark done", systemImage: "checkmark.circle.fill", action: onComplete)
+                Button("Move to bin", systemImage: "trash", role: .destructive, action: onDelete)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var overdueLabel: String {
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: task.dueDate),
+            to: Calendar.current.startOfDay(for: Date())
+        ).day ?? 0
+
+        if days <= 0 {
+            return "Overdue today"
+        }
+
+        return days == 1 ? "1 day overdue" : "\(days) days overdue"
+    }
+}
+
 private struct BetaFocusedDashboardTabBar: View {
     @Binding var selectedTab: BetaFocusedDashboardTab
 
@@ -1210,7 +2163,7 @@ private struct BetaFocusedDashboardTabBar: View {
             tabButton(tab: .home, title: "Home", systemImage: "house.fill")
             tabButton(tab: .capture, title: "Capture", systemImage: "plus.circle")
             tabButton(tab: .focus, title: "Focus", systemImage: "scope")
-            tabButton(tab: .more, title: "More", systemImage: "ellipsis")
+            tabButton(tab: .tools, title: "Tools", systemImage: "square.grid.2x2")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
