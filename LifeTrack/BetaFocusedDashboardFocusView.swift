@@ -9,6 +9,7 @@ import SwiftUI
 struct BetaFocusedDashboardFocusView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \FocusSessionRecord.endedAt, order: .reverse) private var sessionRecords: [FocusSessionRecord]
 
     let recommendations: [DailyFocusRecommendation]
     let scheduledBlock: ScheduledBlock?
@@ -28,6 +29,7 @@ struct BetaFocusedDashboardFocusView: View {
     @State private var timerTask: Task<Void, Never>?
     @State private var activeFocusTaskID: UUID?
     @State private var activeFocusTaskTitle: String?
+    @State private var phaseStartedAt: Date?
     @State private var feedbackMessage: String?
 
     private var startRecommendation: DailyFocusRecommendation? {
@@ -69,6 +71,7 @@ struct BetaFocusedDashboardFocusView: View {
                     progressCard
                     startHereCard
                     timerCard
+                    BetaFocusedDashboardFocusHistoryView(records: sessionRecords)
                     queueCard
                     healthCard
                 }
@@ -575,6 +578,15 @@ struct BetaFocusedDashboardFocusView: View {
     }
 
     private func startFocus(for task: LifeTask) {
+        if isTimerRunning, activeFocusTaskID != nil, activeFocusTaskID != task.id {
+            recordPartialFocusSessionIfNeeded()
+            suspendTicker()
+            isTimerRunning = false
+            isBreak = false
+            timeRemaining = FocusSessionStore.focusDuration
+            FocusSessionStore.reset()
+        }
+
         activeFocusTaskID = task.id
         activeFocusTaskTitle = task.title
         FocusActivityController.shared.start(for: task, customCategories: customCategories)
@@ -583,6 +595,7 @@ struct BetaFocusedDashboardFocusView: View {
 
     private func startTimer() {
         guard !isTimerRunning else { return }
+        let now = Date()
         if activeFocusTaskID == nil, let task = startRecommendation?.task {
             activeFocusTaskID = task.id
             activeFocusTaskTitle = task.title
@@ -590,11 +603,13 @@ struct BetaFocusedDashboardFocusView: View {
         }
 
         isTimerRunning = true
+        phaseStartedAt = now
         FocusSessionStore.start(
             timeRemaining: timeRemaining,
             isBreak: isBreak,
             taskID: activeFocusTaskID,
-            taskTitle: activeFocusTaskTitle
+            taskTitle: activeFocusTaskTitle,
+            now: now
         )
         startTicker()
     }
@@ -609,13 +624,26 @@ struct BetaFocusedDashboardFocusView: View {
                 if timeRemaining > 0 {
                     timeRemaining -= 1
                 } else {
+                    let completedAt = Date()
+                    if !isBreak {
+                        let startedAt = phaseStartedAt ?? completedAt.addingTimeInterval(-TimeInterval(FocusSessionStore.focusDuration))
+                        recordFocusSession(
+                            startedAt: startedAt,
+                            endedAt: completedAt,
+                            durationSeconds: min(FocusSessionStore.focusDuration, max(0, Int(completedAt.timeIntervalSince(startedAt)))),
+                            completedBlock: true
+                        )
+                    }
+
                     isBreak.toggle()
                     timeRemaining = isBreak ? FocusSessionStore.breakDuration : FocusSessionStore.focusDuration
+                    phaseStartedAt = completedAt
                     FocusSessionStore.start(
                         timeRemaining: timeRemaining,
                         isBreak: isBreak,
                         taskID: activeFocusTaskID,
-                        taskTitle: activeFocusTaskTitle
+                        taskTitle: activeFocusTaskTitle,
+                        now: completedAt
                     )
                     LifeTrackHaptics.lightImpact()
                 }
@@ -635,24 +663,33 @@ struct BetaFocusedDashboardFocusView: View {
         )
     }
 
-    private func resetTimer() {
+    private func resetTimer(recordPartial: Bool = true) {
+        if recordPartial {
+            recordPartialFocusSessionIfNeeded()
+        }
         suspendTicker()
         isTimerRunning = false
         isBreak = false
         timeRemaining = FocusSessionStore.focusDuration
+        phaseStartedAt = nil
         FocusSessionStore.reset()
     }
 
     private func skipTimerPhase() {
+        if !isBreak {
+            recordPartialFocusSessionIfNeeded()
+        }
         suspendTicker()
         isBreak.toggle()
         timeRemaining = isBreak ? FocusSessionStore.breakDuration : FocusSessionStore.focusDuration
+        phaseStartedAt = Date()
         if isTimerRunning {
             FocusSessionStore.start(
                 timeRemaining: timeRemaining,
                 isBreak: isBreak,
                 taskID: activeFocusTaskID,
-                taskTitle: activeFocusTaskTitle
+                taskTitle: activeFocusTaskTitle,
+                now: phaseStartedAt ?? Date()
             )
             startTicker()
         } else {
@@ -670,8 +707,19 @@ struct BetaFocusedDashboardFocusView: View {
         timeRemaining = snapshot.timeRemaining
         isTimerRunning = snapshot.isRunning
         isBreak = snapshot.isBreak
+        phaseStartedAt = snapshot.phaseStartedAt
         activeFocusTaskID = snapshot.taskID
         activeFocusTaskTitle = snapshot.taskTitle
+        recordCompletedFocusBlocks(snapshot.completedFocusBlocks)
+        if snapshot.isRunning, !snapshot.completedFocusBlocks.isEmpty {
+            FocusSessionStore.start(
+                timeRemaining: snapshot.timeRemaining,
+                isBreak: snapshot.isBreak,
+                taskID: snapshot.taskID,
+                taskTitle: snapshot.taskTitle,
+                now: Date()
+            )
+        }
         if let task = restoredActiveTask, snapshot.isRunning, !FocusActivityController.shared.isPinned(task) {
             FocusActivityController.shared.start(for: task, customCategories: customCategories)
         }
@@ -686,13 +734,71 @@ struct BetaFocusedDashboardFocusView: View {
     }
 
     private func completeTask(_ task: LifeTask) {
+        if activeFocusTaskID == task.id {
+            recordPartialFocusSessionIfNeeded()
+        }
         onToggleCompletion(task)
         if activeFocusTaskID == task.id {
-            resetTimer()
+            resetTimer(recordPartial: false)
             activeFocusTaskID = nil
             activeFocusTaskTitle = nil
             FocusSessionStore.clearTask()
         }
+    }
+
+    private func recordPartialFocusSessionIfNeeded() {
+        guard !isBreak else { return }
+        let endedAt = Date()
+        let startedAt = phaseStartedAt ?? endedAt.addingTimeInterval(-TimeInterval(max(0, FocusSessionStore.focusDuration - timeRemaining)))
+        let elapsed = min(
+            FocusSessionStore.focusDuration,
+            max(0, Int(endedAt.timeIntervalSince(startedAt)))
+        )
+        guard elapsed >= 60 else { return }
+        recordFocusSession(
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: elapsed,
+            completedBlock: false
+        )
+    }
+
+    private func recordCompletedFocusBlocks(_ blocks: [FocusSessionCompletedBlock]) {
+        for block in blocks {
+            recordFocusSession(
+                startedAt: block.startedAt,
+                endedAt: block.endedAt,
+                durationSeconds: block.durationSeconds,
+                completedBlock: true
+            )
+        }
+    }
+
+    private func recordFocusSession(
+        startedAt: Date,
+        endedAt: Date,
+        durationSeconds: Int,
+        completedBlock: Bool
+    ) {
+        guard durationSeconds >= 60 else { return }
+        guard !sessionRecords.contains(where: { existing in
+            abs(existing.startedAt.timeIntervalSince(startedAt)) < 1 &&
+                abs(existing.endedAt.timeIntervalSince(endedAt)) < 1 &&
+                existing.taskID == activeFocusTaskID
+        }) else { return }
+
+        let task = activeTaskForHistory
+        let record = FocusSessionRecord(
+            taskID: activeFocusTaskID,
+            taskTitle: task?.title ?? activeFocusTaskTitle ?? "Focus session",
+            categoryRawValue: task?.categoryRawValue ?? TaskCategory.other.rawValue,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSeconds: durationSeconds,
+            completedBlock: completedBlock
+        )
+        modelContext.insert(record)
+        try? modelContext.save()
     }
 
     private func snoozeTask(_ task: LifeTask) {
@@ -831,6 +937,11 @@ struct BetaFocusedDashboardFocusView: View {
     }
 
     private var restoredActiveTask: LifeTask? {
+        guard let activeFocusTaskID else { return nil }
+        return recommendations.first(where: { $0.task.id == activeFocusTaskID })?.task
+    }
+
+    private var activeTaskForHistory: LifeTask? {
         guard let activeFocusTaskID else { return nil }
         return recommendations.first(where: { $0.task.id == activeFocusTaskID })?.task
     }

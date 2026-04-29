@@ -54,6 +54,53 @@ struct BetaFocusedDashboardVerificationTests {
         #expect(restored.isRunning)
         #expect(restored.isBreak)
         #expect(restored.timeRemaining == FocusSessionStore.breakDuration - 2)
+        #expect(restored.completedFocusBlocks.count == 1)
+        #expect(restored.completedFocusBlocks.first?.durationSeconds == 10)
+    }
+
+    @Test func focusSessionReportsMultipleCompletedBlocksAcrossRelaunch() throws {
+        let defaults = try Self.makeDefaults()
+        let startedAt = Date(timeIntervalSince1970: 4_000)
+        let elapsed = FocusSessionStore.focusDuration +
+            FocusSessionStore.breakDuration +
+            FocusSessionStore.focusDuration +
+            12
+
+        FocusSessionStore.start(
+            timeRemaining: FocusSessionStore.focusDuration,
+            isBreak: false,
+            taskID: nil,
+            taskTitle: nil,
+            now: startedAt,
+            defaults: defaults
+        )
+
+        let restored = FocusSessionStore.snapshot(
+            now: startedAt.addingTimeInterval(TimeInterval(elapsed)),
+            defaults: defaults
+        )
+
+        #expect(restored.isBreak)
+        #expect(restored.completedFocusBlocks.count == 2)
+        #expect(restored.completedFocusBlocks.map(\.durationSeconds) == [
+            FocusSessionStore.focusDuration,
+            FocusSessionStore.focusDuration
+        ])
+    }
+
+    @Test func focusSessionRecordRoundsDurationToMinutes() {
+        let record = FocusSessionRecord(
+            taskID: nil,
+            taskTitle: "Focus",
+            categoryRawValue: TaskCategory.work.rawValue,
+            startedAt: Date(timeIntervalSince1970: 0),
+            endedAt: Date(timeIntervalSince1970: 61),
+            durationSeconds: 61,
+            completedBlock: false
+        )
+
+        #expect(record.durationMinutes == 2)
+        #expect(record.category == .work)
     }
 
     @Test func focusSessionPauseSurvivesLeavingScreen() throws {

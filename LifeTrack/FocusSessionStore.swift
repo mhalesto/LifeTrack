@@ -9,8 +9,17 @@ struct FocusSessionSnapshot {
     let timeRemaining: Int
     let isRunning: Bool
     let isBreak: Bool
+    let phaseStartedAt: Date?
     let taskID: UUID?
     let taskTitle: String?
+    let completedFocusBlocks: [FocusSessionCompletedBlock]
+}
+
+struct FocusSessionCompletedBlock: Identifiable {
+    let id = UUID()
+    let startedAt: Date
+    let endedAt: Date
+    let durationSeconds: Int
 }
 
 enum FocusSessionStore {
@@ -31,19 +40,36 @@ enum FocusSessionStore {
         let storedIsRunning = defaults.bool(forKey: Keys.isRunning)
         var resolvedIsBreak = defaults.bool(forKey: Keys.isBreak)
         var resolvedRemaining = max(1, storedRemaining)
+        var resolvedPhaseStartedAt: Date?
+        var completedFocusBlocks: [FocusSessionCompletedBlock] = []
 
         if storedIsRunning {
             let startedAt = defaults.double(forKey: Keys.phaseStartedAt)
             if startedAt > 0 {
-                let elapsed = max(0, Int(now.timeIntervalSince(Date(timeIntervalSince1970: startedAt))))
-                resolvedRemaining -= elapsed
+                var cursor = Date(timeIntervalSince1970: startedAt)
+                var elapsed = max(0, Int(now.timeIntervalSince(cursor)))
+                var phaseRemaining = resolvedRemaining
 
-                while resolvedRemaining <= 0 {
-                    let overflow = abs(resolvedRemaining)
+                while elapsed >= phaseRemaining {
+                    let endedAt = cursor.addingTimeInterval(TimeInterval(phaseRemaining))
+                    if !resolvedIsBreak {
+                        completedFocusBlocks.append(
+                            FocusSessionCompletedBlock(
+                                startedAt: cursor,
+                                endedAt: endedAt,
+                                durationSeconds: phaseRemaining
+                            )
+                        )
+                    }
+
+                    elapsed -= phaseRemaining
+                    cursor = endedAt
                     resolvedIsBreak.toggle()
-                    let nextDuration = resolvedIsBreak ? breakDuration : focusDuration
-                    resolvedRemaining = nextDuration - overflow
+                    phaseRemaining = resolvedIsBreak ? breakDuration : focusDuration
                 }
+
+                resolvedRemaining = max(1, phaseRemaining - elapsed)
+                resolvedPhaseStartedAt = cursor
             }
         }
 
@@ -54,8 +80,10 @@ enum FocusSessionStore {
             timeRemaining: min(max(resolvedRemaining, 1), resolvedIsBreak ? breakDuration : focusDuration),
             isRunning: storedIsRunning,
             isBreak: resolvedIsBreak,
+            phaseStartedAt: resolvedPhaseStartedAt,
             taskID: taskID,
-            taskTitle: taskTitle
+            taskTitle: taskTitle,
+            completedFocusBlocks: completedFocusBlocks
         )
     }
 
