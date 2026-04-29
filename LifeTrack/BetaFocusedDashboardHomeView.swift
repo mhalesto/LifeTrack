@@ -31,7 +31,6 @@ struct BetaFocusedDashboardHomeView: View {
 
     @State private var navigationPath: [BetaFocusedDashboardRoute] = []
     @State private var selectedTab: BetaFocusedDashboardTab = .home
-    @State private var toolsScrollRequest = 0
     @State private var isShowingSettings = false
     @State private var isShowingQuickCapture = false
     @State private var isShowingVoiceCapture = false
@@ -229,29 +228,19 @@ struct BetaFocusedDashboardHomeView: View {
                 BetaFocusedDashboardBackground()
                     .ignoresSafeArea()
 
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 13) {
-                            header
-                            todaySummaryCard
-                            dailyFocusSection
-                            inboxSection
-                            toolsSection
-                                .id(BetaFocusedDashboardScrollTarget.tools)
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.top, 4)
-                        .padding(.bottom, 20)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 13) {
+                        header
+                        todaySummaryCard
+                        dailyFocusSection
+                        inboxSection
+                        toolsSection
                     }
-                    .scrollIndicators(.hidden)
-                    .onChange(of: toolsScrollRequest) { _, _ in
-                        DispatchQueue.main.async {
-                            withAnimation(.snappy(duration: 0.34)) {
-                                proxy.scrollTo(BetaFocusedDashboardScrollTarget.tools, anchor: .bottom)
-                            }
-                        }
-                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 4)
+                    .padding(.bottom, 20)
                 }
+                .scrollIndicators(.hidden)
             }
             .safeAreaInset(edge: .bottom) {
                 BetaFocusedDashboardTabBar(selectedTab: $selectedTab)
@@ -262,6 +251,21 @@ struct BetaFocusedDashboardHomeView: View {
             .navigationBarHidden(true)
             .navigationDestination(for: BetaFocusedDashboardRoute.self) { route in
                 switch route {
+                case .tools:
+                    BetaFocusedDashboardToolsView(
+                        dueTodayCount: dueTodayTasks.count,
+                        overdueCount: overdueTasks.count,
+                        inboxCount: inboxItems.count,
+                        planPreview: planPreview,
+                        staleInboxCount: staleInboxItems.count,
+                        oldestInboxLine: oldestInboxLine,
+                        onNavigate: navigate,
+                        onOpenPlanMyDay: presentDailyRitual,
+                        onOpenOverdueRescue: { isShowingOverdueRescue = true },
+                        onOpenSettings: { isShowingSettings = true },
+                        onOpenCategories: { isShowingCategoryManager = true },
+                        onOpenInbox: openInbox
+                    )
                 case .statistics:
                     StatisticsView(tasks: fetchAllTasksForLookup())
                 case .calendar:
@@ -894,7 +898,8 @@ struct BetaFocusedDashboardHomeView: View {
             presentDailyRitual()
             resetTabSelection()
         case .tools:
-            toolsScrollRequest += 1
+            navigate(to: .tools)
+            resetTabSelection()
         }
     }
 

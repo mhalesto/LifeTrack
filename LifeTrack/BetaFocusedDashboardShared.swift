@@ -7,6 +7,7 @@ import Foundation
 import SwiftUI
 
 enum BetaFocusedDashboardRoute: Hashable {
+    case tools
     case statistics
     case calendar
     case documents
@@ -22,10 +23,6 @@ enum BetaFocusedDashboardTab: Hashable {
     case home
     case capture
     case focus
-    case tools
-}
-
-enum BetaFocusedDashboardScrollTarget: Hashable {
     case tools
 }
 

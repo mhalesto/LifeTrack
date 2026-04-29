@@ -480,10 +480,10 @@ struct BetaFocusedDashboardToolTile: View {
             VStack(spacing: 7) {
                 Circle()
                     .fill(tint.opacity(0.14))
-                    .frame(width: 38, height: 38)
+                    .frame(width: 36, height: 36)
                     .overlay {
                         Image(systemName: systemImage)
-                            .font(.system(size: 17, weight: .medium))
+                            .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(tint)
                     }
 
@@ -492,11 +492,11 @@ struct BetaFocusedDashboardToolTile: View {
                     .foregroundStyle(tint)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
-                    .minimumScaleFactor(0.72)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(width: 110)
-            .frame(minHeight: 88)
-            .padding(.horizontal, 7)
+            .frame(width: 96)
+            .frame(minHeight: 84)
+            .padding(.horizontal, 6)
             .padding(.vertical, 10)
             .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
