@@ -236,6 +236,7 @@ struct WeeklyReviewView: View {
         }
 
         try? modelContext.save()
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: LifeTrackSettings.Keys.lastWeeklyReviewDate)
         dismiss()
     }
 }

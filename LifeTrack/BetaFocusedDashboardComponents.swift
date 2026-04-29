@@ -120,7 +120,7 @@ struct BetaFocusedDashboardMetricColumn: View {
                 .frame(width: 36, height: 36)
                 .background(tint.opacity(0.16), in: Circle())
 
-            Text(value.formatted())
+            Text(BetaFocusedDashboardFormat.count(value))
                 .font(BetaFocusedDashboardTypography.statValue)
                 .foregroundStyle(BetaFocusedDashboardPalette.headerText)
                 .monospacedDigit()
@@ -446,7 +446,10 @@ struct BetaFocusedDashboardActionChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            LifeTrackHaptics.lightImpact()
+            action()
+        } label: {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
                     .font(.system(size: isCompact ? 13 : 14, weight: .semibold))
@@ -465,7 +468,7 @@ struct BetaFocusedDashboardActionChip: View {
                     .stroke(BetaFocusedDashboardPalette.border, lineWidth: 0.8)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97, pressedOpacity: 0.92))
     }
 }
 
@@ -476,7 +479,10 @@ struct BetaFocusedDashboardToolTile: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            LifeTrackHaptics.lightImpact()
+            action()
+        } label: {
             VStack(spacing: 7) {
                 Circle()
                     .fill(tint.opacity(0.14))
@@ -504,7 +510,7 @@ struct BetaFocusedDashboardToolTile: View {
                     .stroke(BetaFocusedDashboardPalette.border, lineWidth: 0.8)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.92))
     }
 }
 

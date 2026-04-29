@@ -10,6 +10,7 @@ struct AITaskSuggestionsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @StateObject private var advisor = AITaskAdvisor.shared
+    @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
     let tasks: [LifeTask]
 
@@ -124,6 +125,9 @@ struct AITaskSuggestionsView: View {
 
     private var suggestionsContent: some View {
         VStack(alignment: .leading, spacing: LifeTrackTheme.Spacing.xLarge) {
+            if advisor.overallInsight.isEmpty && advisor.focusSuggestions.isEmpty && advisor.rescheduleSuggestions.isEmpty {
+                emptySuggestionsCard
+            }
             if !advisor.overallInsight.isEmpty {
                 insightCard
             }
@@ -144,6 +148,28 @@ struct AITaskSuggestionsView: View {
             refreshButton
         }
         .padding(.top, LifeTrackTheme.Spacing.xLarge)
+    }
+
+    private var emptySuggestionsCard: some View {
+        SectionCardView {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.95, green: 0.72, blue: 0.1))
+                    .frame(width: 38, height: 38)
+                    .background(Color(red: 0.95, green: 0.72, blue: 0.1).opacity(0.12), in: Circle())
+
+                Text("No pending suggestions")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.primaryText)
+
+                Text("Refresh analysis when your task list changes or after you process your inbox.")
+                    .font(.caption)
+                    .foregroundStyle(LifeTrackTheme.ColorPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     // MARK: - Insight Card
@@ -214,14 +240,14 @@ struct AITaskSuggestionsView: View {
 
             Spacer()
 
-            if suggestion.type == .reschedule && !applied {
+            if !applied {
                 Button {
-                    applyReschedule(suggestion)
+                    applySuggestion(suggestion)
                 } label: {
                     VStack(spacing: 2) {
-                        Image(systemName: "calendar.badge.plus")
+                        Image(systemName: suggestion.type == .reschedule ? "calendar.badge.plus" : "scope")
                             .font(.system(size: 13, weight: .semibold))
-                        Text(suggestion.badge)
+                        Text(suggestion.type == .reschedule ? suggestion.badge : "Focus")
                             .font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(.white)
@@ -273,12 +299,36 @@ struct AITaskSuggestionsView: View {
 
     // MARK: - Actions
 
-    private func applyReschedule(_ suggestion: AITaskSuggestion) {
-        guard let date = suggestion.suggestedDate,
-              let task = tasks.first(where: { $0.id == suggestion.taskID }) else { return }
-        task.dueDate = date
+    private func applySuggestion(_ suggestion: AITaskSuggestion) {
+        guard let task = tasks.first(where: { $0.id == suggestion.taskID }) else { return }
+        switch suggestion.type {
+        case .focus:
+            task.priority = .high
+            if !Calendar.current.isDateInToday(task.dueDate) || task.isOverdue {
+                task.dueDate = nextFocusDate()
+            }
+        case .reschedule:
+            guard let date = suggestion.suggestedDate else { return }
+            task.dueDate = date
+        }
         task.updatedAt = Date()
         try? modelContext.save()
+        TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        LifeTrackHaptics.lightImpact()
         _ = withAnimation(.snappy) { appliedIDs.insert(suggestion.id) }
+    }
+
+    private func nextFocusDate() -> Date {
+        let calendar = Calendar.current
+        let now = Date()
+        let hour = calendar.component(.hour, from: now)
+        if hour < 17,
+           let nextHour = calendar.date(byAdding: .hour, value: 1, to: now) {
+            let components = calendar.dateComponents([.year, .month, .day, .hour], from: nextHour)
+            return calendar.date(from: components) ?? nextHour
+        }
+
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now.addingTimeInterval(24 * 60 * 60)
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
     }
 }

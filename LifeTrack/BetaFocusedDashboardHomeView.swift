@@ -22,10 +22,16 @@ struct BetaFocusedDashboardHomeView: View {
     @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil && !$0.isCompleted }, sort: \LifeTask.dueDate, order: .forward)
     private var openTasks: [LifeTask]
 
+    @Query(filter: #Predicate<LifeTask> { $0.deletedAt == nil })
+    private var visibleTasks: [LifeTask]
+
     @Query private var todayCompletedTasks: [LifeTask]
 
     @Query(filter: #Predicate<LifeTask> { $0.deletedAt != nil })
     private var deletedTasks: [LifeTask]
+
+    @Query(sort: \MoneyEntry.startDate, order: .reverse)
+    private var moneyEntries: [MoneyEntry]
 
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
@@ -187,6 +193,39 @@ struct BetaFocusedDashboardHomeView: View {
         return ageDays == 1 ? "Oldest capture is 1 day old" : "Oldest capture is \(ageDays) days old"
     }
 
+    private var documentCount: Int {
+        visibleTasks.filter(\.hasDocument).count
+    }
+
+    private var moneyMonthlySubtitle: String {
+        let financialTasks = visibleTasks.filter(\.financialEnabled)
+        guard !moneyEntries.isEmpty || !financialTasks.isEmpty else {
+            return "No activity"
+        }
+
+        let currencyCode = MoneyCurrency.primaryCurrencyCode(entries: moneyEntries, tasks: financialTasks)
+        let summary = MoneyAnalytics.monthlySummary(
+            for: Date(),
+            entries: moneyEntries,
+            tasks: financialTasks,
+            currencyCode: currencyCode
+        )
+
+        if summary.actualSpending > 0 {
+            return "\(MoneyFormatting.currency(summary.actualSpending, code: currencyCode)) spent"
+        }
+
+        if summary.plannedSpending > 0 {
+            return "\(MoneyFormatting.currency(summary.plannedSpending, code: currencyCode)) planned"
+        }
+
+        if summary.actualIncome > 0 {
+            return "\(MoneyFormatting.currency(summary.actualIncome, code: currencyCode)) income"
+        }
+
+        return "This month"
+    }
+
     private func recomputeDerivedTasks() {
         let calendar = Calendar.current
         let dueToday = openTasks.filter { calendar.isDateInToday($0.dueDate) }
@@ -264,6 +303,8 @@ struct BetaFocusedDashboardHomeView: View {
                         oldestInboxLine: oldestInboxLine,
                         totalCompletedCount: totalCompletedCount,
                         focusQueueCount: focusRecommendations.count,
+                        documentCount: documentCount,
+                        moneyMonthlySubtitle: moneyMonthlySubtitle,
                         categoryCount: TaskCategory.allCases.count + customCategories.count,
                         deletedCount: deletedTasks.count,
                         onNavigate: navigate,
@@ -692,7 +733,7 @@ struct BetaFocusedDashboardHomeView: View {
 
                         if hiddenFocusTaskCount > 0 {
                             HStack(spacing: 6) {
-                                Text("Scroll for \(hiddenFocusTaskCount) more")
+                                Text("Scroll for \(BetaFocusedDashboardFormat.count(hiddenFocusTaskCount)) more")
                                 Image(systemName: "arrow.down")
                                     .font(.system(size: 10, weight: .bold))
                             }
@@ -732,14 +773,14 @@ struct BetaFocusedDashboardHomeView: View {
 
                                 if !staleInboxItems.isEmpty {
                                     BetaFocusedDashboardTinyBadge(
-                                        title: "\(staleInboxItems.count) old",
+                                        title: "\(BetaFocusedDashboardFormat.count(staleInboxItems.count)) old",
                                         tint: BetaFocusedDashboardPalette.warningTint,
                                         background: BetaFocusedDashboardPalette.warningBackground
                                     )
                                 }
                             }
 
-                            Text(inboxItems.isEmpty ? "Nothing waiting" : "\(inboxItems.count) waiting")
+                            Text(inboxItems.isEmpty ? "Nothing waiting" : "\(BetaFocusedDashboardFormat.count(inboxItems.count)) waiting")
                                 .font(BetaFocusedDashboardTypography.body)
                                 .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
                         }

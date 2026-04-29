@@ -168,6 +168,12 @@ enum BetaFocusedDashboardTimeFormatter {
     }()
 }
 
+enum BetaFocusedDashboardFormat {
+    static func count(_ value: Int, limit: Int = 999) -> String {
+        value > limit ? "\(limit)+" : value.formatted()
+    }
+}
+
 extension LifeTask {
     func betaFocusedHealthState(referenceDate: Date = Date(), calendar: Calendar = .current) -> BetaFocusedDashboardTaskHealthState? {
         guard !isDeleted, !isCompleted else { return nil }

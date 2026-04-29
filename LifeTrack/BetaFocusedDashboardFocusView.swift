@@ -3,10 +3,12 @@
 //  LifeTrack
 //
 
+import SwiftData
 import SwiftUI
 
 struct BetaFocusedDashboardFocusView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     let recommendations: [DailyFocusRecommendation]
     let scheduledBlock: ScheduledBlock?
@@ -20,13 +22,13 @@ struct BetaFocusedDashboardFocusView: View {
     let onOpenPlanMyDay: () -> Void
     let onOpenOverdueRescue: () -> Void
 
-    @State private var timeRemaining = 25 * 60
+    @State private var timeRemaining = FocusSessionStore.focusDuration
     @State private var isTimerRunning = false
     @State private var isBreak = false
     @State private var timerTask: Task<Void, Never>?
-
-    private let focusDuration = 25 * 60
-    private let breakDuration = 5 * 60
+    @State private var activeFocusTaskID: UUID?
+    @State private var activeFocusTaskTitle: String?
+    @State private var feedbackMessage: String?
 
     private var startRecommendation: DailyFocusRecommendation? {
         recommendations.first
@@ -34,6 +36,13 @@ struct BetaFocusedDashboardFocusView: View {
 
     private var queueRecommendations: [DailyFocusRecommendation] {
         Array(recommendations.dropFirst().prefix(4))
+    }
+
+    private var nextQueuedTask: LifeTask? {
+        recommendations.first { recommendation in
+            let task = recommendation.task
+            return task.id != activeFocusTaskID && !task.isCompleted && !task.isDeleted
+        }?.task
     }
 
     private var healthItems: [BetaFocusedDashboardFocusHealthItem] {
@@ -56,6 +65,7 @@ struct BetaFocusedDashboardFocusView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     header
+                    feedbackBanner
                     progressCard
                     startHereCard
                     timerCard
@@ -70,8 +80,11 @@ struct BetaFocusedDashboardFocusView: View {
         }
         .navigationBarBackButtonHidden(true)
         .navigationBarHidden(true)
+        .onAppear {
+            restoreSession()
+        }
         .onDisappear {
-            pauseTimer()
+            suspendTicker()
         }
     }
 
@@ -103,6 +116,32 @@ struct BetaFocusedDashboardFocusView: View {
             }
 
             Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private var feedbackBanner: some View {
+        if let feedbackMessage {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(BetaFocusedDashboardPalette.completedTint)
+
+                Text(feedbackMessage)
+                    .font(BetaFocusedDashboardTypography.body.weight(.semibold))
+                    .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color.white.opacity(0.86), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(BetaFocusedDashboardPalette.completedTint.opacity(0.18), lineWidth: 0.8)
+            }
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 
@@ -226,13 +265,13 @@ struct BetaFocusedDashboardFocusView: View {
                     }
                     .buttonStyle(.plain)
 
-                    HStack(spacing: 8) {
+                    LazyVGrid(columns: actionColumns, spacing: 8) {
                         BetaFocusedDashboardActionChip(
                             title: "Start Focus",
                             systemImage: "play.fill",
                             tint: BetaFocusedDashboardPalette.completedTint
                         ) {
-                            FocusActivityController.shared.start(for: task, customCategories: customCategories)
+                            startFocus(for: task)
                         }
 
                         BetaFocusedDashboardActionChip(
@@ -241,7 +280,25 @@ struct BetaFocusedDashboardFocusView: View {
                             tint: BetaFocusedDashboardPalette.completedTint,
                             isCompact: true
                         ) {
-                            onToggleCompletion(task)
+                            completeTask(task)
+                        }
+
+                        BetaFocusedDashboardActionChip(
+                            title: "Snooze",
+                            systemImage: "clock.badge.plus",
+                            tint: BetaFocusedDashboardPalette.warningTint,
+                            isCompact: true
+                        ) {
+                            snoozeTask(task)
+                        }
+
+                        BetaFocusedDashboardActionChip(
+                            title: "Tomorrow",
+                            systemImage: "calendar.badge.plus",
+                            tint: BetaFocusedDashboardPalette.captureTint,
+                            isCompact: true
+                        ) {
+                            rescheduleTaskToTomorrow(task)
                         }
                     }
                 }
@@ -249,6 +306,13 @@ struct BetaFocusedDashboardFocusView: View {
                 emptyFocusState
             }
         }
+    }
+
+    private var actionColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 8),
+            GridItem(.flexible(), spacing: 8)
+        ]
     }
 
     private var emptyFocusState: some View {
@@ -286,10 +350,18 @@ struct BetaFocusedDashboardFocusView: View {
                 }
 
                 HStack(alignment: .center, spacing: 14) {
-                    Text(timerLabel)
-                        .font(.system(size: 36, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(BetaFocusedDashboardPalette.headerText)
-                        .monospacedDigit()
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(timerLabel)
+                            .font(.system(size: 36, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                            .monospacedDigit()
+
+                        Text(sessionSubtitle)
+                            .font(BetaFocusedDashboardTypography.bodySmall.weight(.medium))
+                            .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.74)
+                    }
 
                     Spacer(minLength: 0)
 
@@ -321,7 +393,7 @@ struct BetaFocusedDashboardFocusView: View {
 
                     Spacer(minLength: 0)
 
-                    Text("\(recommendations.count.formatted()) tasks")
+                    Text("\(BetaFocusedDashboardFormat.count(recommendations.count)) tasks")
                         .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
                         .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
                 }
@@ -332,6 +404,16 @@ struct BetaFocusedDashboardFocusView: View {
                         .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
                         .padding(.vertical, 8)
                 } else {
+                    if let nextQueuedTask {
+                        BetaFocusedDashboardActionChip(
+                            title: activeFocusTaskID == nil ? "Start Queue" : "Start Next",
+                            systemImage: "play.circle.fill",
+                            tint: BetaFocusedDashboardPalette.completedTint
+                        ) {
+                            startFocus(for: nextQueuedTask)
+                        }
+                    }
+
                     VStack(spacing: 0) {
                         ForEach(queueRecommendations) { recommendation in
                             let task = recommendation.task
@@ -344,7 +426,7 @@ struct BetaFocusedDashboardFocusView: View {
                                 visuals: visuals,
                                 healthState: task.betaFocusedHealthState(),
                                 onOpen: { onOpenTask(task) },
-                                onToggleCompletion: { onToggleCompletion(task) }
+                                onToggleCompletion: { completeTask(task) }
                             )
 
                             if recommendation.id != queueRecommendations.last?.id {
@@ -375,7 +457,7 @@ struct BetaFocusedDashboardFocusView: View {
 
                     Spacer(minLength: 0)
 
-                    Text(healthItems.isEmpty ? "Clear" : "\(healthItems.count.formatted()) need attention")
+                    Text(healthItems.isEmpty ? "Clear" : "\(BetaFocusedDashboardFormat.count(healthItems.count)) need attention")
                         .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
                         .foregroundStyle(healthItems.isEmpty ? BetaFocusedDashboardPalette.completedTint : BetaFocusedDashboardPalette.warningTint)
                 }
@@ -387,10 +469,10 @@ struct BetaFocusedDashboardFocusView: View {
                 } else {
                     VStack(spacing: 8) {
                         ForEach(healthItems.prefix(3)) { item in
-                            Button {
-                                onOpenTask(item.task)
-                            } label: {
-                                HStack(spacing: 9) {
+                            HStack(spacing: 9) {
+                                Button {
+                                    onOpenTask(item.task)
+                                } label: {
                                     Image(systemName: item.state.symbolName)
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundStyle(item.state.tint)
@@ -410,8 +492,26 @@ struct BetaFocusedDashboardFocusView: View {
 
                                     Spacer(minLength: 0)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .buttonStyle(.plain)
+
+                            Button {
+                                applyHealthFix(item)
+                            } label: {
+                                Text(healthActionTitle(for: item.state))
+                                    .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                                    .foregroundStyle(item.state.tint)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 7)
+                                    .background(Color.white.opacity(0.9), in: Capsule())
+                                    .overlay {
+                                        Capsule()
+                                            .stroke(item.state.tint.opacity(0.18), lineWidth: 0.8)
+                                    }
+                            }
+                            .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.94, pressedOpacity: 0.9))
                         }
                     }
 
@@ -430,6 +530,18 @@ struct BetaFocusedDashboardFocusView: View {
 
     private var timerLabel: String {
         String(format: "%02d:%02d", timeRemaining / 60, timeRemaining % 60)
+    }
+
+    private var sessionSubtitle: String {
+        if let activeFocusTaskTitle, !activeFocusTaskTitle.isEmpty {
+            return isTimerRunning ? "Running: \(activeFocusTaskTitle)" : "Pinned: \(activeFocusTaskTitle)"
+        }
+
+        if isTimerRunning {
+            return "Running across the Focus screen"
+        }
+
+        return "Persists when you leave and return"
     }
 
     private func scheduleHint(for recommendation: DailyFocusRecommendation) -> String {
@@ -462,9 +574,32 @@ struct BetaFocusedDashboardFocusView: View {
         .buttonStyle(.plain)
     }
 
+    private func startFocus(for task: LifeTask) {
+        activeFocusTaskID = task.id
+        activeFocusTaskTitle = task.title
+        FocusActivityController.shared.start(for: task, customCategories: customCategories)
+        startTimer()
+    }
+
     private func startTimer() {
         guard !isTimerRunning else { return }
+        if activeFocusTaskID == nil, let task = startRecommendation?.task {
+            activeFocusTaskID = task.id
+            activeFocusTaskTitle = task.title
+            FocusActivityController.shared.start(for: task, customCategories: customCategories)
+        }
+
         isTimerRunning = true
+        FocusSessionStore.start(
+            timeRemaining: timeRemaining,
+            isBreak: isBreak,
+            taskID: activeFocusTaskID,
+            taskTitle: activeFocusTaskTitle
+        )
+        startTicker()
+    }
+
+    private func startTicker() {
         timerTask?.cancel()
         timerTask = Task { @MainActor in
             while !Task.isCancelled {
@@ -475,7 +610,13 @@ struct BetaFocusedDashboardFocusView: View {
                     timeRemaining -= 1
                 } else {
                     isBreak.toggle()
-                    timeRemaining = isBreak ? breakDuration : focusDuration
+                    timeRemaining = isBreak ? FocusSessionStore.breakDuration : FocusSessionStore.focusDuration
+                    FocusSessionStore.start(
+                        timeRemaining: timeRemaining,
+                        isBreak: isBreak,
+                        taskID: activeFocusTaskID,
+                        taskTitle: activeFocusTaskTitle
+                    )
                     LifeTrackHaptics.lightImpact()
                 }
             }
@@ -486,18 +627,212 @@ struct BetaFocusedDashboardFocusView: View {
         timerTask?.cancel()
         timerTask = nil
         isTimerRunning = false
+        FocusSessionStore.pause(
+            timeRemaining: timeRemaining,
+            isBreak: isBreak,
+            taskID: activeFocusTaskID,
+            taskTitle: activeFocusTaskTitle
+        )
     }
 
     private func resetTimer() {
-        pauseTimer()
+        suspendTicker()
+        isTimerRunning = false
         isBreak = false
-        timeRemaining = focusDuration
+        timeRemaining = FocusSessionStore.focusDuration
+        FocusSessionStore.reset()
     }
 
     private func skipTimerPhase() {
-        pauseTimer()
+        suspendTicker()
         isBreak.toggle()
-        timeRemaining = isBreak ? breakDuration : focusDuration
+        timeRemaining = isBreak ? FocusSessionStore.breakDuration : FocusSessionStore.focusDuration
+        if isTimerRunning {
+            FocusSessionStore.start(
+                timeRemaining: timeRemaining,
+                isBreak: isBreak,
+                taskID: activeFocusTaskID,
+                taskTitle: activeFocusTaskTitle
+            )
+            startTicker()
+        } else {
+            FocusSessionStore.pause(
+                timeRemaining: timeRemaining,
+                isBreak: isBreak,
+                taskID: activeFocusTaskID,
+                taskTitle: activeFocusTaskTitle
+            )
+        }
+    }
+
+    private func restoreSession() {
+        let snapshot = FocusSessionStore.snapshot()
+        timeRemaining = snapshot.timeRemaining
+        isTimerRunning = snapshot.isRunning
+        isBreak = snapshot.isBreak
+        activeFocusTaskID = snapshot.taskID
+        activeFocusTaskTitle = snapshot.taskTitle
+        if let task = restoredActiveTask, snapshot.isRunning, !FocusActivityController.shared.isPinned(task) {
+            FocusActivityController.shared.start(for: task, customCategories: customCategories)
+        }
+        if snapshot.isRunning {
+            startTicker()
+        }
+    }
+
+    private func suspendTicker() {
+        timerTask?.cancel()
+        timerTask = nil
+    }
+
+    private func completeTask(_ task: LifeTask) {
+        onToggleCompletion(task)
+        if activeFocusTaskID == task.id {
+            resetTimer()
+            activeFocusTaskID = nil
+            activeFocusTaskTitle = nil
+            FocusSessionStore.clearTask()
+        }
+    }
+
+    private func snoozeTask(_ task: LifeTask) {
+        let date = snoozeDate(for: task)
+        applyScheduleChange(
+            task,
+            date: date,
+            feedback: "Snoozed to \(BetaFocusedDashboardTimeFormatter.timeOnly.string(from: date))"
+        )
+    }
+
+    private func rescheduleTaskToTomorrow(_ task: LifeTask) {
+        let date = tomorrowAt(hour: 9)
+        applyScheduleChange(
+            task,
+            date: date,
+            feedback: "Moved to tomorrow at \(BetaFocusedDashboardTimeFormatter.timeOnly.string(from: date))"
+        )
+    }
+
+    private func applyHealthFix(_ item: BetaFocusedDashboardFocusHealthItem) {
+        switch item.state {
+        case .recurringMissed:
+            applyScheduleChange(
+                item.task,
+                date: tomorrowAt(hour: 9),
+                feedback: "Recurring task moved to tomorrow"
+            )
+        case .blocked:
+            unblockTask(item.task)
+        case .stale:
+            refreshStaleTask(item.task)
+        case .needsDate:
+            applyScheduleChange(
+                item.task,
+                date: nextFocusDate(),
+                feedback: "Date set for the next focus window"
+            )
+        }
+    }
+
+    private func healthActionTitle(for state: BetaFocusedDashboardTaskHealthState) -> String {
+        switch state {
+        case .recurringMissed: "Move"
+        case .blocked: "Unblock"
+        case .stale: "Refresh"
+        case .needsDate: "Date"
+        }
+    }
+
+    private func unblockTask(_ task: LifeTask) {
+        task.notes = cleanedBlockerText(task.notes)
+        task.advancedFields = task.advancedFields.mapValues(cleanedBlockerText)
+        if task.dueDate < Date() {
+            task.dueDate = nextFocusDate()
+        }
+        persistTaskUpdate(task, feedback: "Blocked wording cleared")
+    }
+
+    private func refreshStaleTask(_ task: LifeTask) {
+        if task.dueDate < Calendar.current.startOfDay(for: Date()) {
+            task.dueDate = tomorrowAt(hour: 10)
+        }
+        task.priority = maxPriority(task.priority, .normal)
+        persistTaskUpdate(task, feedback: "Stale task refreshed")
+    }
+
+    private func applyScheduleChange(_ task: LifeTask, date: Date, feedback: String) {
+        task.dueDate = date
+        persistTaskUpdate(task, feedback: feedback)
+    }
+
+    private func persistTaskUpdate(_ task: LifeTask, feedback: String) {
+        task.updatedAt = Date()
+        try? modelContext.save()
+        TaskLifecycleManager.synchronizeReminder(for: task, customCategories: customCategories)
+        FocusActivityController.shared.update(for: task)
+        showFeedback(feedback)
+    }
+
+    private func snoozeDate(for task: LifeTask) -> Date {
+        let calendar = Calendar.current
+        let base = max(task.dueDate, Date())
+        return calendar.date(byAdding: .hour, value: 2, to: base) ?? base.addingTimeInterval(2 * 60 * 60)
+    }
+
+    private func tomorrowAt(hour: Int) -> Date {
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date().addingTimeInterval(24 * 60 * 60)
+        return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: tomorrow) ?? tomorrow
+    }
+
+    private func nextFocusDate() -> Date {
+        let calendar = Calendar.current
+        let now = Date()
+        let hour = calendar.component(.hour, from: now)
+        if hour < 17,
+           let nextHour = calendar.date(byAdding: .hour, value: 1, to: now) {
+            let components = calendar.dateComponents([.year, .month, .day, .hour], from: nextHour)
+            return calendar.date(from: components) ?? nextHour
+        }
+        return tomorrowAt(hour: 9)
+    }
+
+    private func cleanedBlockerText(_ value: String) -> String {
+        var cleaned = value
+        [
+            ("blocked", "paused"),
+            ("waiting", "pending"),
+            ("on hold", "paused"),
+            ("stuck", "paused"),
+            ("depends", "needs")
+        ].forEach { target, replacement in
+            cleaned = cleaned.replacingOccurrences(of: target, with: replacement, options: [.caseInsensitive])
+        }
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func maxPriority(_ lhs: TaskPriority, _ rhs: TaskPriority) -> TaskPriority {
+        lhs.focusScore >= rhs.focusScore ? lhs : rhs
+    }
+
+    private func showFeedback(_ message: String) {
+        LifeTrackHaptics.lightImpact()
+        withAnimation(.snappy(duration: 0.22)) {
+            feedbackMessage = message
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            if feedbackMessage == message {
+                withAnimation(.snappy(duration: 0.22)) {
+                    feedbackMessage = nil
+                }
+            }
+        }
+    }
+
+    private var restoredActiveTask: LifeTask? {
+        guard let activeFocusTaskID else { return nil }
+        return recommendations.first(where: { $0.task.id == activeFocusTaskID })?.task
     }
 
     private func categoryVisuals(for option: TaskCategoryOption) -> BetaFocusedDashboardCategoryVisuals {
@@ -533,7 +868,7 @@ private struct BetaFocusedDashboardFocusMetric: View {
                 .background(tint.opacity(0.14), in: Circle())
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(value.formatted())
+                Text(BetaFocusedDashboardFormat.count(value))
                     .font(BetaFocusedDashboardTypography.body.weight(.semibold))
                     .foregroundStyle(BetaFocusedDashboardPalette.headerText)
                     .monospacedDigit()

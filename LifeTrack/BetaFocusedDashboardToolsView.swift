@@ -7,8 +7,9 @@ import SwiftUI
 
 struct BetaFocusedDashboardToolsView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var aiAdvisor = AITaskAdvisor.shared
     @AppStorage(LifeTrackSettings.Keys.lastBackupDate) private var lastBackupTimestamp: Double = 0
-    @State private var isAIConfigured = !ClaudeAPIKeyStore.current.isEmpty
+    @AppStorage(LifeTrackSettings.Keys.lastWeeklyReviewDate) private var lastWeeklyReviewTimestamp: Double = 0
 
     let dueTodayCount: Int
     let overdueCount: Int
@@ -18,6 +19,8 @@ struct BetaFocusedDashboardToolsView: View {
     let oldestInboxLine: String?
     let totalCompletedCount: Int
     let focusQueueCount: Int
+    let documentCount: Int
+    let moneyMonthlySubtitle: String
     let categoryCount: Int
     let deletedCount: Int
     let onNavigate: (BetaFocusedDashboardRoute) -> Void
@@ -49,9 +52,6 @@ struct BetaFocusedDashboardToolsView: View {
         }
         .navigationBarBackButtonHidden(true)
         .navigationBarHidden(true)
-        .onAppear {
-            isAIConfigured = !ClaudeAPIKeyStore.current.isEmpty
-        }
     }
 
     private var header: some View {
@@ -121,28 +121,28 @@ struct BetaFocusedDashboardToolsView: View {
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Focus",
-                subtitle: focusQueueCount == 0 ? "Queue clear" : "\(focusQueueCount.formatted()) queued",
+                subtitle: focusQueueCount == 0 ? "Queue clear" : "\(BetaFocusedDashboardFormat.count(focusQueueCount)) queued",
                 systemImage: "scope",
                 tint: BetaFocusedDashboardPalette.completedTint,
                 action: { onNavigate(.focus) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Calendar",
-                subtitle: dueTodayCount == 0 ? "Clear today" : "\(dueTodayCount.formatted()) due today",
+                subtitle: dueTodayCount == 0 ? "Clear today" : "\(BetaFocusedDashboardFormat.count(dueTodayCount)) due today",
                 systemImage: "calendar",
                 tint: BetaFocusedDashboardPalette.captureTint,
                 action: { onNavigate(.calendar) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Inbox",
-                subtitle: inboxCount == 0 ? "Inbox clear" : "\(inboxCount.formatted()) waiting",
+                subtitle: inboxCount == 0 ? "Inbox clear" : "\(BetaFocusedDashboardFormat.count(inboxCount)) waiting",
                 systemImage: "tray.full",
                 tint: BetaFocusedDashboardPalette.captureTint,
                 action: onOpenInbox
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Stats",
-                subtitle: "\(totalCompletedCount.formatted()) done",
+                subtitle: "\(BetaFocusedDashboardFormat.count(totalCompletedCount)) done",
                 systemImage: "chart.bar.fill",
                 tint: BetaFocusedDashboardPalette.statsPillText,
                 action: { onNavigate(.statistics) }
@@ -154,21 +154,21 @@ struct BetaFocusedDashboardToolsView: View {
         [
             BetaFocusedDashboardToolsItem(
                 title: "Documents",
-                subtitle: "Search files",
+                subtitle: documentCount == 0 ? "No files yet" : "\(BetaFocusedDashboardFormat.count(documentCount)) files",
                 systemImage: "doc.text",
                 tint: BetaFocusedDashboardPalette.workTint,
                 action: { onNavigate(.documents) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Money",
-                subtitle: "Budget & spend",
+                subtitle: moneyMonthlySubtitle,
                 systemImage: "dollarsign.circle",
                 tint: BetaFocusedDashboardPalette.homeTint,
                 action: { onNavigate(.money) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Categories",
-                subtitle: "\(categoryCount.formatted()) categories",
+                subtitle: "\(BetaFocusedDashboardFormat.count(categoryCount)) categories",
                 systemImage: "tag",
                 tint: BetaFocusedDashboardPalette.personalTint,
                 action: onOpenCategories
@@ -187,24 +187,25 @@ struct BetaFocusedDashboardToolsView: View {
         [
             BetaFocusedDashboardToolsItem(
                 title: "Rescue",
-                subtitle: overdueCount == 0 ? "Nothing overdue" : "\(overdueCount.formatted()) overdue",
+                subtitle: overdueCount == 0 ? "Nothing overdue" : "\(BetaFocusedDashboardFormat.count(overdueCount)) overdue",
                 systemImage: "lifepreserver",
                 tint: BetaFocusedDashboardPalette.overdueTint,
                 action: onOpenOverdueRescue
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Weekly Review",
-                subtitle: "This week",
+                subtitle: weeklyReviewSubtitle,
                 systemImage: "calendar.badge.clock",
                 tint: BetaFocusedDashboardPalette.completedTint,
                 action: { onNavigate(.weeklyReview) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "AI Suggestions",
-                subtitle: isAIConfigured ? "Ready" : "Needs API key",
+                subtitle: aiSuggestionSubtitle,
                 systemImage: "sparkles",
                 tint: BetaFocusedDashboardPalette.warningTint,
-                action: { onNavigate(.aiSuggestions) }
+                isLoading: aiAdvisor.isLoading,
+                action: aiAdvisor.isConfigured ? { onNavigate(.aiSuggestions) } : onOpenSettings
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Backup",
@@ -222,7 +223,7 @@ struct BetaFocusedDashboardToolsView: View {
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Bin",
-                subtitle: deletedCount == 0 ? "0 deleted" : "\(deletedCount.formatted()) deleted",
+                subtitle: deletedCount == 0 ? "0 deleted" : "\(BetaFocusedDashboardFormat.count(deletedCount)) deleted",
                 systemImage: "trash",
                 tint: BetaFocusedDashboardPalette.overdueTint,
                 action: { onNavigate(.bin) }
@@ -237,7 +238,7 @@ struct BetaFocusedDashboardToolsView: View {
             items.append(
                 BetaFocusedDashboardToolsSuggestion(
                     title: "Rescue overdue",
-                    detail: "\(overdueCount.formatted()) tasks need cleanup",
+                    detail: "\(BetaFocusedDashboardFormat.count(overdueCount)) tasks need cleanup",
                     systemImage: "lifepreserver",
                     tint: BetaFocusedDashboardPalette.overdueTint,
                     action: onOpenOverdueRescue
@@ -249,7 +250,7 @@ struct BetaFocusedDashboardToolsView: View {
             items.append(
                 BetaFocusedDashboardToolsSuggestion(
                     title: "Process old captures",
-                    detail: oldestInboxLine ?? "\(staleInboxCount.formatted()) older than a day",
+                    detail: oldestInboxLine ?? "\(BetaFocusedDashboardFormat.count(staleInboxCount)) older than a day",
                     systemImage: "tray.and.arrow.down",
                     tint: BetaFocusedDashboardPalette.warningTint,
                     action: onOpenInbox
@@ -259,7 +260,7 @@ struct BetaFocusedDashboardToolsView: View {
             items.append(
                 BetaFocusedDashboardToolsSuggestion(
                     title: "Review inbox",
-                    detail: "\(inboxCount.formatted()) waiting to become tasks",
+                    detail: "\(BetaFocusedDashboardFormat.count(inboxCount)) waiting to become tasks",
                     systemImage: "tray.full",
                     tint: BetaFocusedDashboardPalette.captureTint,
                     action: onOpenInbox
@@ -276,6 +277,41 @@ struct BetaFocusedDashboardToolsView: View {
                     systemImage: "wand.and.stars",
                     tint: BetaFocusedDashboardPalette.heroAccent,
                     action: onOpenPlanMyDay
+                )
+            )
+        }
+
+        if lastBackupTimestamp == 0 {
+            items.append(
+                BetaFocusedDashboardToolsSuggestion(
+                    title: "Create backup",
+                    detail: "No backup has been made yet",
+                    systemImage: "icloud.and.arrow.up",
+                    tint: BetaFocusedDashboardPalette.financeTint,
+                    action: { onNavigate(.backup) }
+                )
+            )
+        }
+
+        let pendingAISuggestions = aiAdvisor.focusSuggestions.count + aiAdvisor.rescheduleSuggestions.count
+        if !aiAdvisor.isConfigured {
+            items.append(
+                BetaFocusedDashboardToolsSuggestion(
+                    title: "Set up AI",
+                    detail: "API key needed for suggestions",
+                    systemImage: "sparkles",
+                    tint: BetaFocusedDashboardPalette.warningTint,
+                    action: onOpenSettings
+                )
+            )
+        } else if pendingAISuggestions > 0 || aiAdvisor.isLoading {
+            items.append(
+                BetaFocusedDashboardToolsSuggestion(
+                    title: aiAdvisor.isLoading ? "AI is scanning" : "Review AI suggestions",
+                    detail: aiAdvisor.isLoading ? "Suggestions are being prepared" : "\(BetaFocusedDashboardFormat.count(pendingAISuggestions)) pending",
+                    systemImage: "sparkles",
+                    tint: BetaFocusedDashboardPalette.warningTint,
+                    action: { onNavigate(.aiSuggestions) }
                 )
             )
         }
@@ -299,6 +335,27 @@ struct BetaFocusedDashboardToolsView: View {
         guard lastBackupTimestamp > 0 else { return "Never backed up" }
         let backupDate = Date(timeIntervalSince1970: lastBackupTimestamp)
         return "Backed up \(backupDate.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
+    private var weeklyReviewSubtitle: String {
+        guard lastWeeklyReviewTimestamp > 0 else { return "Not reviewed" }
+        let date = Date(timeIntervalSince1970: lastWeeklyReviewTimestamp)
+        if Calendar.current.isDate(date, equalTo: Date(), toGranularity: .weekOfYear) {
+            return "Reviewed this week"
+        }
+        return "Last \(date.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
+    private var aiSuggestionSubtitle: String {
+        guard aiAdvisor.isConfigured else { return "Needs API key" }
+        let pending = aiAdvisor.focusSuggestions.count + aiAdvisor.rescheduleSuggestions.count
+        if pending > 0 {
+            return "\(BetaFocusedDashboardFormat.count(pending)) pending"
+        }
+        if aiAdvisor.isLoading {
+            return "Scanning"
+        }
+        return "Ready to scan"
     }
 
     private var suggestedNextSection: some View {
@@ -360,6 +417,7 @@ private struct BetaFocusedDashboardToolsItem: Identifiable {
     let subtitle: String
     let systemImage: String
     let tint: Color
+    var isLoading = false
     let action: () -> Void
 
     var id: String { title }
@@ -369,15 +427,23 @@ private struct BetaFocusedDashboardToolsTile: View {
     let item: BetaFocusedDashboardToolsItem
 
     var body: some View {
-        Button(action: item.action) {
+        Button {
+            LifeTrackHaptics.lightImpact()
+            item.action()
+        } label: {
             VStack(spacing: 6) {
                 Circle()
                     .fill(item.tint.opacity(0.14))
                     .frame(width: 36, height: 36)
                     .overlay {
-                        Image(systemName: item.systemImage)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(item.tint)
+                        if item.isLoading {
+                            ProgressView()
+                                .tint(item.tint)
+                        } else {
+                            Image(systemName: item.systemImage)
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(item.tint)
+                        }
                     }
 
                 Text(item.title)
@@ -404,7 +470,7 @@ private struct BetaFocusedDashboardToolsTile: View {
                     .stroke(BetaFocusedDashboardPalette.border, lineWidth: 0.8)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.96, pressedOpacity: 0.92))
     }
 }
 
@@ -423,7 +489,10 @@ private struct BetaFocusedDashboardToolsSuggestionCard: View {
     let width: CGFloat
 
     var body: some View {
-        Button(action: item.action) {
+        Button {
+            LifeTrackHaptics.lightImpact()
+            item.action()
+        } label: {
             HStack(spacing: 10) {
                 Circle()
                     .fill(item.tint.opacity(0.14))
@@ -464,7 +533,7 @@ private struct BetaFocusedDashboardToolsSuggestionCard: View {
                     .stroke(item.tint.opacity(0.2), lineWidth: 1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.97, pressedOpacity: 0.92))
     }
 }
 
@@ -483,7 +552,7 @@ private struct BetaFocusedDashboardToolsMetric: View {
                 .background(tint.opacity(0.14), in: Circle())
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(value.formatted())
+                Text(BetaFocusedDashboardFormat.count(value))
                     .font(BetaFocusedDashboardTypography.body.weight(.semibold))
                     .foregroundStyle(BetaFocusedDashboardPalette.headerText)
                     .monospacedDigit()
