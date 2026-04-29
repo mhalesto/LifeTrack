@@ -12,8 +12,7 @@ struct StartVoiceTaskIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        UserDefaults(suiteName: "group.com.currenttech.LifeTrack")?
-            .set(true, forKey: "pendingVoiceTaskLaunch")
+        LifeTrackSharedGroup.defaults?.set(true, forKey: "pendingVoiceTaskLaunch")
         return .result()
     }
 }
@@ -24,8 +23,7 @@ struct NewBlankTaskIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        UserDefaults(suiteName: "group.com.currenttech.LifeTrack")?
-            .set(true, forKey: "pendingBlankTaskLaunch")
+        LifeTrackSharedGroup.defaults?.set(true, forKey: "pendingBlankTaskLaunch")
         return .result()
     }
 }
@@ -36,8 +34,7 @@ struct TodaysFocusIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        UserDefaults(suiteName: "group.com.currenttech.LifeTrack")?
-            .set(true, forKey: "pendingFocusLaunch")
+        LifeTrackSharedGroup.defaults?.set(true, forKey: "pendingFocusLaunch")
         return .result()
     }
 }
@@ -48,8 +45,7 @@ struct QuickCompleteIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        UserDefaults(suiteName: "group.com.currenttech.LifeTrack")?
-            .set(true, forKey: "pendingQuickComplete")
+        LifeTrackSharedGroup.defaults?.set(true, forKey: "pendingQuickComplete")
         return .result()
     }
 }

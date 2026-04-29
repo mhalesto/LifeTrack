@@ -13,6 +13,14 @@ enum SharedGroup {
     static let suiteName = "group.com.currenttech.LifeTrack"
     static let snapshotKey = "widget.focusSnapshot"
     static let moneySnapshotKey = "widget.moneySnapshot"
+
+    static var defaults: UserDefaults? {
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suiteName) != nil else {
+            return nil
+        }
+
+        return UserDefaults(suiteName: suiteName)
+    }
 }
 
 struct MoneyWidgetSnapshot: Codable {
@@ -35,7 +43,7 @@ struct MoneyWidgetSnapshot: Codable {
     )
 
     static func load() -> MoneyWidgetSnapshot {
-        guard let defaults = UserDefaults(suiteName: SharedGroup.suiteName),
+        guard let defaults = SharedGroup.defaults,
               let data = defaults.data(forKey: SharedGroup.moneySnapshotKey)
         else {
             return .empty
@@ -70,7 +78,7 @@ struct FocusSnapshot: Codable {
     )
 
     static func load() -> FocusSnapshot {
-        guard let defaults = UserDefaults(suiteName: SharedGroup.suiteName),
+        guard let defaults = SharedGroup.defaults,
               let data = defaults.data(forKey: SharedGroup.snapshotKey)
         else {
             return .empty

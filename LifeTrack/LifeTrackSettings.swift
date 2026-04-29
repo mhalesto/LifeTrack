@@ -12,7 +12,11 @@ import WidgetKit
 nonisolated enum LifeTrackSharedGroup {
     static let suiteName = "group.com.currenttech.LifeTrack"
     static var defaults: UserDefaults? {
-        UserDefaults(suiteName: suiteName)
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suiteName) != nil else {
+            return nil
+        }
+
+        return UserDefaults(suiteName: suiteName)
     }
 }
 
