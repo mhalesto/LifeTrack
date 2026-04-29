@@ -28,17 +28,17 @@ private enum BetaFocusedDashboardTab: Hashable {
 }
 
 private enum BetaFocusedDashboardTypography {
-    static let greeting = Font.system(size: 22, weight: .semibold, design: .serif)
-    static let date = Font.system(size: 12, weight: .medium, design: .default)
-    static let section = Font.system(size: 17, weight: .semibold, design: .serif)
-    static let heroTitle = Font.system(size: 26, weight: .bold, design: .serif)
-    static let statValue = Font.system(size: 26, weight: .medium, design: .serif)
-    static let button = Font.system(size: 15, weight: .semibold, design: .default)
-    static let body = Font.system(size: 12.5, weight: .medium, design: .default)
-    static let bodySmall = Font.system(size: 11, weight: .medium, design: .default)
-    static let chip = Font.system(size: 11, weight: .semibold, design: .default)
-    static let nav = Font.system(size: 11, weight: .medium, design: .default)
-    static let taskTitle = Font.system(size: 15, weight: .semibold, design: .default)
+    static let greeting = Font.system(size: 22, weight: .regular, design: .serif)
+    static let date = Font.system(size: 13, weight: .regular, design: .default)
+    static let section = Font.system(size: 17, weight: .medium, design: .serif)
+    static let heroTitle = Font.system(size: 29, weight: .semibold, design: .serif)
+    static let statValue = Font.system(size: 25, weight: .regular, design: .serif)
+    static let button = Font.system(size: 14.5, weight: .semibold, design: .default)
+    static let body = Font.system(size: 12, weight: .regular, design: .default)
+    static let bodySmall = Font.system(size: 10.5, weight: .regular, design: .default)
+    static let chip = Font.system(size: 10.5, weight: .semibold, design: .default)
+    static let nav = Font.system(size: 10.5, weight: .medium, design: .default)
+    static let taskTitle = Font.system(size: 14.5, weight: .medium, design: .default)
 }
 
 private enum BetaFocusedDashboardPalette {
@@ -192,7 +192,7 @@ struct BetaFocusedDashboardHomeView: View {
                 BetaFocusedDashboardBackground()
                     .ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 11) {
                     header
                     todaySummaryCard
                     dailyFocusSection
@@ -201,7 +201,7 @@ struct BetaFocusedDashboardHomeView: View {
                     toolsSection
                 }
                 .padding(.horizontal, 18)
-                .padding(.top, 2)
+                .padding(.top, 4)
                 .padding(.bottom, 2)
             }
             .safeAreaInset(edge: .bottom) {
@@ -356,18 +356,18 @@ struct BetaFocusedDashboardHomeView: View {
                 Button {
                     navigationPath.append(.statistics)
                 } label: {
-                    HStack(spacing: 7) {
+                    HStack(spacing: 6) {
                         Image(systemName: "chart.bar.fill")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         Text("Stats")
                             .font(BetaFocusedDashboardTypography.button)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                     }
                     .foregroundStyle(BetaFocusedDashboardPalette.statsPillText)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 9)
-                    .frame(minWidth: 96)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(minWidth: 78)
                     .background(BetaFocusedDashboardPalette.statsPillBackground, in: Capsule())
                     .overlay {
                         Capsule()
@@ -380,12 +380,12 @@ struct BetaFocusedDashboardHomeView: View {
                     isShowingSettings = true
                 } label: {
                     ZStack(alignment: .bottomTrailing) {
-                        ProfileAvatarView(size: 50, avatarVersion: avatarVersion)
+                        ProfileAvatarView(size: 48, avatarVersion: avatarVersion)
 
                         Image(systemName: "gearshape.fill")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(BetaFocusedDashboardPalette.statsPillText)
-                            .frame(width: 20, height: 20)
+                            .frame(width: 19, height: 19)
                             .background(Color.white, in: Circle())
                             .overlay {
                                 Circle()
@@ -405,7 +405,7 @@ struct BetaFocusedDashboardHomeView: View {
                 BetaFocusedDashboardSunBackdrop()
                     .allowsHitTesting(false)
 
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 14) {
                     Text("Today")
                         .font(BetaFocusedDashboardTypography.heroTitle)
                         .foregroundStyle(BetaFocusedDashboardPalette.heroAccent)
@@ -450,7 +450,7 @@ struct BetaFocusedDashboardHomeView: View {
                         }
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 11)
                         .background(
                             LinearGradient(
                                 colors: [
@@ -460,7 +460,7 @@ struct BetaFocusedDashboardHomeView: View {
                                 startPoint: .leading,
                                 endPoint: .trailing
                             ),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                         )
                         .shadow(color: BetaFocusedDashboardPalette.heroAccent.opacity(0.16), radius: 14, x: 0, y: 8)
                     }
@@ -471,7 +471,7 @@ struct BetaFocusedDashboardHomeView: View {
     }
 
     private var dailyFocusSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Daily Focus")
                     .font(BetaFocusedDashboardTypography.section)
@@ -502,7 +502,7 @@ struct BetaFocusedDashboardHomeView: View {
                 if focusTasks.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Your day is clear.")
-                            .font(.system(size: 19, weight: .semibold, design: .default))
+                            .font(.system(size: 18, weight: .medium, design: .default))
                             .foregroundStyle(BetaFocusedDashboardPalette.headerText)
 
                         Text("Capture something new or run Plan My Day to build a focused list.")
@@ -601,7 +601,7 @@ struct BetaFocusedDashboardHomeView: View {
 
                 HStack(spacing: 8) {
                     BetaFocusedDashboardActionChip(
-                        title: "Text",
+                        title: "Text Capture",
                         systemImage: "bubble.left.and.text.bubble.right",
                         tint: BetaFocusedDashboardPalette.captureTint,
                         isCompact: true
@@ -610,7 +610,7 @@ struct BetaFocusedDashboardHomeView: View {
                     }
 
                     BetaFocusedDashboardActionChip(
-                        title: "Voice",
+                        title: "Voice Capture",
                         systemImage: "waveform",
                         tint: BetaFocusedDashboardPalette.captureTint,
                         isCompact: true
@@ -878,7 +878,7 @@ private struct BetaFocusedDashboardCard<Content: View>: View {
             content
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
@@ -900,7 +900,7 @@ private struct BetaFocusedDashboardMetricColumn: View {
             Image(systemName: symbolName)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 38, height: 38)
+                .frame(width: 36, height: 36)
                 .background(tint.opacity(0.16), in: Circle())
 
             Text(value.formatted())
@@ -1011,7 +1011,7 @@ private struct BetaFocusedDashboardTaskRow: View {
     let onToggleCompletion: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(visuals.background)
                 .frame(width: 38, height: 38)
@@ -1022,13 +1022,13 @@ private struct BetaFocusedDashboardTaskRow: View {
                 }
 
             Button(action: onOpen) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(task.title)
                         .font(BetaFocusedDashboardTypography.taskTitle)
                         .foregroundStyle(BetaFocusedDashboardPalette.headerText)
                         .multilineTextAlignment(.leading)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.82)
+                        .truncationMode(.tail)
 
                     HStack(spacing: 5) {
                         Image(systemName: "calendar")
@@ -1039,7 +1039,7 @@ private struct BetaFocusedDashboardTaskRow: View {
                             .font(BetaFocusedDashboardTypography.body)
                             .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.75)
+                            .truncationMode(.tail)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1048,7 +1048,6 @@ private struct BetaFocusedDashboardTaskRow: View {
 
             BetaFocusedDashboardCategoryChip(
                 title: categoryOption.title,
-                symbolName: categoryOption.symbolName,
                 tint: visuals.tint,
                 background: visuals.background
             )
@@ -1060,12 +1059,12 @@ private struct BetaFocusedDashboardTaskRow: View {
                             task.isCompleted ? BetaFocusedDashboardPalette.completedTint : BetaFocusedDashboardPalette.border,
                             lineWidth: 2
                         )
-                        .frame(width: 26, height: 26)
+                        .frame(width: 24, height: 24)
 
                     if task.isCompleted {
                         Circle()
                             .fill(BetaFocusedDashboardPalette.completedTint)
-                            .frame(width: 26, height: 26)
+                            .frame(width: 24, height: 24)
 
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .bold))
@@ -1076,36 +1075,56 @@ private struct BetaFocusedDashboardTaskRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel(task.isCompleted ? "Mark incomplete" : "Mark complete")
         }
-        .padding(.vertical, 6)
-        .padding(.trailing, 4)
+        .padding(.vertical, 7)
+        .padding(.trailing, 3)
     }
 
     private var scheduleLabel: String {
         let calendar = Calendar.current
 
         if calendar.isDateInToday(task.dueDate) {
-            return "Today, \(task.dueDate.formatted(date: .omitted, time: .shortened))"
+            return "Today, \(BetaFocusedDashboardTimeFormatter.timeOnly.string(from: task.dueDate))"
         }
 
         if calendar.isDateInTomorrow(task.dueDate) {
-            return "Tomorrow, \(task.dueDate.formatted(date: .omitted, time: .shortened))"
+            return "Tomorrow, \(BetaFocusedDashboardTimeFormatter.timeOnly.string(from: task.dueDate))"
         }
 
-        return task.dueDate.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
+        return BetaFocusedDashboardTimeFormatter.dateAndTime.string(from: task.dueDate)
     }
+}
+
+private enum BetaFocusedDashboardTimeFormatter {
+    static let timeOnly: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "h:mm a"
+        formatter.amSymbol = "AM"
+        formatter.pmSymbol = "PM"
+        return formatter
+    }()
+
+    static let dateAndTime: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, d MMM, h:mm a"
+        formatter.amSymbol = "AM"
+        formatter.pmSymbol = "PM"
+        return formatter
+    }()
 }
 
 private struct BetaFocusedDashboardCategoryChip: View {
     let title: String
-    let symbolName: String
     let tint: Color
     let background: Color
 
     var body: some View {
-        Label(title, systemImage: symbolName)
+        Text(title)
             .font(BetaFocusedDashboardTypography.chip)
             .foregroundStyle(tint)
-            .padding(.horizontal, 8)
+            .lineLimit(1)
+            .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(background, in: Capsule())
             .overlay {
@@ -1132,8 +1151,8 @@ private struct BetaFocusedDashboardActionChip: View {
                     .lineLimit(1)
             }
             .foregroundStyle(tint)
-            .padding(.horizontal, isCompact ? 9 : 11)
-            .padding(.vertical, isCompact ? 9 : 10)
+            .padding(.horizontal, isCompact ? 7 : 11)
+            .padding(.vertical, isCompact ? 8 : 10)
             .frame(maxWidth: .infinity)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
@@ -1153,10 +1172,10 @@ private struct BetaFocusedDashboardToolTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Circle()
                     .fill(tint.opacity(0.14))
-                    .frame(width: 38, height: 38)
+                    .frame(width: 36, height: 36)
                     .overlay {
                         Image(systemName: systemImage)
                             .font(.system(size: 17, weight: .medium))
@@ -1170,12 +1189,12 @@ private struct BetaFocusedDashboardToolTile: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .frame(maxWidth: .infinity, minHeight: 86)
+            .frame(maxWidth: .infinity, minHeight: 74)
             .padding(.horizontal, 4)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(BetaFocusedDashboardPalette.border, lineWidth: 0.8)
             }
         }
@@ -1194,7 +1213,7 @@ private struct BetaFocusedDashboardTabBar: View {
             tabButton(tab: .more, title: "More", systemImage: "ellipsis")
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.vertical, 7)
         .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -1211,14 +1230,14 @@ private struct BetaFocusedDashboardTabBar: View {
         } label: {
             VStack(spacing: 5) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 17, weight: isSelected ? .semibold : .medium))
 
                 Text(title)
                     .font(BetaFocusedDashboardTypography.nav.weight(isSelected ? .semibold : .medium))
             }
             .foregroundStyle(isSelected ? BetaFocusedDashboardPalette.navAccent : BetaFocusedDashboardPalette.secondaryText)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
+            .padding(.vertical, 5)
             .overlay(alignment: .top) {
                 if isSelected {
                     Capsule()
