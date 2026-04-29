@@ -8,6 +8,7 @@ import SwiftUI
 
 enum BetaFocusedDashboardRoute: Hashable {
     case tools
+    case focus
     case statistics
     case calendar
     case documents

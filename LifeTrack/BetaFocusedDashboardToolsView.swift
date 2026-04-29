@@ -7,6 +7,8 @@ import SwiftUI
 
 struct BetaFocusedDashboardToolsView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(LifeTrackSettings.Keys.lastBackupDate) private var lastBackupTimestamp: Double = 0
+    @State private var isAIConfigured = !ClaudeAPIKeyStore.current.isEmpty
 
     let dueTodayCount: Int
     let overdueCount: Int
@@ -14,6 +16,10 @@ struct BetaFocusedDashboardToolsView: View {
     let planPreview: BetaFocusedDashboardPlanPreviewModel
     let staleInboxCount: Int
     let oldestInboxLine: String?
+    let totalCompletedCount: Int
+    let focusQueueCount: Int
+    let categoryCount: Int
+    let deletedCount: Int
     let onNavigate: (BetaFocusedDashboardRoute) -> Void
     let onOpenPlanMyDay: () -> Void
     let onOpenOverdueRescue: () -> Void
@@ -43,6 +49,9 @@ struct BetaFocusedDashboardToolsView: View {
         }
         .navigationBarBackButtonHidden(true)
         .navigationBarHidden(true)
+        .onAppear {
+            isAIConfigured = !ClaudeAPIKeyStore.current.isEmpty
+        }
     }
 
     private var header: some View {
@@ -105,24 +114,35 @@ struct BetaFocusedDashboardToolsView: View {
         [
             BetaFocusedDashboardToolsItem(
                 title: "Plan My Day",
+                subtitle: planPreview.summary,
                 systemImage: "wand.and.stars",
                 tint: BetaFocusedDashboardPalette.heroAccent,
                 action: onOpenPlanMyDay
             ),
             BetaFocusedDashboardToolsItem(
+                title: "Focus",
+                subtitle: focusQueueCount == 0 ? "Queue clear" : "\(focusQueueCount.formatted()) queued",
+                systemImage: "scope",
+                tint: BetaFocusedDashboardPalette.completedTint,
+                action: { onNavigate(.focus) }
+            ),
+            BetaFocusedDashboardToolsItem(
                 title: "Calendar",
+                subtitle: dueTodayCount == 0 ? "Clear today" : "\(dueTodayCount.formatted()) due today",
                 systemImage: "calendar",
                 tint: BetaFocusedDashboardPalette.captureTint,
                 action: { onNavigate(.calendar) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Inbox",
+                subtitle: inboxCount == 0 ? "Inbox clear" : "\(inboxCount.formatted()) waiting",
                 systemImage: "tray.full",
                 tint: BetaFocusedDashboardPalette.captureTint,
                 action: onOpenInbox
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Stats",
+                subtitle: "\(totalCompletedCount.formatted()) done",
                 systemImage: "chart.bar.fill",
                 tint: BetaFocusedDashboardPalette.statsPillText,
                 action: { onNavigate(.statistics) }
@@ -134,24 +154,28 @@ struct BetaFocusedDashboardToolsView: View {
         [
             BetaFocusedDashboardToolsItem(
                 title: "Documents",
+                subtitle: "Search files",
                 systemImage: "doc.text",
                 tint: BetaFocusedDashboardPalette.workTint,
                 action: { onNavigate(.documents) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Money",
+                subtitle: "Budget & spend",
                 systemImage: "dollarsign.circle",
                 tint: BetaFocusedDashboardPalette.homeTint,
                 action: { onNavigate(.money) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Categories",
+                subtitle: "\(categoryCount.formatted()) categories",
                 systemImage: "tag",
                 tint: BetaFocusedDashboardPalette.personalTint,
                 action: onOpenCategories
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Settings",
+                subtitle: "Profile & app",
                 systemImage: "gearshape",
                 tint: BetaFocusedDashboardPalette.statsPillText,
                 action: onOpenSettings
@@ -163,36 +187,42 @@ struct BetaFocusedDashboardToolsView: View {
         [
             BetaFocusedDashboardToolsItem(
                 title: "Rescue",
+                subtitle: overdueCount == 0 ? "Nothing overdue" : "\(overdueCount.formatted()) overdue",
                 systemImage: "lifepreserver",
                 tint: BetaFocusedDashboardPalette.overdueTint,
                 action: onOpenOverdueRescue
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Weekly Review",
+                subtitle: "This week",
                 systemImage: "calendar.badge.clock",
                 tint: BetaFocusedDashboardPalette.completedTint,
                 action: { onNavigate(.weeklyReview) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "AI Suggestions",
+                subtitle: isAIConfigured ? "Ready" : "Needs API key",
                 systemImage: "sparkles",
                 tint: BetaFocusedDashboardPalette.warningTint,
                 action: { onNavigate(.aiSuggestions) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Backup",
+                subtitle: backupSubtitle,
                 systemImage: "icloud",
                 tint: BetaFocusedDashboardPalette.financeTint,
                 action: { onNavigate(.backup) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Import / Export",
+                subtitle: "CSV & backup",
                 systemImage: "arrow.up.arrow.down",
                 tint: BetaFocusedDashboardPalette.importExportTint,
                 action: { onNavigate(.taskData) }
             ),
             BetaFocusedDashboardToolsItem(
                 title: "Bin",
+                subtitle: deletedCount == 0 ? "0 deleted" : "\(deletedCount.formatted()) deleted",
                 systemImage: "trash",
                 tint: BetaFocusedDashboardPalette.overdueTint,
                 action: { onNavigate(.bin) }
@@ -265,6 +295,12 @@ struct BetaFocusedDashboardToolsView: View {
         return items
     }
 
+    private var backupSubtitle: String {
+        guard lastBackupTimestamp > 0 else { return "Never backed up" }
+        let backupDate = Date(timeIntervalSince1970: lastBackupTimestamp)
+        return "Backed up \(backupDate.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
     private var suggestedNextSection: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .firstTextBaseline) {
@@ -307,12 +343,7 @@ struct BetaFocusedDashboardToolsView: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(items) { item in
-                            BetaFocusedDashboardToolTile(
-                                title: item.title,
-                                systemImage: item.systemImage,
-                                tint: item.tint,
-                                action: item.action
-                            )
+                            BetaFocusedDashboardToolsTile(item: item)
                         }
                     }
                     .padding(.vertical, 1)
@@ -326,11 +357,55 @@ struct BetaFocusedDashboardToolsView: View {
 
 private struct BetaFocusedDashboardToolsItem: Identifiable {
     let title: String
+    let subtitle: String
     let systemImage: String
     let tint: Color
     let action: () -> Void
 
     var id: String { title }
+}
+
+private struct BetaFocusedDashboardToolsTile: View {
+    let item: BetaFocusedDashboardToolsItem
+
+    var body: some View {
+        Button(action: item.action) {
+            VStack(spacing: 6) {
+                Circle()
+                    .fill(item.tint.opacity(0.14))
+                    .frame(width: 36, height: 36)
+                    .overlay {
+                        Image(systemName: item.systemImage)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(item.tint)
+                    }
+
+                Text(item.title)
+                    .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                    .foregroundStyle(item.tint)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+
+                Text(item.subtitle)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.74)
+            }
+            .frame(width: 104)
+            .frame(minHeight: 112)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 10)
+            .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(BetaFocusedDashboardPalette.border, lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 private struct BetaFocusedDashboardToolsSuggestion: Identifiable {

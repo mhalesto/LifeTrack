@@ -24,6 +24,9 @@ struct BetaFocusedDashboardHomeView: View {
 
     @Query private var todayCompletedTasks: [LifeTask]
 
+    @Query(filter: #Predicate<LifeTask> { $0.deletedAt != nil })
+    private var deletedTasks: [LifeTask]
+
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
@@ -259,12 +262,30 @@ struct BetaFocusedDashboardHomeView: View {
                         planPreview: planPreview,
                         staleInboxCount: staleInboxItems.count,
                         oldestInboxLine: oldestInboxLine,
+                        totalCompletedCount: totalCompletedCount,
+                        focusQueueCount: focusRecommendations.count,
+                        categoryCount: TaskCategory.allCases.count + customCategories.count,
+                        deletedCount: deletedTasks.count,
                         onNavigate: navigate,
                         onOpenPlanMyDay: presentDailyRitual,
                         onOpenOverdueRescue: { isShowingOverdueRescue = true },
                         onOpenSettings: { isShowingSettings = true },
                         onOpenCategories: { isShowingCategoryManager = true },
                         onOpenInbox: openInbox
+                    )
+                case .focus:
+                    BetaFocusedDashboardFocusView(
+                        recommendations: focusRecommendations,
+                        scheduledBlock: nextBestScheduledBlock,
+                        focusProgressLabel: todayProgressLabel,
+                        focusProgress: todayProgressValue,
+                        dueTodayCount: dueTodayTasks.count,
+                        busyBlockCount: dashboardBusyBlocks.count,
+                        customCategories: customCategories,
+                        onOpenTask: { editingTask = $0 },
+                        onToggleCompletion: toggleCompletion,
+                        onOpenPlanMyDay: presentDailyRitual,
+                        onOpenOverdueRescue: { isShowingOverdueRescue = true }
                     )
                 case .statistics:
                     StatisticsView(tasks: fetchAllTasksForLookup())
@@ -895,7 +916,7 @@ struct BetaFocusedDashboardHomeView: View {
             openQuickCapture()
             resetTabSelection()
         case .focus:
-            presentDailyRitual()
+            navigate(to: .focus)
             resetTabSelection()
         case .tools:
             navigate(to: .tools)
