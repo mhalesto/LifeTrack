@@ -10,6 +10,8 @@ struct BetaFocusedDashboardFocusView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \FocusSessionRecord.endedAt, order: .reverse) private var sessionRecords: [FocusSessionRecord]
+    @AppStorage(LifeTrackSettings.Keys.focusDailyMinuteGoal) private var focusDailyMinuteGoal = FocusDailyGoal.defaultMinuteTarget
+    @AppStorage(LifeTrackSettings.Keys.focusDailyBlockGoal) private var focusDailyBlockGoal = FocusDailyGoal.defaultBlockTarget
 
     let recommendations: [DailyFocusRecommendation]
     let scheduledBlock: ScheduledBlock?
@@ -31,6 +33,8 @@ struct BetaFocusedDashboardFocusView: View {
     @State private var activeFocusTaskTitle: String?
     @State private var phaseStartedAt: Date?
     @State private var feedbackMessage: String?
+    @State private var suggestedNextTaskID: UUID?
+    @State private var isShowingSessionHistory = false
 
     private var startRecommendation: DailyFocusRecommendation? {
         recommendations.first
@@ -45,6 +49,19 @@ struct BetaFocusedDashboardFocusView: View {
             let task = recommendation.task
             return task.id != activeFocusTaskID && !task.isCompleted && !task.isDeleted
         }?.task
+    }
+
+    private var suggestedNextTask: LifeTask? {
+        guard let suggestedNextTaskID else { return nil }
+        return recommendations.first { $0.task.id == suggestedNextTaskID }?.task
+    }
+
+    private var focusSummary: FocusSessionSummary {
+        FocusSessionSummary(records: sessionRecords)
+    }
+
+    private var focusGoal: FocusDailyGoal {
+        FocusDailyGoal(minuteTarget: focusDailyMinuteGoal, blockTarget: focusDailyBlockGoal)
     }
 
     private var healthItems: [BetaFocusedDashboardFocusHealthItem] {
@@ -69,9 +86,13 @@ struct BetaFocusedDashboardFocusView: View {
                     header
                     feedbackBanner
                     progressCard
+                    focusGoalCard
                     startHereCard
                     timerCard
-                    BetaFocusedDashboardFocusHistoryView(records: sessionRecords)
+                    focusHandoffCard
+                    BetaFocusedDashboardFocusHistoryView(records: sessionRecords) {
+                        isShowingSessionHistory = true
+                    }
                     queueCard
                     healthCard
                 }
@@ -88,6 +109,11 @@ struct BetaFocusedDashboardFocusView: View {
         }
         .onDisappear {
             suspendTicker()
+        }
+        .sheet(isPresented: $isShowingSessionHistory) {
+            BetaFocusedDashboardFocusHistoryDetailView(records: sessionRecords)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -199,6 +225,120 @@ struct BetaFocusedDashboardFocusView: View {
                         tint: BetaFocusedDashboardPalette.importExportTint
                     )
                 }
+            }
+        }
+    }
+
+    private var focusGoalCard: some View {
+        BetaFocusedDashboardCard(background: BetaFocusedDashboardPalette.cardSecondary) {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Daily Goal")
+                        .font(BetaFocusedDashboardTypography.section)
+                        .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+
+                    Spacer(minLength: 0)
+
+                    Text(focusGoal.goalMetLine(for: focusSummary))
+                        .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                        .foregroundStyle(focusGoal.goalMet(for: focusSummary) ? BetaFocusedDashboardPalette.completedTint : BetaFocusedDashboardPalette.secondaryText)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    focusGoalProgressRow(
+                        title: "Minutes",
+                        value: focusMinuteProgressValue,
+                        progress: focusGoal.minuteProgress(for: focusSummary),
+                        systemImage: "timer",
+                        tint: BetaFocusedDashboardPalette.heroAccent
+                    )
+
+                    focusGoalProgressRow(
+                        title: "Blocks",
+                        value: focusBlockProgressValue,
+                        progress: focusGoal.blockProgress(for: focusSummary),
+                        systemImage: "checkmark.seal",
+                        tint: BetaFocusedDashboardPalette.completedTint
+                    )
+                }
+
+                VStack(spacing: 8) {
+                    Stepper(value: $focusDailyMinuteGoal, in: 0...240, step: 15) {
+                        Text(focusMinuteGoalLabel)
+                            .font(BetaFocusedDashboardTypography.body.weight(.semibold))
+                            .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                            .lineLimit(1)
+                    }
+                    .font(BetaFocusedDashboardTypography.bodySmall)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Stepper(value: $focusDailyBlockGoal, in: 0...8, step: 1) {
+                        Text(focusBlockGoalLabel)
+                            .font(BetaFocusedDashboardTypography.body.weight(.semibold))
+                            .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                            .lineLimit(1)
+                    }
+                    .font(BetaFocusedDashboardTypography.bodySmall)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private var focusMinuteProgressValue: String {
+        focusDailyMinuteGoal == 0 ? "\(focusSummary.todayMinutes)m" : "\(focusSummary.todayMinutes)/\(focusDailyMinuteGoal)m"
+    }
+
+    private var focusBlockProgressValue: String {
+        focusDailyBlockGoal == 0 ? "\(focusSummary.todayCompletedBlocks)" : "\(focusSummary.todayCompletedBlocks)/\(focusDailyBlockGoal)"
+    }
+
+    private var focusMinuteGoalLabel: String {
+        focusDailyMinuteGoal == 0 ? "Minute goal off" : "\(focusDailyMinuteGoal)m goal"
+    }
+
+    private var focusBlockGoalLabel: String {
+        focusDailyBlockGoal == 0 ? "Block goal off" : "\(focusDailyBlockGoal) block\(focusDailyBlockGoal == 1 ? "" : "s") goal"
+    }
+
+    private func focusGoalProgressRow(
+        title: String,
+        value: String,
+        progress: Double,
+        systemImage: String,
+        tint: Color
+    ) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(tint.opacity(0.14), in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title)
+                        .font(BetaFocusedDashboardTypography.body.weight(.semibold))
+                        .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+
+                    Spacer(minLength: 0)
+
+                    Text(value)
+                        .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                        .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                }
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(BetaFocusedDashboardPalette.border.opacity(0.52))
+
+                        Capsule()
+                            .fill(tint)
+                            .frame(width: proxy.size.width * CGFloat(progress))
+                    }
+                }
+                .frame(height: 5)
             }
         }
     }
@@ -379,6 +519,84 @@ struct BetaFocusedDashboardFocusView: View {
 
                         focusCircleButton(systemImage: "forward.end.fill") {
                             skipTimerPhase()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var focusHandoffCard: some View {
+        if let suggestedNextTask {
+            let category = suggestedNextTask.categoryOption(customCategories: customCategories)
+            let visuals = categoryVisuals(for: category)
+
+            BetaFocusedDashboardCard(background: BetaFocusedDashboardPalette.cardSecondary) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label("Next up", systemImage: "arrow.right.circle.fill")
+                            .font(BetaFocusedDashboardTypography.section)
+                            .foregroundStyle(BetaFocusedDashboardPalette.completedTint)
+
+                        Spacer(minLength: 0)
+
+                        Text(smartNextDetail(for: suggestedNextTask))
+                            .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                            .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.76)
+                    }
+
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(visuals.background)
+                            .frame(width: 38, height: 38)
+                            .overlay {
+                                Image(systemName: category.symbolName)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(visuals.tint)
+                            }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(suggestedNextTask.title)
+                                .font(BetaFocusedDashboardTypography.taskTitle.weight(.semibold))
+                                .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+                                .lineLimit(2)
+
+                            HStack(spacing: 6) {
+                                BetaFocusedDashboardCategoryChip(
+                                    title: category.title,
+                                    tint: visuals.tint,
+                                    background: visuals.background
+                                )
+
+                                if let state = suggestedNextTask.betaFocusedHealthState() {
+                                    BetaFocusedDashboardHealthChip(state: state)
+                                }
+                            }
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+
+                    HStack(spacing: 8) {
+                        BetaFocusedDashboardActionChip(
+                            title: "Start Next",
+                            systemImage: "play.fill",
+                            tint: BetaFocusedDashboardPalette.completedTint,
+                            isCompact: true
+                        ) {
+                            startFocus(for: suggestedNextTask)
+                        }
+
+                        BetaFocusedDashboardActionChip(
+                            title: "Later",
+                            systemImage: "clock",
+                            tint: BetaFocusedDashboardPalette.secondaryText,
+                            isCompact: true
+                        ) {
+                            suggestedNextTaskID = nil
                         }
                     }
                 }
@@ -578,6 +796,7 @@ struct BetaFocusedDashboardFocusView: View {
     }
 
     private func startFocus(for task: LifeTask) {
+        suggestedNextTaskID = nil
         if isTimerRunning, activeFocusTaskID != nil, activeFocusTaskID != task.id {
             recordPartialFocusSessionIfNeeded()
             suspendTicker()
@@ -734,6 +953,7 @@ struct BetaFocusedDashboardFocusView: View {
     }
 
     private func completeTask(_ task: LifeTask) {
+        let nextTask = smartNextTask(after: task)
         if activeFocusTaskID == task.id {
             recordPartialFocusSessionIfNeeded()
         }
@@ -743,6 +963,10 @@ struct BetaFocusedDashboardFocusView: View {
             activeFocusTaskID = nil
             activeFocusTaskTitle = nil
             FocusSessionStore.clearTask()
+        }
+        suggestedNextTaskID = nextTask?.id
+        if let nextTask {
+            showFeedback("Next up: \(nextTask.title)")
         }
     }
 
@@ -901,6 +1125,57 @@ struct BetaFocusedDashboardFocusView: View {
             return calendar.date(from: components) ?? nextHour
         }
         return tomorrowAt(hour: 9)
+    }
+
+    private func smartNextTask(after completedTask: LifeTask) -> LifeTask? {
+        let candidates = recommendations
+            .map(\.task)
+            .filter { task in
+                task.id != completedTask.id &&
+                    task.id != activeFocusTaskID &&
+                    !task.isCompleted &&
+                    !task.isDeleted
+            }
+
+        guard !candidates.isEmpty else { return nil }
+
+        let minutesRemaining = focusMinutesRemainingToday()
+        let fittingTasks = candidates.filter { $0.scheduledDurationMinutes <= minutesRemaining }
+        let workableFittingTasks = fittingTasks.filter { $0.betaFocusedHealthState() != .blocked }
+
+        return workableFittingTasks.first ??
+            fittingTasks.first ??
+            candidates.first { $0.betaFocusedHealthState() != .blocked } ??
+            candidates.first
+    }
+
+    private func smartNextDetail(for task: LifeTask) -> String {
+        if let state = task.betaFocusedHealthState() {
+            switch state {
+            case .blocked:
+                return "Review blocker"
+            case .stale:
+                return "Refresh if needed"
+            case .recurringMissed:
+                return "Missed routine"
+            case .needsDate:
+                return "Needs date"
+            }
+        }
+
+        let remaining = focusMinutesRemainingToday()
+        if task.scheduledDurationMinutes <= remaining {
+            return "Fits today"
+        }
+
+        return "Queue priority"
+    }
+
+    private func focusMinutesRemainingToday() -> Int {
+        let now = Date()
+        let workday = CalendarAwareScheduleEngine.workdayInterval(for: now)
+        guard now < workday.end else { return 0 }
+        return max(0, Int(workday.end.timeIntervalSince(now) / 60))
     }
 
     private func cleanedBlockerText(_ value: String) -> String {

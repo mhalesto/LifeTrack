@@ -128,6 +128,45 @@ struct BetaFocusedDashboardVerificationTests {
         #expect(summary.activeDayStreak == 2)
     }
 
+    @Test func focusDailyGoalFormatsProgressAndCompletion() {
+        let summary = FocusSessionSummary(
+            records: [
+                Self.makeFocusRecord(
+                    endedAt: Date(),
+                    durationSeconds: 25 * 60,
+                    completedBlock: true
+                )
+            ]
+        )
+        let goal = FocusDailyGoal(minuteTarget: 30, blockTarget: 2)
+
+        #expect(goal.homeLine(for: summary) == "25m focused today • 1 block")
+        #expect(goal.compactProgressLine(for: summary) == "25m/30m • 1/2 blocks")
+        #expect(goal.goalMetLine(for: summary) == "5m to minute goal")
+        #expect(goal.goalMet(for: summary) == false)
+    }
+
+    @Test func focusDailyGoalDetectsCompletedGoal() {
+        let summary = FocusSessionSummary(
+            records: [
+                Self.makeFocusRecord(
+                    endedAt: Date(),
+                    durationSeconds: 15 * 60,
+                    completedBlock: true
+                ),
+                Self.makeFocusRecord(
+                    endedAt: Date(),
+                    durationSeconds: 15 * 60,
+                    completedBlock: true
+                )
+            ]
+        )
+        let goal = FocusDailyGoal(minuteTarget: 30, blockTarget: 2)
+
+        #expect(goal.goalMet(for: summary))
+        #expect(goal.goalMetLine(for: summary) == "Goal met")
+    }
+
     @Test func focusSessionPauseSurvivesLeavingScreen() throws {
         let defaults = try Self.makeDefaults()
         let taskID = UUID()

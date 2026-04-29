@@ -7,69 +7,80 @@ import SwiftUI
 
 struct BetaFocusedDashboardFocusHistoryView: View {
     let records: [FocusSessionRecord]
+    let onOpenDetail: () -> Void
 
     private var summary: FocusSessionSummary {
         FocusSessionSummary(records: records)
     }
 
     var body: some View {
-        BetaFocusedDashboardCard(background: BetaFocusedDashboardPalette.cardSecondary) {
-            VStack(alignment: .leading, spacing: 11) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Session History")
-                        .font(BetaFocusedDashboardTypography.section)
-                        .foregroundStyle(BetaFocusedDashboardPalette.headerText)
+        Button {
+            LifeTrackHaptics.lightImpact()
+            onOpenDetail()
+        } label: {
+            BetaFocusedDashboardCard(background: BetaFocusedDashboardPalette.cardSecondary) {
+                VStack(alignment: .leading, spacing: 11) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Session History")
+                            .font(BetaFocusedDashboardTypography.section)
+                            .foregroundStyle(BetaFocusedDashboardPalette.headerText)
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
 
-                    Text(headerDetail)
+                        HStack(spacing: 5) {
+                            Text(headerDetail)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .bold))
+                        }
                         .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
                         .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
-                }
+                    }
 
-                HStack(spacing: 8) {
-                    FocusHistoryMetric(
-                        value: "\(summary.todayMinutes)",
-                        title: "Min Today",
-                        systemImage: "timer",
-                        tint: BetaFocusedDashboardPalette.heroAccent
-                    )
+                    HStack(spacing: 8) {
+                        FocusHistoryMetric(
+                            value: "\(summary.todayMinutes)",
+                            title: "Min Today",
+                            systemImage: "timer",
+                            tint: BetaFocusedDashboardPalette.heroAccent
+                        )
 
-                    FocusHistoryMetric(
-                        value: "\(summary.weekMinutes)",
-                        title: "Min Week",
-                        systemImage: "calendar.badge.clock",
-                        tint: BetaFocusedDashboardPalette.completedTint
-                    )
+                        FocusHistoryMetric(
+                            value: "\(summary.weekMinutes)",
+                            title: "Min Week",
+                            systemImage: "calendar.badge.clock",
+                            tint: BetaFocusedDashboardPalette.completedTint
+                        )
 
-                    FocusHistoryMetric(
-                        value: "\(summary.todayCompletedBlocks)",
-                        title: "Blocks",
-                        systemImage: "checkmark.seal",
-                        tint: BetaFocusedDashboardPalette.captureTint
-                    )
-                }
+                        FocusHistoryMetric(
+                            value: "\(summary.todayCompletedBlocks)",
+                            title: "Blocks",
+                            systemImage: "checkmark.seal",
+                            tint: BetaFocusedDashboardPalette.captureTint
+                        )
+                    }
 
-                if records.isEmpty {
-                    Text("Completed focus blocks and meaningful partial sessions will appear here.")
-                        .font(BetaFocusedDashboardTypography.body)
-                        .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
-                        .padding(.vertical, 4)
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(records.prefix(3).enumerated()), id: \.element.id) { index, record in
-                            FocusHistoryRow(record: record)
+                    if records.isEmpty {
+                        Text("Completed focus blocks and meaningful partial sessions will appear here.")
+                            .font(BetaFocusedDashboardTypography.body)
+                            .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                            .padding(.vertical, 4)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(records.prefix(3).enumerated()), id: \.element.id) { index, record in
+                                FocusHistoryRow(record: record)
 
-                            if index < min(records.count, 3) - 1 {
-                                Divider()
-                                    .overlay(BetaFocusedDashboardPalette.border)
-                                    .padding(.leading, 44)
+                                if index < min(records.count, 3) - 1 {
+                                    Divider()
+                                        .overlay(BetaFocusedDashboardPalette.border)
+                                        .padding(.leading, 44)
+                                }
                             }
                         }
                     }
                 }
             }
         }
+        .buttonStyle(LifeTrackPressableButtonStyle(scale: 0.985, pressedOpacity: 0.94))
     }
 
     private var headerDetail: String {

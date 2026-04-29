@@ -70,3 +70,85 @@ struct FocusSessionSummary {
         records.reduce(0) { $0 + $1.durationMinutes }
     }
 }
+
+struct FocusDailyGoal {
+    static let defaultMinuteTarget = 30
+    static let defaultBlockTarget = 2
+
+    let minuteTarget: Int
+    let blockTarget: Int
+
+    init(minuteTarget: Int, blockTarget: Int) {
+        self.minuteTarget = max(0, minuteTarget)
+        self.blockTarget = max(0, blockTarget)
+    }
+
+    var hasMinuteGoal: Bool {
+        minuteTarget > 0
+    }
+
+    var hasBlockGoal: Bool {
+        blockTarget > 0
+    }
+
+    var isEnabled: Bool {
+        hasMinuteGoal || hasBlockGoal
+    }
+
+    func minuteProgress(for summary: FocusSessionSummary) -> Double {
+        guard hasMinuteGoal else { return 0 }
+        return min(max(Double(summary.todayMinutes) / Double(minuteTarget), 0), 1)
+    }
+
+    func blockProgress(for summary: FocusSessionSummary) -> Double {
+        guard hasBlockGoal else { return 0 }
+        return min(max(Double(summary.todayCompletedBlocks) / Double(blockTarget), 0), 1)
+    }
+
+    func homeLine(for summary: FocusSessionSummary) -> String {
+        "\(summary.todayMinutes)m focused today • \(blockCountLabel(summary.todayCompletedBlocks))"
+    }
+
+    func compactProgressLine(for summary: FocusSessionSummary) -> String {
+        let minuteText = hasMinuteGoal
+            ? "\(minuteLabel(summary.todayMinutes))/\(minuteLabel(minuteTarget))"
+            : "\(minuteLabel(summary.todayMinutes)) today"
+        let blockText = hasBlockGoal
+            ? "\(summary.todayCompletedBlocks)/\(blockTarget) blocks"
+            : blockCountLabel(summary.todayCompletedBlocks)
+
+        return "\(minuteText) • \(blockText)"
+    }
+
+    func goalMetLine(for summary: FocusSessionSummary) -> String {
+        if goalMet(for: summary) {
+            return "Goal met"
+        }
+
+        if hasMinuteGoal, summary.todayMinutes < minuteTarget {
+            let remaining = max(minuteTarget - summary.todayMinutes, 0)
+            return "\(remaining)m to minute goal"
+        }
+
+        if hasBlockGoal, summary.todayCompletedBlocks < blockTarget {
+            let remaining = max(blockTarget - summary.todayCompletedBlocks, 0)
+            return "\(remaining) block\(remaining == 1 ? "" : "s") to goal"
+        }
+
+        return "Keep going"
+    }
+
+    func goalMet(for summary: FocusSessionSummary) -> Bool {
+        let minuteMet = !hasMinuteGoal || summary.todayMinutes >= minuteTarget
+        let blockMet = !hasBlockGoal || summary.todayCompletedBlocks >= blockTarget
+        return isEnabled && minuteMet && blockMet
+    }
+
+    private func minuteLabel(_ minutes: Int) -> String {
+        minutes > 999 ? "999+ min" : "\(minutes)m"
+    }
+
+    private func blockCountLabel(_ count: Int) -> String {
+        "\(count) block\(count == 1 ? "" : "s")"
+    }
+}

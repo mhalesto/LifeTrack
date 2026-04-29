@@ -35,8 +35,13 @@ struct BetaFocusedDashboardHomeView: View {
 
     @Query(sort: \CustomTaskCategory.title) private var customCategories: [CustomTaskCategory]
 
+    @Query(sort: \FocusSessionRecord.endedAt, order: .reverse)
+    private var focusSessionRecords: [FocusSessionRecord]
+
     @AppStorage(LifeTrackSettings.Keys.nickname) private var nickname = ""
     @AppStorage(LifeTrackSettings.Keys.avatarVersion) private var avatarVersion = 0
+    @AppStorage(LifeTrackSettings.Keys.focusDailyMinuteGoal) private var focusDailyMinuteGoal = FocusDailyGoal.defaultMinuteTarget
+    @AppStorage(LifeTrackSettings.Keys.focusDailyBlockGoal) private var focusDailyBlockGoal = FocusDailyGoal.defaultBlockTarget
 
     @State private var navigationPath: [BetaFocusedDashboardRoute] = []
     @State private var selectedTab: BetaFocusedDashboardTab = .home
@@ -97,6 +102,14 @@ struct BetaFocusedDashboardHomeView: View {
 
     private var focusRecommendations: [DailyFocusRecommendation] {
         DailyFocusPlanner.recommendations(from: openTasks, energyLevel: energyReader.energyLevel)
+    }
+
+    private var focusSummary: FocusSessionSummary {
+        FocusSessionSummary(records: focusSessionRecords)
+    }
+
+    private var focusGoal: FocusDailyGoal {
+        FocusDailyGoal(minuteTarget: focusDailyMinuteGoal, blockTarget: focusDailyBlockGoal)
     }
 
     private var nextBestRecommendation: DailyFocusRecommendation? {
@@ -661,6 +674,8 @@ struct BetaFocusedDashboardHomeView: View {
                 }
             }
 
+            focusProgressLine
+
             BetaFocusedDashboardCard(background: BetaFocusedDashboardPalette.cardSecondary) {
                 if focusTasks.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
@@ -745,6 +760,36 @@ struct BetaFocusedDashboardHomeView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var focusProgressLine: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "timer")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(BetaFocusedDashboardPalette.completedTint)
+
+            Text(focusGoal.homeLine(for: focusSummary))
+                .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                .foregroundStyle(BetaFocusedDashboardPalette.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+
+            if focusGoal.isEnabled {
+                Text(focusGoal.goalMetLine(for: focusSummary))
+                    .font(BetaFocusedDashboardTypography.bodySmall.weight(.semibold))
+                    .foregroundStyle(focusGoal.goalMet(for: focusSummary) ? BetaFocusedDashboardPalette.completedTint : BetaFocusedDashboardPalette.heroAccent)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.54), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(BetaFocusedDashboardPalette.border.opacity(0.72), lineWidth: 0.8)
         }
     }
 

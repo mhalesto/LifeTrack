@@ -12,6 +12,8 @@ struct BetaFocusedDashboardToolsView: View {
     @Query(sort: \FocusSessionRecord.endedAt, order: .reverse) private var focusSessionRecords: [FocusSessionRecord]
     @AppStorage(LifeTrackSettings.Keys.lastBackupDate) private var lastBackupTimestamp: Double = 0
     @AppStorage(LifeTrackSettings.Keys.lastWeeklyReviewDate) private var lastWeeklyReviewTimestamp: Double = 0
+    @AppStorage(LifeTrackSettings.Keys.focusDailyMinuteGoal) private var focusDailyMinuteGoal = FocusDailyGoal.defaultMinuteTarget
+    @AppStorage(LifeTrackSettings.Keys.focusDailyBlockGoal) private var focusDailyBlockGoal = FocusDailyGoal.defaultBlockTarget
 
     let dueTodayCount: Int
     let overdueCount: Int
@@ -349,7 +351,15 @@ struct BetaFocusedDashboardToolsView: View {
         FocusSessionSummary(records: focusSessionRecords)
     }
 
+    private var focusGoal: FocusDailyGoal {
+        FocusDailyGoal(minuteTarget: focusDailyMinuteGoal, blockTarget: focusDailyBlockGoal)
+    }
+
     private var focusSubtitle: String {
+        if focusGoal.isEnabled && (focusSummary.todayMinutes > 0 || focusSummary.todayCompletedBlocks > 0) {
+            return focusGoal.compactProgressLine(for: focusSummary)
+        }
+
         if focusSummary.todayMinutes > 0 {
             if focusSummary.todayCompletedBlocks > 0 {
                 return "\(focusMinutesLabel(focusSummary.todayMinutes)) today • \(BetaFocusedDashboardFormat.count(focusSummary.todayCompletedBlocks)) blocks"

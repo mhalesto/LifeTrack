@@ -167,6 +167,8 @@ nonisolated enum LifeTrackSettings {
         static let claudeAPIKey = "LifeTrack.settings.claudeAPIKey"
         static let lastBackupDate = "LifeTrack.settings.lastBackupDate"
         static let lastWeeklyReviewDate = "LifeTrack.settings.lastWeeklyReviewDate"
+        static let focusDailyMinuteGoal = "LifeTrack.settings.focusDailyMinuteGoal"
+        static let focusDailyBlockGoal = "LifeTrack.settings.focusDailyBlockGoal"
         static let betaShapesOpacity = "LifeTrack.settings.betaShapesOpacity"
         static let hideStatusBar = "LifeTrack.settings.hideStatusBar"
         static let moneyCurrencyCode = "LifeTrack.settings.moneyCurrencyCode"
