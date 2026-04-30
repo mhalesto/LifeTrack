@@ -12,6 +12,69 @@ struct CurrentDashboardHomeView: View {
     }
 }
 
+private struct BetaFocusedDashboardFocusListScroller: View {
+    let contentHeight: CGFloat
+    let viewportHeight: CGFloat
+    let scrollOffset: CGFloat
+
+    private var thumbHeight: CGFloat {
+        guard contentHeight > viewportHeight, contentHeight > 0 else {
+            return viewportHeight
+        }
+
+        return max(34, viewportHeight * viewportHeight / contentHeight)
+    }
+
+    private var thumbOffset: CGFloat {
+        let scrollableDistance = max(contentHeight - viewportHeight, 1)
+        let trackDistance = max(viewportHeight - thumbHeight, 0)
+        let progress = min(max(scrollOffset / scrollableDistance, 0), 1)
+        return trackDistance * progress
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Capsule()
+                .fill(BetaFocusedDashboardPalette.border.opacity(0.5))
+                .frame(width: 5)
+
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            BetaFocusedDashboardPalette.heroAccent,
+                            BetaFocusedDashboardPalette.heroAccentDeep
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 5, height: thumbHeight)
+                .offset(y: thumbOffset)
+                .shadow(color: BetaFocusedDashboardPalette.heroAccent.opacity(0.16), radius: 5, x: 0, y: 2)
+        }
+        .frame(width: 10, height: viewportHeight)
+        .padding(.top, 1)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct BetaFocusedDashboardFocusListOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct BetaFocusedDashboardFocusListContentHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 1
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct BetaFocusedDashboardHomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -62,6 +125,8 @@ struct BetaFocusedDashboardHomeView: View {
     @State private var overdueTasks: [LifeTask] = []
     @State private var focusTasks: [LifeTask] = []
     @State private var dayCompleteSummary: DayCompleteSummary?
+    @State private var focusListScrollOffset: CGFloat = 0
+    @State private var focusListContentHeight: CGFloat = 1
     @AppStorage("beta.dashboard.lastDayCompleteCelebration") private var lastCelebrationDayKey: String = ""
 
     init() {
@@ -721,29 +786,62 @@ struct BetaFocusedDashboardHomeView: View {
                             )
                         }
 
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                ForEach(Array(focusListTasks.enumerated()), id: \.element.id) { index, task in
-                                    let option = task.categoryOption(customCategories: customCategories)
-                                    BetaFocusedDashboardTaskRow(
-                                        task: task,
-                                        categoryOption: option,
-                                        visuals: categoryVisuals(for: option),
-                                        healthState: task.betaFocusedHealthState(),
-                                        onOpen: { editingTask = task },
-                                        onToggleCompletion: { toggleCompletion(task) }
-                                    )
+                        HStack(alignment: .top, spacing: 8) {
+                            if hiddenFocusTaskCount > 0 {
+                                BetaFocusedDashboardFocusListScroller(
+                                    contentHeight: focusListContentHeight,
+                                    viewportHeight: focusListHeight,
+                                    scrollOffset: focusListScrollOffset
+                                )
+                            }
 
-                                    if index < focusListTasks.count - 1 {
-                                        Divider()
-                                            .overlay(BetaFocusedDashboardPalette.border)
-                                            .padding(.leading, 56)
+                            ScrollView {
+                                VStack(spacing: 0) {
+                                    GeometryReader { proxy in
+                                        Color.clear.preference(
+                                            key: BetaFocusedDashboardFocusListOffsetPreferenceKey.self,
+                                            value: proxy.frame(in: .named("dailyFocusListScroll")).minY
+                                        )
+                                    }
+                                    .frame(height: 0)
+
+                                    ForEach(Array(focusListTasks.enumerated()), id: \.element.id) { index, task in
+                                        let option = task.categoryOption(customCategories: customCategories)
+                                        BetaFocusedDashboardTaskRow(
+                                            task: task,
+                                            categoryOption: option,
+                                            visuals: categoryVisuals(for: option),
+                                            healthState: task.betaFocusedHealthState(),
+                                            onOpen: { editingTask = task },
+                                            onToggleCompletion: { toggleCompletion(task) }
+                                        )
+
+                                        if index < focusListTasks.count - 1 {
+                                            Divider()
+                                                .overlay(BetaFocusedDashboardPalette.border)
+                                                .padding(.leading, 56)
+                                        }
+                                    }
+                                    .padding(.bottom, 2)
+                                }
+                                .background {
+                                    GeometryReader { proxy in
+                                        Color.clear.preference(
+                                            key: BetaFocusedDashboardFocusListContentHeightPreferenceKey.self,
+                                            value: proxy.size.height
+                                        )
                                     }
                                 }
-                                .padding(.bottom, 2)
+                            }
+                            .coordinateSpace(name: "dailyFocusListScroll")
+                            .scrollIndicators(.hidden)
+                            .onPreferenceChange(BetaFocusedDashboardFocusListOffsetPreferenceKey.self) { value in
+                                focusListScrollOffset = max(0, -value)
+                            }
+                            .onPreferenceChange(BetaFocusedDashboardFocusListContentHeightPreferenceKey.self) { value in
+                                focusListContentHeight = max(value, focusListHeight)
                             }
                         }
-                        .scrollIndicators(hiddenFocusTaskCount > 0 ? .visible : .hidden)
                         .frame(height: focusListHeight)
 
                         if hiddenFocusTaskCount > 0 {
